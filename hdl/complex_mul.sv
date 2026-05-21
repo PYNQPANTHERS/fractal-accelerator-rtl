@@ -1,11 +1,11 @@
 module complex_mul #(parameter DATA_WIDTH = 32) (
-    input  logic signed [DATA_WIDTH-1:0] ar,
-    input  logic signed [DATA_WIDTH-1:0] ai,
-    input  logic signed [DATA_WIDTH-1:0] br,
-    input  logic signed [DATA_WIDTH-1:0] bi,
+    input  logic signed [DATA_WIDTH-1:0] a_r,
+    input  logic signed [DATA_WIDTH-1:0] a_i,
+    input  logic signed [DATA_WIDTH-1:0] b_r,
+    input  logic signed [DATA_WIDTH-1:0] b_i,
 
-    output logic signed [DATA_WIDTH-1:0] pr,
-    output logic signed [DATA_WIDTH-1:0] pi
+    output logic signed [DATA_WIDTH-1:0] p_r,
+    output logic signed [DATA_WIDTH-1:0] p_i
 );
 
     localparam FRAC_BITS = DATA_WIDTH - 2; // Q2.30
