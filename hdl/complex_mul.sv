@@ -17,18 +17,18 @@ module complex_mul #(parameter DATA_WIDTH = 32) (
     logic signed [2*DATA_WIDTH-1:0] pr_full, pi_full;
 
     always_comb begin
-        a_sum   = ar + ai;
-        b_sum   = br + bi;
+        a_sum   = a_r + a_i;
+        b_sum   = b_r + b_i;
 
-        m1      = ar * br;
-        m2      = ai * bi;
+        m1      = a_r * b_r;
+        m2      = a_i * b_i;
         m3      = a_sum * b_sum;
 
         pr_full = m1 - m2;
         pi_full = m3 - m1 - m2;
 
-        pr      = pr_full >>> FRAC_BITS;
-        pi      = pi_full >>> FRAC_BITS;
+        p_r      = pr_full >>> FRAC_BITS;
+        p_i      = pi_full >>> FRAC_BITS;
     end
 
 endmodule

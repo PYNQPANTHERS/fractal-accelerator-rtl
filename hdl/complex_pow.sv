@@ -67,11 +67,18 @@ always_ff @(posedge clk) begin
         square_count <= square;
         single_count <= single;
 
-        multiplier_state <= (square == 0) ? SINGLE : SQUARE;
         done <= 0;
 
         zi_r <= z_r;
         zi_i <= z_i;
+
+        //if function is z^1 + c
+        if (square == 0 && single == 0) begin
+            done <= 1;
+            multiplier_state <= IDLE;
+        end else begin
+            multiplier_state <= (square == 0) ? SINGLE : SQUARE;
+        end
 
     end else begin
 
@@ -82,8 +89,13 @@ always_ff @(posedge clk) begin
                 zi_r <= p_r;
                 zi_i <= p_i;
                 if (square_count <= 1) begin
-                    multiplier_state <= (single == 0) ? IDLE : SINGLE;
-                    single_count <= single;
+                    if (single == 0) begin
+                        done <= 1;        
+                        multiplier_state <= IDLE;
+                    end else begin
+                        multiplier_state <= SINGLE;
+                        single_count <= single;
+                    end
                 end else begin
                     square_count <= square_count - 1;
                 end

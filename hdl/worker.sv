@@ -44,6 +44,14 @@ logic signed [DATA_WIDTH-1:0] zi_r;
 logic signed [DATA_WIDTH-1:0] zi_i;
 logic pow_done;
 
+typedef enum logic [1:0] { 
+    EXP,
+    ADD,
+    IDLE
+} worker_state;
+
+worker_state iterator_stage;
+
 complex_pow #(.DATA_WIDTH(DATA_WIDTH), .MULTIPLICATIONS(MULTIPLICATIONS)) pow_inst (
     .clk(clk),
     .rst(rst),
@@ -66,29 +74,57 @@ always_ff @(posedge clk) begin
         c_i <= 0;
 
         iteration <= 0;
-        escaped   <= 0;
+        escaped <= 0;
+        
+        done <= 0;
+        pow_start <= 0;
 
     end else if (start) begin
 
         if (julia_type) begin
             z_r <= coordinate_r;
             z_i <= coordinate_i;
-
+            
             c_r <= constant_r;
             c_i <= constant_i;
-        end else begin
+        end else begin // need to do burning ship support next
             z_r <= 0;
             z_i <= 0;
-
+            
             c_r <= coordinate_r;
             c_i <= coordinate_i;
         end
 
-        iteration <= 0;
-        escaped   <= 0;
+        iteration  <= 0;
+        escaped    <= 0;
+        
+        done       <= 0;
+        pow_start  <= 1;
 
+    end else begin
+        pow_start <= 0;
+
+        if (pow_done) begin
+            z_r       <= zi_r + c_r;
+            z_i       <= zi_i + c_i;
+            iteration <= iteration + 1;
+
+            if (/* escape check */) begin // need to figure out best way to do this.
+                escaped <= 1;
+                done <= 1;
+                iteration_count <= iteration + 1;
+
+            end else if (iteration + 1 >= max_iteration) begin
+                escaped <= 0;
+                done <= 1;
+                iteration_count <= iteration + 1;
+
+            end else begin
+                pow_start <= 1;
+                
+            end
+        end
     end
-
 end
 
 endmodule
