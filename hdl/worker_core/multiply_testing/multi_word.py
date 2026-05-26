@@ -56,18 +56,128 @@ def multiply_split(a, b):
 
 # Test cases
 test_cases = [
-    (12345, 6789),
-    (-12345, 6789),
-    (12345, -6789),
-    (-12345, -6789),
-    (0, 12345),
+    # --- zeros and identities ---
+    (0, 0),
+    (0, 1),
+    (1, 0),
+    (0, -1),
+    (-1, 0),
+    (1, 1),
     (1, -1),
-    (2**34 - 1, 2**34 - 1),       # max positive 35-bit
-    (-(2**34), -(2**34)),          # min negative 35-bit
-    (2**34 - 1, -(2**34)),
+    (-1, 1),
+    (-1, -1),
+
+    # --- small values ---
+    (2, 3),
+    (-2, 3),
+    (2, -3),
+    (-2, -3),
+    (7, 7),
+    (-7, -7),
+
+    # --- powers of two (clean bit patterns) ---
+    (1 << 16, 1 << 16),
+    (1 << 17, 1 << 17),       # boundary of the split
+    (1 << 17, 1 << 16),
+    (1 << 18, 1 << 18),
+    (1 << 33, 1),
+    (1 << 33, -1),
+    (-(1 << 33), 1 << 33),
+    (1 << 17, -(1 << 17)),
+
+    # --- just-below / just-above the 17-bit boundary ---
+    ((1 << 17) - 1, (1 << 17) - 1),       # 0x1FFFF * 0x1FFFF, low half maxed
+    ((1 << 17) - 1, -((1 << 17) - 1)),
+    ((1 << 17) + 1, (1 << 17) + 1),       # straddles the split
+    ((1 << 17) - 1, 2),
+    ((1 << 17), (1 << 17) - 1),
+
+    # --- 18-bit boundary (sign bit of the high half) ---
+    ((1 << 18) - 1, 2),
+    (-(1 << 18), 2),
+    ((1 << 18) - 1, -(1 << 18)),
+
+    # --- max positive 35-bit ---
+    ((1 << 34) - 1, 1),
+    ((1 << 34) - 1, -1),
+    ((1 << 34) - 1, 2),
+    ((1 << 34) - 1, (1 << 34) - 1),       # max² 
+    ((1 << 34) - 1, -((1 << 34) - 1)),
+
+    # --- min negative 35-bit ---
+    (-(1 << 34), 1),
+    (-(1 << 34), -1),
+    (-(1 << 34), 2),
+    (-(1 << 34), -(1 << 34)),             # min² (largest positive product)
+    (-(1 << 34), (1 << 34) - 1),
+
+    # --- all-ones / all-zeros patterns in each half ---
+    (0x7FFFFFFFF, 0x7FFFFFFFF),           # 35-bit max
+    (0x7FFFFFFFF, -1),
+    (0x400000000, 0x400000000),           # min 35-bit (as raw bits this is -2^34)
+    (0x3FFFE0000, 0x3FFFE0000),           # high half full, low half zero
+    (0x00001FFFF, 0x00001FFFF),           # high half zero, low half full
+    (0x3FFFFFFFF, 0x00001FFFF),
+    (0x3FFFE0000, 0x00001FFFF),
+
+    # --- alternating bit patterns (catches stuck-bit / wiring bugs) ---
+    (0x2AAAAAAAA, 0x155555555),
+    (0x155555555, 0x2AAAAAAAA),
+    (0x2AAAAAAAA, 0x2AAAAAAAA),
+    (-0x155555555, 0x2AAAAAAAA),
+    (0x3FFFFFFFE, 0x3FFFFFFFE),
+
+    # --- one operand small, one large (asymmetric stress) ---
+    (1, (1 << 34) - 1),
+    (-1, -(1 << 34)),
+    (3, (1 << 34) - 1),
+    (-7, -(1 << 33)),
+    ((1 << 34) - 1, 13),
+
+    # --- both operands have non-zero high AND low halves ---
+    (0x123456789, 0x0ABCDEF12),
+    (-0x123456789, 0x0ABCDEF12),
+    (0x123456789, -0x0ABCDEF12),
+    (-0x123456789, -0x0ABCDEF12),
+    (0x2DEADBEEF, 0x1CAFEBABE),
+    (-0x2DEADBEEF, 0x1CAFEBABE),
+
+    # --- values where a_lo or b_lo is exactly 2^16 (MSB of the 17-bit low) ---
+    ((1 << 16), (1 << 16)),
+    ((1 << 16) | (1 << 20), (1 << 16) | (1 << 20)),
+    (-(1 << 16), (1 << 16)),
+
+    # --- realistic-looking mid-range values ---
+    (123456789, 987654321),
+    (-123456789, 987654321),
     (123456789, -987654321),
-    (-(2**20), 2**15 + 7),
+    (-123456789, -987654321),
+    (1_000_000_000, 1_000_000_000),
+    (-1_000_000_000, 1_000_000_000),
+    (8_589_934_591, 1),                   # 2^33 - 1
+    (8_589_934_592, 2),                   # 2^33
 ]
+
+# Add random coverage
+import random
+random.seed(42)
+for _ in range(50):
+    a = random.randint(-(1 << 34), (1 << 34) - 1)
+    b = random.randint(-(1 << 34), (1 << 34) - 1)
+    test_cases.append((a, b))
+
+# Add directed random in the "both halves nonzero" region
+for _ in range(20):
+    a_hi = random.randint(-(1 << 17), (1 << 17) - 1)
+    a_lo = random.randint(1, (1 << 17) - 1)
+    b_hi = random.randint(-(1 << 17), (1 << 17) - 1)
+    b_lo = random.randint(1, (1 << 17) - 1)
+    a = (a_hi << 17) | a_lo
+    b = (b_hi << 17) | b_lo
+    # clamp to 35-bit signed range
+    if a >= (1 << 34): a -= (1 << 35)
+    if b >= (1 << 34): b -= (1 << 35)
+    test_cases.append((a, b))
 
 print(f"{'a':>15} {'b':>15} {'result':>25} {'expected':>25}  match")
 print("-" * 95)
