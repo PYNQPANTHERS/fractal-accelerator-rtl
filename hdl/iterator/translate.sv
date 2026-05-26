@@ -21,13 +21,6 @@ module translate #(
 localparam FRAC_BITS = DATA_WIDTH - 2; // Q2.30
 logic [DATA_WIDTH-1:0] scale_factor;
 
-typedef enum logic [1:0] {  
-    ONE,
-    TWO,
-    FOUR
-} name;
-
-
 //  Zoom -> scale_factor = window_width / 1024 in Q2.30
 //      - window_width * 2^20 
 //      - ^ limits our zoom can increase probably just have this match 128 case or have dynamic with FSM
