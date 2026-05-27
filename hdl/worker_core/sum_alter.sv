@@ -5,17 +5,24 @@ input signed [2*NARROW_WIDTH-1:0] sum_x_reg_2,
 input signed [2*NARROW_WIDTH-1:0] sum_y_reg_1,
 input signed [2*NARROW_WIDTH-1:0] sum_y_reg_2,
 
-input [3:0] magnitude_negation_encoding;
+input [3:0] magnitude_negation_encoding,
 
 
 
-output signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_1,
-output signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_2,
-output signed [2*NARROW_WIDTH-1:0] changed_sum_y_reg_1,
-output signed [2*NARROW_WIDTH-1:0] changed_sum_y_reg_2,
+output logic signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_1,
+output logic signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_2,
+output logic signed [2*NARROW_WIDTH-1:0] changed_sum_y_reg_1,
+output logic signed [2*NARROW_WIDTH-1:0] changed_sum_y_reg_2
 );
 localparam SUM_INT_BITS = 2*INTEGER_BITS;
 localparam SUM_FRACTIONAL_BITS = 2*(NARROW_WIDTH-INTEGER_BITS);
+
+
+wire abs_x  = magnitude_negation_encoding[3];
+wire neg_x  = magnitude_negation_encoding[1];
+wire abs_y  = magnitude_negation_encoding[2];
+wire neg_y  = magnitude_negation_encoding[0];
+
 
 //{abs x, abs y, neg x, neg y}
 
@@ -25,20 +32,20 @@ always_comb begin
     changed_sum_x_reg_2 = sum_x_reg_2;
     changed_sum_y_reg_1 = sum_y_reg_1;
     changed_sum_y_reg_2 = sum_y_reg_2;
-    if (magnitude_negation_encoding[3]) begin
+    if (abs_x) begin
         changed_sum_x_reg_1 = (sum_x_reg_1 < 0) ? -sum_x_reg_1 : sum_x_reg_1;
         changed_sum_x_reg_2 = (sum_x_reg_2 < 0) ? -sum_x_reg_2 : sum_x_reg_2;
     end
-    if (magnitude_negation_encoding[1]) begin
+    if (neg_x) begin
         changed_sum_x_reg_1 = -changed_sum_x_reg_1;
         changed_sum_x_reg_2 = -changed_sum_x_reg_2;
     end
 
-    if (magnitude_negation_encoding[2]) begin
+    if (abs_y) begin
         changed_sum_y_reg_1 = (sum_y_reg_1 < 0) ? -sum_y_reg_1 : sum_y_reg_1;
         changed_sum_y_reg_2 = (sum_y_reg_2 < 0) ? -sum_y_reg_2 : sum_y_reg_2;
     end
-    if (magnitude_negation_encoding[0]) begin
+    if (neg_y) begin
         changed_sum_y_reg_1 = -changed_sum_y_reg_1;
         changed_sum_y_reg_2 = -changed_sum_y_reg_2;
     end
