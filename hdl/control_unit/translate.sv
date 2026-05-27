@@ -8,6 +8,7 @@
 
 module translate #(
     parameter int DATA_WIDTH = 32,
+    parameter int FULL_WIDTH = DATA_WIDTH*2;
     parameter int RESOLUTION = 10  // 2^10 = 1024 pixels
 )(
     input  logic [DATA_WIDTH-1:0] pan_x,
@@ -15,10 +16,11 @@ module translate #(
     input  logic [RESOLUTION-1:0] a,
     input  logic [RESOLUTION-1:0] b,
     input  logic [3:0]            zoom,
-    output logic [DATA_WIDTH-1:0] z_real,
-    output logic [DATA_WIDTH-1:0] z_imag
+    input  logic                  width,
+    output logic [FULL_WIDTH-1:0] z_real,
+    output logic [FULL_WIDTH-1:0] z_imag
 );
-localparam FRAC_BITS = DATA_WIDTH - 2; // Q2.30
+localparam FRAC_BITS = DATA_WIDTH - 3; // Q2.30 + one signed bit
 logic [DATA_WIDTH-1:0] scale_factor;
 
 //  Zoom -> scale_factor = window_width / 1024 in Q2.30

@@ -1,5 +1,5 @@
 module core_ram #(
-    parameter int CORE_COUNT = 200,
+    parameter int CORE_COUNT = 8,
     parameter int PIXEL_WIDTH    = 40,
     localparam int ADDR_WIDTH   = $clog2(CORE_COUNT)   // = 8 bits, addresses 0..255
 ) (
