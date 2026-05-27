@@ -1,36 +1,46 @@
-// Sits between the scheduler (push side) and 20 iterator cores (pop side)
+// job_queue_handler.sv
+// Sits between the scheduler (push side) and the control unit (pop side).
+// The control unit sends a single wants_job request per cycle.
+// No arbitration needed — single requester only.
+//
+// Push side:
+//   Scheduler presents sched_coord and asserts sched_push.
+//   If full, sched_stall asserts and no push occurs.
+//   Scheduler must hold sched_coord and sched_push until sched_stall deasserts.
+//
+// Pop side:
+//   Control unit asserts wants_job when it needs a coordinate.
+//   If queue non-empty, grant asserts and coord_out holds the coordinate.
+//   If queue empty, grant stays low and control unit must wait.
+//
+// Flush:
+//   Passed through to job_queue FIFO on quad split.
 
-module job_queue_handler #(
-    parameter int NUM_ITER = 20
-) (
-    input  logic                  clk,
-    input  logic                  rst,
- 
+module job_queue_handler (
+    input  logic        clk,
+    input  logic        rst,
+
     // --- Scheduler push interface ---
-    input  logic [17:0]           sched_coord, // { y[8:0], x[8:0] }
-    input  logic                  sched_push,
-    output logic                  sched_stall, // high when queue full
- 
+    input  logic [17:0] sched_coord,  // { y[8:0], x[8:0] }
+    input  logic        sched_push,
+    output logic        sched_stall,  // asserts when queue full
+
     // --- Flush from scheduler ---
-    input  logic                  flush,
- 
-    // --- Iterator request interface ---
-    input  logic [NUM_ITER-1:0]   wants_job,
-    output logic [NUM_ITER-1:0]   grant,
-    output logic [17:0]           coord_out  // registered, valid same cycle as grant
+    input  logic        flush,
+
+    // --- Control unit pop interface ---
+    input  logic        wants_job,
+    output logic        grant,
+    output logic [17:0] coord_out     // { y[8:0], x[8:0] }, valid same cycle as grant
 );
- 
-    // Internal FIFO signals
+
     logic        q_push, q_pop;
     logic [17:0] q_data_out;
     logic        q_full, q_empty;
- 
-    // Round-robin state
-    logic [$clog2(NUM_ITER)-1:0] rr_ptr;
- 
-    // ---------------------------------------------------------------
+
+    // ----------------------------------------------------------------
     // Job queue instance
-    // ---------------------------------------------------------------
+    // ----------------------------------------------------------------
     job_queue u_job_queue (
         .clk      (clk),
         .rst      (rst),
@@ -42,76 +52,27 @@ module job_queue_handler #(
         .full     (q_full),
         .empty    (q_empty)
     );
- 
-    // ---------------------------------------------------------------
-    // Push side: stall scheduler if full
-    // ---------------------------------------------------------------
+
+    // ----------------------------------------------------------------
+    // Push side
+    // ----------------------------------------------------------------
     assign sched_stall = q_full;
     assign q_push      = sched_push && !q_full;
- 
-    // ---------------------------------------------------------------
-    // Pop side: round-robin arbitration
-    // ---------------------------------------------------------------
- 
-    // Find the next requesting iterator starting from rr_ptr
-    // Uses a two-phase priority scan to wrap around correctly:
-    //   phase A: rr_ptr .. NUM_ITER-1
-    //   phase B: 0 .. rr_ptr-1
-    // The winner is the lowest index in A; if none, lowest index in B.
- 
-    logic [NUM_ITER-1:0]          grant_next;
-    logic [$clog2(NUM_ITER)-1:0]  winner;
-    logic                          any_req;
- 
-    always_comb begin
-        grant_next = '0;
-        winner     = '0;
-        any_req    = 1'b0;
- 
-        if (!q_empty) begin
-            // Phase A: rr_ptr .. NUM_ITER-1 ascending — first match (lowest index) wins
-            for (int i = 0; i < NUM_ITER; i++) begin
-                if (i >= int'(rr_ptr) && wants_job[i] && !any_req) begin
-                    winner  = $clog2(NUM_ITER)'(i);
-                    any_req = 1'b1;
-                end
-            end
-            // Phase B: 0 .. rr_ptr-1 ascending — only runs if phase A found nothing
-            if (!any_req) begin
-                for (int i = 0; i < NUM_ITER; i++) begin
-                    if (i < int'(rr_ptr) && wants_job[i] && !any_req) begin
-                        winner  = $clog2(NUM_ITER)'(i);
-                        any_req = 1'b1;
-                    end
-                end
-            end
- 
-            if (any_req) begin
-                grant_next[winner] = 1'b1;
-            end
-        end
-    end
- 
-    // Register outputs and advance round-robin pointer.
-    // coord_out is registered alongside grant so both are valid on the same cycle.
-    // q_data_out is captured BEFORE tail advances (q_pop fires combinationally).
+
+    // ----------------------------------------------------------------
+    // Pop side — single requester, no arbitration needed
+    // ----------------------------------------------------------------
+    assign q_pop = wants_job && !q_empty;
+
+    // Register grant and coord_out so both are valid on the same cycle
     always_ff @(posedge clk) begin
         if (rst || flush) begin
-            grant     <= '0;
+            grant     <= 1'b0;
             coord_out <= '0;
-            rr_ptr    <= '0;
         end else begin
-            grant     <= grant_next;
-            coord_out <= q_data_out;
-            if (any_req) begin
-                rr_ptr <= (winner == $clog2(NUM_ITER)'(NUM_ITER-1))
-                          ? '0
-                          : winner + 1'b1;
-            end
+            grant     <= wants_job && !q_empty;
+            coord_out <= q_data_out;  // capture head before tail advances
         end
     end
- 
-    // Pop fires combinationally so tail advances by next cycle
-    assign q_pop = any_req;
- 
+
 endmodule
