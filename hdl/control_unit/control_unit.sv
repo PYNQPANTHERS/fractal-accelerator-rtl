@@ -1,7 +1,11 @@
 module control_unit #(
-    parameter int DATA_WIDTH  = 17,
-    parameter int CORE_COUNT  = 8,
-    parameter int PIXEL_WIDTH = 9
+    parameter int DATA_WIDTH    = 17,
+    parameter int PIXEL_WIDTH   = 9,   // translate resolution
+    parameter int CLUSTER_COUNT = 4,   // number of clusters
+    parameter int CLUSTER_SIZE  = 8,   // cores per cluster
+    parameter int PIXEL_ADDR_W  = 16,  // pixel address bits
+    parameter int JOB_DATA_W    = 18,  // job payload bits
+    parameter int PIXEL_W       = 8    // result pixel bits
 ) (
     input  logic            clk,
     input  logic            rst,
@@ -9,15 +13,15 @@ module control_unit #(
     input  logic            width_flag,      
     input  logic [4:0]      fractal_type,    
     input  logic [4:0]      iteration_count,
-    output logic            result
+    output logic []           result
 );
 
     // --------------------------------------------------------------------
     // Local params
     // --------------------------------------------------------------------
-    localparam int Z_WIDTH    = DATA_WIDTH + 1;      // 1 sign + DATA_WIDTH data
-    localparam int Z_WIDE     = Z_WIDTH * 2 - 1;     // packed case {signed, upper, lower}
-    localparam int ADDR_LEN   = $clog2(CORE_COUNT);
+    localparam int Z_WIDTH      = DATA_WIDTH + 1;         // 1 sign + DATA_WIDTH data
+    localparam int Z_WIDE       = Z_WIDTH * 2 - 1;        // packed case {signed, upper, lower}
+    localparam int CLUST_ADDR_W = $clog2(CLUSTER_COUNT);  // bits to address a cluster
 
     // --------------------------------------------------------------------
     // Translate: pixel coord -> complex plane
@@ -64,7 +68,7 @@ module control_unit #(
         IDLE,                   // pre-frame request
         START,                  // opcode and c load
         WAIT,                   // wait for free core and start of z load
-        
+        OPCODE_BROADCAST,       // drives everycore with opcode in one cycle
         LOAD_C_NARROW,          // c load for narrow
         LOAD_C_WIDE,            // c load for wide
         LOAD_Z_NARROW,          // z load for narrow
@@ -155,53 +159,83 @@ module control_unit #(
     end
 
     // --------------------------------------------------------------------
-    // Core selection
-    // TODO: core_bus needs to be driven by the cores themselves
-    //       (1 = free / done). Tied off for now.
+    // Cluster signals
     // --------------------------------------------------------------------
-    logic [CORE_COUNT-1:0] core_bus;
-    logic [CORE_COUNT-1:0] core_sel;
-    logic [ADDR_LEN-1:0]   core_addr;
+    logic [CLUSTER_COUNT-1:0]              cluster_wants_job;
+    logic [CLUSTER_COUNT-1:0]              cluster_disp_valid;
+    logic [PIXEL_ADDR_W-1:0]              disp_pixel_addr;   // TODO: drive from scan counter
+    logic [JOB_DATA_W-1:0]               disp_job_data;     // TODO: drive from datapath
 
-    assign core_bus = '0; // TODO: connect to per-core free/done signals
+    logic [CLUSTER_COUNT-1:0]              cluster_result_valid;
+    logic [CLUSTER_COUNT-1:0]              cluster_result_ready;
+    logic [PIXEL_ADDR_W-1:0]              cluster_result_pixel_addr [CLUSTER_COUNT];
+    logic [PIXEL_W-1:0]                   cluster_result_data       [CLUSTER_COUNT];
+
+    // Placeholder until datapath is wired
+    assign disp_pixel_addr = '0;
+    assign disp_job_data   = '0;
+    assign cluster_result_ready = '1; // TODO: backpressure from output stage
+
+    // --------------------------------------------------------------------
+    // Priority encoder: arbitrate between clusters wanting a job
+    // --------------------------------------------------------------------
+    logic [CLUSTER_COUNT-1:0]  wants_onehot;
+    logic [CLUST_ADDR_W-1:0]  winner_idx;
+    logic                      any_cluster_free;
 
     priority_encoder #(
-        .core_number  (CORE_COUNT)
-    ) u_priority_encoder (
-        .core_bus     (core_bus),
-        .core_select  (core_sel),
-        .core_address (core_addr)
+        .BUS_WIDTH (CLUSTER_COUNT)
+    ) u_cluster_arb (
+        .core_bus    (cluster_wants_job),
+        .core_select (wants_onehot),
+        .core_address(winner_idx),
+        .any_valid   (any_cluster_free)
     );
 
+    // --------------------------------------------------------------------
     // Pipeline the encoder output by one cycle for timing / hand-off
-    logic [CORE_COUNT-1:0] ichooseyou;
-    logic                  ichooseyou_flag;
+    // --------------------------------------------------------------------
+    logic [CLUSTER_COUNT-1:0] ichooseyou;
+    logic                     ichooseyou_flag;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             ichooseyou      <= '0;
             ichooseyou_flag <= 1'b0;
-        end
-        else begin
-            ichooseyou      <= core_sel;
-            ichooseyou_flag <= |core_sel; // any bit set => a core was picked
+        end else begin
+            ichooseyou      <= wants_onehot;
+            ichooseyou_flag <= any_cluster_free;
         end
     end
 
-s
+    // Only the winning cluster receives disp_valid
+    assign cluster_disp_valid = (current_state == LOAD_Z_NARROW ||
+                                 current_state == LOAD_Z_WIDE)
+                                 ? ichooseyou : '0;
 
     // --------------------------------------------------------------------
-    // op-code broadcast to cores
+    // Generate CLUSTER_COUNT cluster instances
     // --------------------------------------------------------------------
-    logic [10:0]           op_code;       // {width_flag, fractal_type[4:0], iteration_count[4:0]}
-    logic [DATA_WIDTH-1:0] data_path;     // TODO: hook up if/when needed
-
-    always_ff @(posedge clk) begin
-        if (rst) op_code <= '0;
-        else     op_code <= {width_flag, fractal_type, iteration_count};
-    end
-
-    // TODO: instantiate / connect the N iterator cores here, fed by
-    //       ichooseyou (one-hot enable), load_real_*/load_imag_*, op_code.
+    generate
+        for (genvar g = 0; g < CLUSTER_COUNT; g++) begin : gen_clusters
+            cluster #(
+                .CLUSTER_SIZE (CLUSTER_SIZE),
+                .PIXEL_ADDR_W (PIXEL_ADDR_W),
+                .PIXEL_W      (PIXEL_W),
+                .JOB_DATA_W   (JOB_DATA_W)
+            ) u_cluster (
+                .clk               (clk),
+                .rst_n             (~rst),
+                .disp_valid        (cluster_disp_valid[g]),
+                .disp_pixel_addr   (disp_pixel_addr),
+                .disp_job_data     (disp_job_data),
+                .cluster_wants_job (cluster_wants_job[g]),
+                .result_valid      (cluster_result_valid[g]),
+                .result_pixel_addr (cluster_result_pixel_addr[g]),
+                .result_data       (cluster_result_data[g]),
+                .result_ready      (cluster_result_ready[g])
+            );
+        end
+    endgenerate
 
 endmodule

@@ -2,6 +2,7 @@
 // cluster
 //   Pool of CLUSTER_SIZE fractal cores with local arbitration, pixel-address
 //   bookkeeping, and result buffering using local fifo
+//.  needs a FSM for the different data transfers to wait for datapath to be free again
 // ─────────────────────────────────────────────────────────────────────────────
 module cluster #(
     parameter  int CLUSTER_SIZE  = 8,
@@ -27,6 +28,15 @@ module cluster #(
     output logic [PIXEL_W-1:0]       result_data,
     input  logic                     result_ready
 );
+    // state just to hold for certain amount of cycles for full data to be sent
+    typedef enum data_type {
+        IDLE,
+        LOAD_OPCODE         // one cycle
+        LOAD_Z_NARROW,      // holds handshake for 2
+        LOAD_Z_WIDE,        // holds handshake for 4
+        LOAD_C_NARROW,      // holds handshake for 2
+        LOAD_C_WIDE         // holds handshake for 4
+      } name;
 
     // register dispatch inputs
     logic                     disp_valid_q;
@@ -104,14 +114,14 @@ module cluster #(
                 .JOB_DATA_W (JOB_DATA_W),
                 .PIXEL_W    (PIXEL_W)
             ) u_core (
-                .clk       (clk),
-                .rst_n     (rst_n),
-                .live_data (core_start[g]),
-                .data_in   (disp_job_data_q),
-                .ready     (core_wants_job[g]),
-                .done      (core_done[g]),
-                .result    (core_result[g]),
-                .received  (core_received[g])
+                .clk        (clk),
+                .rst_n      (rst_n),
+                .live_data  (core_start[g]),       // selects this core
+                .data_in    (disp_job_data_q),     // job payload
+                .ready      (core_wants_job[g]),   // ready for job
+                .done       (core_done[g]),        // done flag
+                .result     (core_result[g]),      // iteration count
+                .received   (core_received[g])     // handshake: FIFO took it
             );
         end
     endgenerate
