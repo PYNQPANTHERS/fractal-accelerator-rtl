@@ -1,11 +1,16 @@
+// needs to be updated with opcodes coming through datapath
+
+
+
+
 module core_top 
-#(parameter NARROW_WIDTH = 17, ITERATION_COUNT_WIDTH = 16)
+#(parameter NARROW_WIDTH = 18, ITERATION_COUNT_WIDTH = 16)
 (
 input clk,
 input rst,
 input opcode_reset,
 input live_data, // live_data is the signal the control unit sends to a core to tell the core it is sending data that needs to be stored 
-input [12:0] opcode, //{Width[12], Julia[11], |x|[10], |y|[9], -x[8], -y[7], n[6:5], MaxIter[4:0]}
+input [10:0] opcode, //{Width[10], Julia[9], |x|[8], |y|[7], -x[6], -y[5], MaxIter[4:0]}
 input [NARROW_WIDTH-1:0] data_in,
 
 //this is to communicate to stack when done
@@ -34,7 +39,6 @@ width width_mode;
 
 reg julia_type; //0 - mandel, 1 - julia
 reg [3:0] magnitude_negation_encoding; //{abs x, abs y, neg x, neg y}
-reg [1:0] n_exponent; // 00 = 2, 01 = 3, 10 = 4, 11 = 5
 reg [4:0] max_iteration;
 
 reg [NARROW_WIDTH-1:0] julia_c_x; 
@@ -46,19 +50,13 @@ reg [NARROW_WIDTH-1:0] starting_x_reg_2;
 reg [NARROW_WIDTH-1:0] starting_y_reg_1;
 reg [NARROW_WIDTH-1:0] starting_y_reg_2;
 
-reg [NARROW_WIDTH-1:0] magnitude_reg_1; //upper
-reg [NARROW_WIDTH-1:0] magnitude_reg_2;
-reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_1;
-reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_2;
+
 
 //this is where the exponentiator adds up partial products as the 'end' register
 //note : this mean the way the exponentiator multiplies is either:
 //multiply what is in the sum register by the starting value,
 //square what is in the sum registers 
-reg [NARROW_WIDTH-1:0] sum_x_reg_1; //upper
-reg [NARROW_WIDTH-1:0] sum_x_reg_2;
-reg [NARROW_WIDTH-1:0] sum_y_reg_1;
-reg [NARROW_WIDTH-1:0] sum_y_reg_2;
+
 
 
 
@@ -89,10 +87,9 @@ always_ff @(posedge clk) begin
             case (core_state)
             
             LOADING_OPCODES : begin 
-                                width_mode <= opcode[12];
-                                julia_type <= opcode[11];
-                                magnitude_negation_encoding <= opcode[10:7];
-                                n_exponent <= opcode[6:5];
+                                width_mode <= opcode[10];
+                                julia_type <= opcode[9];
+                                magnitude_negation_encoding <= opcode[8:5];
                                 max_iteration <= opcode[4:0];
                                 if(opcode[11]) begin
                                     core_state <= LOADING_JULIA;
