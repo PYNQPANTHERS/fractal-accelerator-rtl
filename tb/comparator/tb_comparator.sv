@@ -4,9 +4,7 @@
 
 module tb_comparator;
 
-    // ----------------------------------------------------------------
     // Test infrastructure
-    // ----------------------------------------------------------------
     int tests_run    = 0;
     int tests_passed = 0;
     int tests_failed = 0;
@@ -40,9 +38,7 @@ module tb_comparator;
         $display("%0s\n", {72{"="}});
     endtask
 
-    // ----------------------------------------------------------------
     // Clock
-    // ----------------------------------------------------------------
     localparam int CLK_HALF = 5;
     logic clk = 0;
     always #CLK_HALF clk = ~clk;
@@ -52,9 +48,7 @@ module tb_comparator;
         #1;
     endtask
 
-    // ----------------------------------------------------------------
     // DUT signals
-    // ----------------------------------------------------------------
     logic        rst;
     logic        sched_reset;
     logic [8:0]  top_left_x, top_left_y, quad_size;
@@ -79,9 +73,7 @@ module tb_comparator;
         .complete      (complete)
     );
 
-    // ----------------------------------------------------------------
     // Helpers
-    // ----------------------------------------------------------------
 
     // Pack an entry and present it as valid for one cycle
     task automatic feed(input logic [8:0] x, y, input logic [3:0] col);
@@ -110,9 +102,7 @@ module tb_comparator;
         rst = 1; tick(2); rst = 0; tick(1);
     endtask
 
-    // ----------------------------------------------------------------
     // Tests
-    // ----------------------------------------------------------------
     initial begin
         $dumpfile("sim/waves/tb_comparator.vcd");
         $dumpvars(0, tb_comparator);
@@ -121,17 +111,13 @@ module tb_comparator;
         rst=0; sched_reset=0; comp_valid=0; comp_data=0;
         top_left_x=0; top_left_y=0; quad_size=0; expected_count=0;
 
-        // ============================================================
         suite("RESET — hard reset clears all state");
-        // ============================================================
         hard_reset();
         check(!differ,   "differ low on reset");
         check(!complete, "complete low on reset");
         check(!comp_pop, "comp_pop low when no valid data");
 
-        // ============================================================
         suite("RESET — sched_reset clears state");
-        // ============================================================
         hard_reset();
         // manually force differ high by feeding mismatched colours
         load_quad(9'd0, 9'd0, 9'd4, 11'd4);
@@ -143,18 +129,14 @@ module tb_comparator;
         check(!differ,   "differ cleared by sched_reset");
         check(!complete, "complete cleared by sched_reset");
 
-        // ============================================================
         suite("BOUNDS — in-bounds entry is processed");
-        // ============================================================
         hard_reset();
         load_quad(9'd10, 9'd10, 9'd8, 11'd1);
         feed(9'd10, 9'd10, 4'hC); // exactly top-left corner
         tick(1);
         check(!differ, "no differ for single in-bounds entry (becomes reference)");
 
-        // ============================================================
         suite("BOUNDS — out-of-bounds entry is discarded");
-        // ============================================================
         hard_reset();
         load_quad(9'd10, 9'd10, 9'd8, 11'd2);
         feed(9'd5, 9'd5, 4'hA);   // out of bounds — sets nothing
@@ -166,9 +148,7 @@ module tb_comparator;
         tick(1);
         check(!differ, "in-bounds after OOB correctly becomes reference");
 
-        // ============================================================
         suite("BOUNDS — out-of-bounds after reference does not affect differ");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd4, 11'd2);
         feed(9'd0, 9'd0, 4'hA); // reference = A
@@ -176,9 +156,7 @@ module tb_comparator;
         tick(1);
         check(!differ, "OOB entry with different colour does not set differ");
 
-        // ============================================================
         suite("BOUNDS — corner cases of bounding box");
-        // ============================================================
         hard_reset();
         // quad from (5,5) size 4 covers x=[5..8], y=[5..8]
         load_quad(9'd5, 9'd5, 9'd4, 11'd4);
@@ -190,9 +168,7 @@ module tb_comparator;
         check(!differ,  "all four corners in-bounds, same colour — no differ");
         check(complete, "complete after 4 in-bounds entries with expected=4");
 
-        // ============================================================
         suite("BOUNDS — one pixel outside boundary");
-        // ============================================================
         hard_reset();
         load_quad(9'd5, 9'd5, 9'd4, 11'd1);
         feed(9'd9, 9'd5, 4'h1); // x=9 is one past boundary (5+4=9, exclusive)
@@ -200,18 +176,14 @@ module tb_comparator;
         check(!differ,   "x=top_left+quad_size is out of bounds");
         check(!complete, "complete not set — OOB entry not counted");
 
-        // ============================================================
         suite("COLOUR — first entry becomes reference, no differ");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd3);
         feed(9'd0, 9'd0, 4'h7);
         tick(1);
         check(!differ, "first entry sets reference — no differ");
 
-        // ============================================================
         suite("COLOUR — matching colours do not set differ");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd4);
         feed(9'd0,  9'd0,  4'h5);
@@ -221,9 +193,7 @@ module tb_comparator;
         tick(1);
         check(!differ, "four identical colours — no differ");
 
-        // ============================================================
         suite("COLOUR — mismatch sets differ immediately");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd4);
         feed(9'd0, 9'd0, 4'hA); // reference = A
@@ -231,9 +201,7 @@ module tb_comparator;
         tick(1);
         check(differ, "differ set immediately on first mismatch");
 
-        // ============================================================
         suite("COLOUR — differ latches and stays high");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd4);
         feed(9'd0, 9'd0, 4'hA);
@@ -243,9 +211,7 @@ module tb_comparator;
         tick(1);
         check(differ, "differ stays latched even after matching entries follow");
 
-        // ============================================================
         suite("COLOUR — mismatch on last entry still sets differ");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd3);
         feed(9'd0, 9'd0, 4'h3);
@@ -254,9 +220,7 @@ module tb_comparator;
         tick(1);
         check(differ, "differ set on last entry mismatch");
 
-        // ============================================================
         suite("COMPLETE — asserts when seen == expected");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd4);
         feed(9'd0, 9'd0, 4'h2);
@@ -267,15 +231,11 @@ module tb_comparator;
         tick(1);
         check(complete, "complete asserts after 4th entry");
 
-        // ============================================================
         suite("COMPLETE — latches and stays high after asserting");
-        // ============================================================
         tick(5);
         check(complete, "complete stays latched after asserting");
 
-        // ============================================================
         suite("COMPLETE — differ and complete can both be high");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd3);
         feed(9'd0, 9'd0, 4'hA);
@@ -285,9 +245,7 @@ module tb_comparator;
         check(differ,   "differ asserted");
         check(complete, "complete asserted simultaneously with differ");
 
-        // ============================================================
         suite("COMPLETE — expected_count=1 completes on first entry");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd1);
         feed(9'd0, 9'd0, 4'h9);
@@ -295,9 +253,7 @@ module tb_comparator;
         check(complete, "complete after single entry when expected=1");
         check(!differ,  "no differ for single entry");
 
-        // ============================================================
         suite("COMP_POP — asserts whenever comp_valid high");
-        // ============================================================
         hard_reset();
         load_quad(9'd0, 9'd0, 9'd16, 11'd2);
         comp_valid = 1; comp_data = {4'h1, 9'd0, 9'd0};
@@ -307,9 +263,7 @@ module tb_comparator;
         comp_valid = 0;
         check(!comp_pop, "comp_pop deasserts when comp_valid low");
 
-        // ============================================================
         suite("COMP_POP — out-of-bounds entries still consumed");
-        // ============================================================
         hard_reset();
         load_quad(9'd10, 9'd10, 9'd4, 11'd1);
         comp_valid = 1; comp_data = {4'hF, 9'd0, 9'd0}; // OOB
@@ -317,9 +271,7 @@ module tb_comparator;
         check(comp_pop, "comp_pop fires for OOB entry — entry consumed");
         tick(1); comp_valid = 0;
 
-        // ============================================================
         suite("MULTI-QUAD — sched_reset correctly transitions between quads");
-        // ============================================================
         hard_reset();
         // Quad 1: 4x4 at (0,0), 4 border pixels, all colour A
         load_quad(9'd0, 9'd0, 9'd4, 11'd4);
@@ -342,9 +294,7 @@ module tb_comparator;
         check(differ,   "quad 2: differ set");
         check(complete, "quad 2: complete set");
 
-        // ============================================================
         suite("MULTI-QUAD — stale entries from previous quad are discarded");
-        // ============================================================
         hard_reset();
         // Quad 1 at (0,0) size 4
         load_quad(9'd0, 9'd0, 9'd4, 11'd2);
