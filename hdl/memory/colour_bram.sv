@@ -1,10 +1,5 @@
-// colour_bram.sv
 // Dual-port colour storage for one 256x256 sixteenth.
 // 6-bit colour padded to 8 bits, tile-ordered addressing.
-//
-// Port A (read only)  — controller, dedicated, zero stall
-// Port B (contested)  — controller write takes priority over b2d read
-//                       b2d_rd_grant asserted when b2d read is served
 
 module colour_bram (
     input  logic        clk,

@@ -129,20 +129,18 @@ module tb_state_bram;
         check(got == 2'b11, "pixel (0,255) — bottom left corner");
 
         // ============================================================
-        suite("RESET — output register clears on rst");
+        suite("RESET — writes blocked during rst, existing values preserved");
         // ============================================================
-        // Note: BRAM memory contents are NOT cleared by rst (hardware limitation).
-        // In real use the sixteenth_controller writes 00 to every address before
-        // starting. We test only that rst clears the output register (post_rst flag).
+        // rst does not clear BRAM memory (hardware limitation).
+        // Verify: writes are blocked while rst high, old value preserved after rst.
         write_state(9'd10, 9'd10, 2'b11);
-        // assert rst — post_rst goes high, next read before any a_rd should return 00
-        rst = 1; tick(1); rst = 0;
-        // immediately read — post_rst still high so output is 00
-        a_x = 9'd10; a_y = 9'd10; a_rd = 1; tick(1); a_rd = 0; tick(0);
-        check(a_rstate == 2'b00, "output returns 00 immediately after rst (post_rst gating)");
-        // second read — post_rst cleared by first a_rd, now returns real mem value
-        a_x = 9'd10; a_y = 9'd10; a_rd = 1; tick(1); a_rd = 0; tick(1);
-        check(a_rstate == 2'b11, "second read returns real mem value (11)");
+        rst = 1;
+        // attempt write during rst — should be blocked
+        write_state(9'd10, 9'd10, 2'b01);
+        rst = 0; tick(1);
+        // read back — should still be 11 since write was blocked
+        read_state(9'd10, 9'd10, got);
+        check(got == 2'b11, "write blocked during rst — value preserved as 11");
 
         // ============================================================
         suite("STATE MACHINE — 00 -> 01 -> 11 sequence");

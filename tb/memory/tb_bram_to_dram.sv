@@ -84,24 +84,23 @@ module tb_bram_to_dram;
     logic [31:0] axi_addr_captured [0:31];
     int          axi_capture_count;
 
-    // AXI capture via always_ff — reset via rst signal
-    logic        cap_rst;
-    always_ff @(posedge clk) begin
-        if (cap_rst)
-            axi_capture_count <= 0;
-        else if (axi_wr_en && axi_wr_ready && axi_capture_count < 32) begin
-            axi_captured[axi_capture_count]      <= axi_wr_data;
-            axi_addr_captured[axi_capture_count] <= axi_wr_addr;
-            axi_capture_count                    <= axi_capture_count + 1;
+    // AXI capture — blocking assignments so initial block can reset count
+    always @(posedge clk) begin
+        #1; // wait for non-blocking assignments to settle
+        if (axi_wr_en && axi_wr_ready && axi_capture_count < 32) begin
+            axi_captured[axi_capture_count]      = axi_wr_data;
+            axi_addr_captured[axi_capture_count] = axi_wr_addr;
+            axi_capture_count                    = axi_capture_count + 1;
         end
     end
 
     task automatic do_reset();
-        rst = 1; cap_rst = 1; tick(2);
-        rst = 0; cap_rst = 0;
+        rst = 1; tick(2);
+        rst = 0;
         tile_done = '0; engine_done = 0;
         tt_is_filled = 0; tt_fill_colour = 0;
         axi_wr_ready = 1; sixteenth_base_addr = 32'h0;
+        axi_capture_count = 0;
         tick(1);
     endtask
 
@@ -123,7 +122,7 @@ module tb_bram_to_dram;
     initial begin
         $dumpfile("sim/waves/tb_bram_to_dram.vcd");
         $dumpvars(0, tb_bram_to_dram);
-        cap_rst=0; rst=1; tile_done='0; engine_done=0;
+        rst=1; tile_done='0; engine_done=0;
         tt_is_filled=0; tt_fill_colour=0;
         axi_wr_ready=1; sixteenth_base_addr=0;
         axi_capture_count=0;

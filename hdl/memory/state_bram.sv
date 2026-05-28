@@ -1,12 +1,6 @@
-// state_bram.sv
 // Packed 2-bit state storage for one 256x256 sixteenth.
 // 4 pixels per byte, tile-ordered addressing.
 // State: 00=uncomputed, 01=in-progress, 11=done, 10=unused
-//
-// Reset: memory is initialised to 00 via initial block (BRAM init data).
-// rst only gates the output register — memory contents are not cleared.
-// In normal use, sixteenth_controller writes 00 to state BRAM before
-// each sixteenth via the write port rather than relying on rst.
 
 module state_bram (
     input  logic        clk,

@@ -113,14 +113,12 @@ module tb_memory_integration;
     logic [31:0] axi_addr_log [0:255];
     int          axi_log_count;
 
-    logic log_rst;
-    always_ff @(posedge clk) begin
-        if (log_rst)
-            axi_log_count <= 0;
-        else if (axi_wr_en && axi_wr_ready && axi_log_count < 256) begin
-            axi_data_log[axi_log_count] <= axi_wr_data;
-            axi_addr_log[axi_log_count] <= axi_wr_addr;
-            axi_log_count               <= axi_log_count + 1;
+    always @(posedge clk) begin
+        #1; // wait for non-blocking assignments to settle
+        if (axi_wr_en && axi_wr_ready && axi_log_count < 256) begin
+            axi_data_log[axi_log_count] = axi_wr_data;
+            axi_addr_log[axi_log_count] = axi_wr_addr;
+            axi_log_count               = axi_log_count + 1;
         end
     end
 
@@ -130,12 +128,13 @@ module tb_memory_integration;
     logic        got_cache, got_val;
 
     task automatic reset_all();
-        tt_rst = 1; b2d_rst = 1; log_rst = 1; tick(2);
-        tt_rst = 0; b2d_rst = 0; log_rst = 0;
+        tt_rst = 1; b2d_rst = 1; tick(2);
+        tt_rst = 0; b2d_rst = 0;
         cb_rd_en=0; cb_wr_en=0;
         tt_single_en=0; tt_quad_en=0;
         tile_done='0; engine_done=0;
         axi_wr_ready=1; sixteenth_base_addr=32'h0;
+        axi_log_count = 0;
         tick(1);
     endtask
 
