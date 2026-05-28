@@ -17,6 +17,11 @@ module state_bram (
     (* ram_style = "block" *)
     logic [7:0] mem [0:16383];
 
+    initial begin
+        for (int i = 0; i < 16384; i++)
+            mem[i] = 8'h00;
+    end
+
     // Address computation
     // Tile-ordered pixel address = { y[7:4], x[7:4], y[3:0], x[3:0] }
     // Byte address = tile_ordered_addr[15:2]  (upper 14 bits)

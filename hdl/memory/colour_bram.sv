@@ -1,66 +1,70 @@
-// Dual-port colour storage for one 256x256 sixteenth.
-// Stores 6-bit colour values padded to 8 bits (top 2 bits unused).
-
+// 64-bit wide dual-port BRAM for 256x256 sixteenth colour storage.
+// 6-bit colour padded to 8 bits, tile-ordered addressing throughout.
 module colour_bram (
     input  logic        clk,
 
-    // Port A - control unit (single pixel, 8-bit)
-    input  logic [8:0]  a_x,         // pixel x coordinate (0..255)
-    input  logic [8:0]  a_y,         // pixel y coordinate (0..255)
-    input  logic        a_rd,        // read enable
-    input  logic        a_we,        // write enable
-    input  logic [7:0]  a_wdata,     // write data ([5:0] = colour, [7:6] unused)
-    output logic [7:0]  a_rdata,     // read data, valid one cycle after a_rd
+    // controller read port - dedicated, always served
+    input  logic [8:0]  ctrl_rd_x,
+    input  logic [8:0]  ctrl_rd_y,
+    input  logic        ctrl_rd_en,
+    output logic [7:0]  ctrl_rd_data,   // valid one cycle after ctrl_rd_en
 
-    // Port B - BRAM-to-DRAM (8 pixels, 64-bit) 
-    input  logic [12:0] b_word_addr, // word address (0..8191)
-    input  logic        b_rd,        // read enable
-    output logic [63:0] b_rdata      // read data, valid one cycle after b_rd
+    // controller write port - priority on port B
+    input  logic [8:0]  ctrl_wr_x,
+    input  logic [8:0]  ctrl_wr_y,
+    input  logic        ctrl_wr_en,
+    input  logic [7:0]  ctrl_wr_data,
+
+    // bram-to-dram read port - port B, granted only when no controller write
+    input  logic [12:0] b2d_word_addr,
+    input  logic        b2d_rd_en,
+    output logic        b2d_rd_grant,   // high when b2d read is being served
+    output logic [63:0] b2d_rd_data     // valid one cycle after b2d_rd_grant
 );
 
-    // Memory - 8192 words × 64 bits
     (* ram_style = "block" *)
     logic [63:0] mem [0:8191];
 
-    // Port A address decomposition
-    logic [15:0] tile_addr;   // full tile-ordered pixel address
-    logic [12:0] a_word_addr; // which 64-bit word this pixel lives in
-    logic [2:0]  a_byte_off;  // which byte within that word (0..7)
+    function automatic [12:0] word_addr(input logic [8:0] x, input logic [8:0] y);
+        logic [15:0] ta;
+        ta = {y[7:4], x[7:4], y[3:0], x[3:0]};
+        return ta[15:3];
+    endfunction
 
-    assign tile_addr   = { a_y[7:4], a_x[7:4], a_y[3:0], a_x[3:0] };
-    assign a_word_addr = tile_addr[15:3];
-    assign a_byte_off  = tile_addr[2:0];
+    function automatic [2:0] byte_off(input logic [8:0] x, input logic [8:0] y);
+        logic [15:0] ta;
+        ta = {y[7:4], x[7:4], y[3:0], x[3:0]};
+        return ta[2:0];
+    endfunction
 
-    // Port A - read
-    // Read the full 64-bit word, extract the target byte.
+    // port A - controller dedicated read
     logic [63:0] a_rd_word;
+    logic [2:0]  a_byte_off_reg;
 
     always_ff @(posedge clk) begin
-        if (a_rd)
-            a_rd_word <= mem[a_word_addr];
+        if (ctrl_rd_en) begin
+            a_rd_word     <= mem[word_addr(ctrl_rd_x, ctrl_rd_y)];
+            a_byte_off_reg <= byte_off(ctrl_rd_x, ctrl_rd_y);
+        end
     end
 
-    // Extract correct byte from registered word - combinational after reg
-    assign a_rdata = a_rd_word[a_byte_off * 8 +: 8];
+    assign ctrl_rd_data = a_rd_word[a_byte_off_reg * 8 +: 8];
 
-    // Port A - write (read-modify-write)
-    // Read current word, replace target byte, write back.
-    logic [63:0] a_wr_word;
+    // port B arbitration - controller write beats b2d read
+    assign b2d_rd_grant = b2d_rd_en && !ctrl_wr_en;
+
+    logic [63:0] b_wr_word;
 
     always_comb begin
-        a_wr_word = mem[a_word_addr]; // read current word (LUTRAM path for RMW)
-        a_wr_word[a_byte_off * 8 +: 8] = a_wdata; // replace target byte
+        b_wr_word = mem[word_addr(ctrl_wr_x, ctrl_wr_y)];
+        b_wr_word[byte_off(ctrl_wr_x, ctrl_wr_y) * 8 +: 8] = ctrl_wr_data;
     end
 
     always_ff @(posedge clk) begin
-        if (a_we)
-            mem[a_word_addr] <= a_wr_word;
-    end
-
-    // Port B - read (64-bit, one cycle)
-    always_ff @(posedge clk) begin
-        if (b_rd)
-            b_rdata <= mem[b_word_addr];
+        if (ctrl_wr_en)
+            mem[word_addr(ctrl_wr_x, ctrl_wr_y)] <= b_wr_word;
+        else if (b2d_rd_en)
+            b2d_rd_data <= mem[b2d_word_addr];
     end
 
 endmodule
