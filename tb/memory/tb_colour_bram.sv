@@ -77,9 +77,7 @@ module tb_colour_bram;
         ctrl_wr_en=0; ctrl_wr_x=0; ctrl_wr_y=0; ctrl_wr_data=0;
         tick(2);
 
-        // ============================================================
-        suite("PORT A — basic write then read");
-        // ============================================================
+        suite("PORT A - basic write then read");
         write_pixel(9'd0, 9'd0, 8'h3F);
         read_pixel(9'd0, 9'd0, got);
         check(got == 8'h3F, "pixel (0,0) reads back correct colour");
@@ -90,11 +88,9 @@ module tb_colour_bram;
 
         write_pixel(9'd0, 9'd15, 8'h15);
         read_pixel(9'd0, 9'd15, got);
-        check(got == 8'h15, "pixel (0,15) reads back correct — different tile row");
+        check(got == 8'h15, "pixel (0,15) reads back correct - different tile row");
 
-        // ============================================================
-        suite("PORT A — tile boundary pixels");
-        // ============================================================
+        suite("PORT A - tile boundary pixels");
         // pixels at tile boundaries to verify tile-ordered addressing
         write_pixel(9'd16, 9'd0,  8'h01); // start of tile (1,0)
         write_pixel(9'd31, 9'd0,  8'h02); // end of tile (1,0) first row
@@ -106,9 +102,7 @@ module tb_colour_bram;
         read_pixel(9'd0,  9'd16, got); check(got == 8'h03, "tile (0,1) first pixel");
         read_pixel(9'd16, 9'd16, got); check(got == 8'h04, "tile (1,1) first pixel");
 
-        // ============================================================
-        suite("PORT A — overwrite same pixel");
-        // ============================================================
+        suite("PORT A - overwrite same pixel");
         write_pixel(9'd5, 9'd5, 8'h10);
         read_pixel(9'd5, 9'd5, got);
         check(got == 8'h10, "first write");
@@ -116,9 +110,7 @@ module tb_colour_bram;
         read_pixel(9'd5, 9'd5, got);
         check(got == 8'h3E, "overwrite succeeds");
 
-        // ============================================================
-        suite("PORT A — adjacent pixels in same 64-bit word independent");
-        // ============================================================
+        suite("PORT A - adjacent pixels in same 64-bit word independent");
         // pixels (0,0)..(7,0) share the same 64-bit word (tile 0, word 0)
         for (int i = 0; i < 8; i++) write_pixel(9'(i), 9'd0, 8'(i + 1));
         tick(1);
@@ -127,9 +119,7 @@ module tb_colour_bram;
             check(got == 8'(i+1), $sformatf("word-shared pixel (%0d,0) correct", i));
         end
 
-        // ============================================================
-        suite("PORT A — write does not corrupt adjacent pixels");
-        // ============================================================
+        suite("PORT A - write does not corrupt adjacent pixels");
         write_pixel(9'd0, 9'd0, 8'hAA);
         write_pixel(9'd1, 9'd0, 8'hBB);
         write_pixel(9'd2, 9'd0, 8'hCC);
@@ -140,9 +130,7 @@ module tb_colour_bram;
         read_pixel(9'd1, 9'd0, got); check(got == 8'h11, "overwritten pixel correct");
         read_pixel(9'd2, 9'd0, got); check(got == 8'hCC, "right neighbour unchanged");
 
-        // ============================================================
-        suite("PORT B — 64-bit read returns 8 correct pixels");
-        // ============================================================
+        suite("PORT B - 64-bit read returns 8 correct pixels");
         // write 8 known pixels into tile 0, row 0 (word address 0)
         for (int i = 0; i < 8; i++) write_pixel(9'(i), 9'd0, 8'(i + 10));
         tick(2);
@@ -153,27 +141,21 @@ module tb_colour_bram;
             check(b_rdata[i*8 +: 8] == 8'(i+10),
                 $sformatf("Port B word[%0d] = pixel (%0d,0) correct", i, i));
 
-        // ============================================================
-        suite("PORT B — grant denied when controller write in same cycle");
-        // ============================================================
+        suite("PORT B - grant denied when controller write in same cycle");
         ctrl_wr_en = 1; ctrl_wr_x = 9'd0; ctrl_wr_y = 9'd0; ctrl_wr_data = 8'hFF;
         b_rd = 1; b_word_addr = 13'd0;
         tick(1);
         check(!b_rd_grant, "b2d_rd_grant denied when controller write active");
         ctrl_wr_en = 0; b_rd = 0;
 
-        // ============================================================
-        suite("PORT B — grant given next cycle after write clears");
-        // ============================================================
+        suite("PORT B - grant given next cycle after write clears");
         tick(1);
         b_rd = 1; b_word_addr = 13'd0;
         tick(1);
         check(b_rd_grant, "b2d_rd_grant asserted cycle after write clears");
         b_rd = 0; tick(1);
 
-        // ============================================================
-        suite("SIMULTANEOUS — read port A and Port B different tiles");
-        // ============================================================
+        suite("SIMULTANEOUS - read port A and Port B different tiles");
         write_pixel(9'd0, 9'd0,   8'h21); // tile 0
         write_pixel(9'd0, 9'd16,  8'h42); // tile (0,1), word addr = 16*32 = 512
         tick(2);
@@ -183,20 +165,18 @@ module tb_colour_bram;
         check(axi_rdata_byte(b_rdata, 0) == 8'h42, "Port B reads tile (0,1) correctly");
         check(a_rdata == 8'h21, "Port A reads tile (0,0) correctly same cycle");
 
-        // ============================================================
-        suite("SIMULTANEOUS — write and Port B read to different tiles");
-        // ============================================================
+        suite("SIMULTANEOUS - write and Port B read to different tiles");
         write_pixel(9'd0, 9'd32, 8'hDE); // tile (0,2) = word addr 1024
         b_word_addr = 13'd0; b_rd = 1;   // read tile 0 simultaneously
         tick(1); b_rd = 0;
-        // write to tile (0,2), b2d reading tile 0 — no conflict
+        // write to tile (0,2), b2d reading tile 0 - no conflict
         check(b_rd_grant, "b2d granted when write targets different tile");
 
         summary();
         $finish;
     end
 
-    // helper — extract byte 0 from a 64-bit word
+    // helper - extract byte 0 from a 64-bit word
     function automatic logic [7:0] axi_rdata_byte(input logic [63:0] w, input int idx);
         return w[idx*8 +: 8];
     endfunction

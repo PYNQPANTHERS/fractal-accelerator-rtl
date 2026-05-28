@@ -1,14 +1,5 @@
-// bram_to_dram.sv
 // Streams completed tiles from colour_bram to DDR3 via AXI HP.
 // Runs concurrently with per_sixteenth_engine.
-//
-// Flood-filled tiles are generated from tile_table (no BRAM read).
-// Tiled tiles use a pipelined BRAM read → AXI write:
-//   each cycle issues the next BRAM read while sending the previous
-//   read result to AXI. Total tile transfer = 33 cycles (32+1 pipeline drain).
-//   Pipeline stalls cleanly if b2d_rd_grant is denied.
-//
-// quarter_complete only asserts when all 256 tiles transferred AND engine_done.
 
 module bram_to_dram (
     input  logic         clk,
@@ -56,8 +47,8 @@ module bram_to_dram (
 
     logic [255:0] transferred;
     logic [7:0]   cur_tile;
-    logic [4:0]   rd_count;      // how many BRAM reads issued (0..31)
-    logic [4:0]   wr_count;      // how many AXI writes sent   (0..31)
+    logic [4:0]   rd_count;      // BRAM words received into pipeline (0..31)
+    logic [4:0]   wr_count;      // AXI writes committed (0..31)
     logic [4:0]   fill_count;    // words generated in fill path (0..31)
 
     // one-deep pipeline register
@@ -85,10 +76,6 @@ module bram_to_dram (
     assign tt_rd_index    = cur_tile;
     assign quarter_complete = (transferred == '1) && engine_done;
 
-    // AXI write address — base + tile offset + word offset within tile
-    // wr_count is the current word index, used combinationally before increment
-    assign axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
-
     // fill word — 8 pixels of same colour packed into 64 bits
     logic [63:0] fill_word;
     always_comb begin
@@ -99,18 +86,19 @@ module bram_to_dram (
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            state         <= SCAN;
-            transferred   <= '0;
-            cur_tile      <= '0;
-            rd_count      <= '0;
-            wr_count      <= '0;
-            fill_count    <= '0;
-            pipe_valid    <= 1'b0;
-            pipe_data     <= '0;
-            b2d_rd_en     <= 1'b0;
-            b2d_word_addr <= '0;
-            axi_wr_en     <= 1'b0;
-            axi_wr_data   <= '0;
+            state             <= SCAN;
+            transferred       <= '0;
+            cur_tile          <= '0;
+            rd_count          <= '0;
+            wr_count          <= '0;
+            fill_count        <= '0;
+            pipe_valid        <= 1'b0;
+            pipe_data         <= '0;
+            b2d_rd_en         <= 1'b0;
+            b2d_word_addr     <= '0;
+            axi_wr_en         <= 1'b0;
+            axi_wr_addr       <= '0;
+            axi_wr_data       <= '0;
             cache_valid_wr_en <= 1'b0;
         end else begin
             // default deasserts
@@ -146,6 +134,8 @@ module bram_to_dram (
                 GENERATE_FILL: begin
                     // no BRAM read — generate solid colour words and write to AXI
                     if (axi_wr_ready) begin
+                        // register address with pre-increment wr_count
+                        axi_wr_addr <= sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
                         axi_wr_en   <= 1'b1;
                         axi_wr_data <= fill_word;
                         fill_count  <= fill_count + 1;
@@ -161,39 +151,49 @@ module bram_to_dram (
                 end
 
                 BURST_PIPE: begin
-                    // pipeline: issue next BRAM read while sending previous result to AXI
                     if (b2d_rd_grant) begin
-                        // previous read result now valid — latch into pipeline reg
-                        // (on first grant pipe_valid was 0 so no AXI write yet)
-                        if (pipe_valid && axi_wr_ready) begin
+                        if (!pipe_valid) begin
+                            // priming — fill the pipeline, no AXI write yet
+                            pipe_data  <= b2d_rd_data;
+                            pipe_valid <= 1'b1;
+                            rd_count   <= rd_count + 1;
+                            if (rd_count < 5'd31) begin
+                                b2d_rd_en     <= 1'b1;
+                                b2d_word_addr <= {cur_tile, 5'(rd_count + 1)};
+                            end else begin
+                                state <= PIPE_DRAIN;
+                            end
+                        end else if (axi_wr_ready) begin
+                            // pipeline flowing — write current word, latch new BRAM data
+                            // register address with pre-increment wr_count
+                            axi_wr_addr <= sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
                             axi_wr_en   <= 1'b1;
                             axi_wr_data <= pipe_data;
                             wr_count    <= wr_count + 1;
-                        end
-                        pipe_data  <= b2d_rd_data;
-                        pipe_valid <= 1'b1;
-                        rd_count   <= rd_count + 1;
-
-                        if (rd_count == 5'd31) begin
-                            // all reads issued — drain the last word
-                            state <= PIPE_DRAIN;
+                            pipe_data   <= b2d_rd_data;
+                            rd_count    <= rd_count + 1;
+                            if (rd_count == 5'd31) begin
+                                state <= PIPE_DRAIN;
+                            end else begin
+                                b2d_rd_en     <= 1'b1;
+                                b2d_word_addr <= {cur_tile, 5'(rd_count + 1)};
+                            end
                         end else begin
-                            // issue next read
+                            // AXI stall — cannot latch new data, re-request same BRAM word
                             b2d_rd_en     <= 1'b1;
-                            b2d_word_addr <= {cur_tile, 5'(rd_count + 1)};
+                            b2d_word_addr <= {cur_tile, rd_count};
                         end
                     end else begin
-                        // grant denied — controller write took priority
-                        // hold current AXI write, retry same BRAM address next cycle
-                        b2d_rd_en     <= 1'b1; // reassert same address
+                        // BRAM grant denied — controller write took priority; retry same address
+                        b2d_rd_en     <= 1'b1;
                         b2d_word_addr <= {cur_tile, rd_count};
-                        // do not advance wr_count or pipe — stall cleanly
                     end
                 end
 
                 PIPE_DRAIN: begin
                     // send the last word sitting in pipe_data to AXI
                     if (pipe_valid && axi_wr_ready) begin
+                        axi_wr_addr           <= sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
                         axi_wr_en             <= 1'b1;
                         axi_wr_data           <= pipe_data;
                         pipe_valid            <= 1'b0;

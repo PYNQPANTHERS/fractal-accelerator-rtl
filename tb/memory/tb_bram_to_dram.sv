@@ -73,7 +73,7 @@ module tb_bram_to_dram;
         .quarter_complete   (quarter_complete)
     );
 
-    // BRAM model — always grant, echo address in all bytes
+    // BRAM model - always grant, echo address in all bytes
     always_comb begin
         b2d_rd_grant = b2d_rd_en;
         b2d_rd_data  = {8{b2d_word_addr[7:0]}};
@@ -84,15 +84,21 @@ module tb_bram_to_dram;
     logic [31:0] axi_addr_captured [0:31];
     int          axi_capture_count;
 
-    // AXI capture — blocking assignments so initial block can reset count
-    always @(posedge clk) begin
-        #1; // wait for non-blocking assignments to settle
-        if (axi_wr_en && axi_wr_ready && axi_capture_count < 32) begin
-            axi_captured[axi_capture_count]      = axi_wr_data;
-            axi_addr_captured[axi_capture_count] = axi_wr_addr;
-            axi_capture_count                    = axi_capture_count + 1;
+    // AXI capture task - called explicitly in tests to collect N writes
+    task automatic collect_writes(input int n);
+        int collected;
+        collected = 0;
+        axi_capture_count = 0;
+        while (collected < n) begin
+            @(posedge clk); #1;
+            if (axi_wr_en && axi_wr_ready) begin
+                axi_captured[collected]      = axi_wr_data;
+                axi_addr_captured[collected] = axi_wr_addr;
+                collected++;
+                axi_capture_count = collected;
+            end
         end
-    end
+    endtask
 
     task automatic do_reset();
         rst = 1; tick(2);
@@ -100,13 +106,13 @@ module tb_bram_to_dram;
         tile_done = '0; engine_done = 0;
         tt_is_filled = 0; tt_fill_colour = 0;
         axi_wr_ready = 1; sixteenth_base_addr = 32'h0;
-        axi_capture_count = 0;
         tick(1);
     endtask
 
     // module-level vars
     int          n, i;
     int          addr_errors, col_errors, writes_seen, denials;
+    int          bp_count, rdy_timer;
     logic [31:0] expected_addr;
     logic        got_cache_pulse, got_cache_val;
     logic [7:0]  got_cache_idx;
@@ -125,17 +131,14 @@ module tb_bram_to_dram;
         rst=1; tile_done='0; engine_done=0;
         tt_is_filled=0; tt_fill_colour=0;
         axi_wr_ready=1; sixteenth_base_addr=0;
-        axi_capture_count=0;
         tick(3);
 
-        // ============================================================
-        suite("TILED TILE — basic transfer AXI always ready");
-        // ============================================================
+        suite("TILED TILE - basic transfer AXI always ready");
         do_reset();
         tt_is_filled = 0;
         tick(2);
         tile_done[0] = 1;
-        wait_tile(8'd0, 200);
+        collect_writes(32);
         check(axi_capture_count == 32,
             $sformatf("32 AXI writes issued (got %0d)", axi_capture_count));
         addr_errors = 0;
@@ -146,32 +149,36 @@ module tb_bram_to_dram;
         check(addr_errors == 0,
             $sformatf("all 32 addresses sequential (%0d errors)", addr_errors));
 
-        // ============================================================
-        suite("TILED TILE — AXI backpressure");
-        // ============================================================
+        suite("TILED TILE - AXI backpressure");
         do_reset();
         tt_is_filled = 0;
         tile_done[1] = 1;
-        fork
-            begin
-                repeat(300) begin
-                    axi_wr_ready = 0; tick(2);
-                    axi_wr_ready = 1; tick(3);
-                end
+        // Collect 32 writes while toggling ready - no fork/join (Icarus hangs).
+        // Capture on axi_wr_en alone: DUT pre-validates ready at the decision cycle and
+        // latches axi_wr_en one cycle later, so ready may have changed at output time.
+        rdy_timer = 0; bp_count = 0; axi_capture_count = 0; axi_wr_ready = 1;
+        while (bp_count < 32) begin
+            @(posedge clk); #1;
+            rdy_timer++;
+            if      (rdy_timer == 3) axi_wr_ready = 1;
+            else if (rdy_timer == 6) begin axi_wr_ready = 0; rdy_timer = 0; end
+            if (axi_wr_en) begin
+                axi_captured[bp_count]      = axi_wr_data;
+                axi_addr_captured[bp_count] = axi_wr_addr;
+                bp_count++;
+                axi_capture_count = bp_count;
             end
-            begin wait_tile(8'd1, 1500); end
-        join
+        end
+        axi_wr_ready = 1;
         check(axi_capture_count == 32,
             $sformatf("backpressure: still 32 writes (got %0d)", axi_capture_count));
 
-        // ============================================================
-        suite("FLOOD FILLED TILE — solid colour in all AXI writes");
-        // ============================================================
+        suite("FLOOD FILLED TILE - solid colour in all AXI writes");
         do_reset();
         tt_is_filled   = 1;
         tt_fill_colour = 6'h2A;
         tile_done[0]   = 1;
-        wait_tile(8'd0, 200);
+        collect_writes(32);
         check(axi_capture_count == 32,
             $sformatf("flood fill: 32 AXI writes (got %0d)", axi_capture_count));
         col_errors = 0;
@@ -188,9 +195,7 @@ module tb_bram_to_dram;
         check(col_errors == 0,
             $sformatf("flood fill: all words are fill colour (%0d errors)", col_errors));
 
-        // ============================================================
-        suite("FLOOD FILL — cache_valid=0");
-        // ============================================================
+        suite("FLOOD FILL - cache_valid=0");
         do_reset();
         tt_is_filled   = 1;
         tt_fill_colour = 6'h0F;
@@ -208,9 +213,7 @@ module tb_bram_to_dram;
         check(got_cache_val == 1'b0, "cache_valid=0 for flood fill");
         check(got_cache_idx == 8'd5, "cache_valid_index=5");
 
-        // ============================================================
-        suite("TILED TILE — cache_valid=1");
-        // ============================================================
+        suite("TILED TILE - cache_valid=1");
         do_reset();
         tt_is_filled = 0;
         tile_done[3] = 1;
@@ -225,9 +228,7 @@ module tb_bram_to_dram;
         check(got_cache_pulse,       "cache_valid_wr_en pulsed for tile 3");
         check(got_cache_val == 1'b1, "cache_valid=1 for tiled tile");
 
-        // ============================================================
-        suite("MULTIPLE TILES — 3 tiled tiles sequentially");
-        // ============================================================
+        suite("MULTIPLE TILES - 3 tiled tiles sequentially");
         do_reset();
         tt_is_filled = 0;
         tile_done[0] = 1; tile_done[1] = 1; tile_done[2] = 1;
@@ -239,9 +240,7 @@ module tb_bram_to_dram;
         check(writes_seen == 96,
             $sformatf("3 tiles: 96 total writes (got %0d)", writes_seen));
 
-        // ============================================================
-        suite("QUARTER COMPLETE — needs both all-transferred and engine_done");
-        // ============================================================
+        suite("QUARTER COMPLETE - needs both all-transferred and engine_done");
         do_reset();
         tt_is_filled = 1; tt_fill_colour = 6'h01;
         tile_done    = '1;
@@ -251,9 +250,7 @@ module tb_bram_to_dram;
         engine_done = 1; tick(5);
         check(quarter_complete, "quarter_complete after engine_done");
 
-        // ============================================================
-        suite("QUARTER COMPLETE — engine_done before tiles");
-        // ============================================================
+        suite("QUARTER COMPLETE - engine_done before tiles");
         do_reset();
         tt_is_filled = 1; tt_fill_colour = 6'h01;
         engine_done  = 1;
@@ -263,15 +260,13 @@ module tb_bram_to_dram;
         repeat(10000) tick(1);
         check(quarter_complete, "quarter_complete after all tiles transferred");
 
-        // ============================================================
-        suite("BASE ADDRESS — AXI addresses respect sixteenth_base_addr");
-        // ============================================================
+        suite("BASE ADDRESS - AXI addresses respect sixteenth_base_addr");
         do_reset();
         sixteenth_base_addr = 32'h00100000;
         tt_is_filled = 0;
         tick(2);
         tile_done[0] = 1;
-        wait_tile(8'd0, 200);
+        collect_writes(32);
         check(axi_addr_captured[0]  == 32'h00100000,
             $sformatf("first write at base (got 0x%08X)", axi_addr_captured[0]));
         check(axi_addr_captured[1]  == 32'h00100008,

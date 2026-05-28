@@ -75,7 +75,7 @@ module tb_tile_table;
         wr_quad_size   = size;
         wr_quad_colour = col;
         wr_quad_en     = 1;
-        // quad write takes num_tiles cycles — wait for it
+        // quad write takes num_tiles cycles - wait for it
         // num_tiles = (size/16)^2
         begin
             automatic int ntiles = (int'(size) / 16) * (int'(size) / 16);
@@ -86,7 +86,7 @@ module tb_tile_table;
 
     task automatic read_tile(input logic [7:0] idx,
                               output logic filled, output logic [5:0] col);
-        rd_index = idx; tick(0); // combinational — sample immediately
+        rd_index = idx; tick(0); // combinational - sample immediately
         filled = rd_is_filled;
         col    = rd_fill_colour;
     endtask
@@ -104,9 +104,7 @@ module tb_tile_table;
         rd_index=0;
         tick(2);
 
-        // ============================================================
-        suite("RESET — all entries clear");
-        // ============================================================
+        suite("RESET - all entries clear");
         rst = 1; tick(2); rst = 0; tick(1);
         for (int i = 0; i < 256; i++) begin
             read_tile(8'(i), got_filled, got_col);
@@ -118,40 +116,30 @@ module tb_tile_table;
         tests_passed++; tests_run++;
         $display("  [PASS] all 256 entries zero after reset");
 
-        // ============================================================
-        suite("SINGLE WRITE — tiled entry (is_filled=0)");
-        // ============================================================
+        suite("SINGLE WRITE - tiled entry (is_filled=0)");
         single_write(8'd42, 1'b0, 6'b0);
         read_tile(8'd42, got_filled, got_col);
         check(!got_filled,        "tile 42 is_filled=0 after tiled write");
         check(got_col == 6'b0,    "tile 42 colour=0 for tiled entry");
 
-        // ============================================================
-        suite("SINGLE WRITE — flood filled entry");
-        // ============================================================
+        suite("SINGLE WRITE - flood filled entry");
         single_write(8'd10, 1'b1, 6'h2A);
         read_tile(8'd10, got_filled, got_col);
         check(got_filled,          "tile 10 is_filled=1");
         check(got_col == 6'h2A,    "tile 10 colour correct");
 
-        // ============================================================
-        suite("SINGLE WRITE — overwrite entry");
-        // ============================================================
+        suite("SINGLE WRITE - overwrite entry");
         single_write(8'd10, 1'b0, 6'b0);
         read_tile(8'd10, got_filled, got_col);
         check(!got_filled,         "tile 10 overwritten to tiled");
 
-        // ============================================================
-        suite("SINGLE WRITE — does not affect neighbours");
-        // ============================================================
+        suite("SINGLE WRITE - does not affect neighbours");
         rst = 1; tick(2); rst = 0; tick(1);
         single_write(8'd5, 1'b1, 6'h3F);
         read_tile(8'd4, got_filled, got_col); check(!got_filled, "tile 4 unaffected");
         read_tile(8'd6, got_filled, got_col); check(!got_filled, "tile 6 unaffected");
 
-        // ============================================================
-        suite("QUAD WRITE — 16x16 quad (1 tile)");
-        // ============================================================
+        suite("QUAD WRITE - 16x16 quad (1 tile)");
         rst = 1; tick(2); rst = 0; tick(1);
         // 16x16 quad at (0,0) covers exactly tile index 0
         quad_write(8'd0, 8'd0, 8'd16, 6'h0F);
@@ -161,9 +149,7 @@ module tb_tile_table;
         read_tile(8'd1, got_filled, got_col);
         check(!got_filled,      "16x16 quad: tile 1 not affected");
 
-        // ============================================================
-        suite("QUAD WRITE — 32x32 quad (4 tiles)");
-        // ============================================================
+        suite("QUAD WRITE - 32x32 quad (4 tiles)");
         rst = 1; tick(2); rst = 0; tick(1);
         // 32x32 quad at (0,0) covers tiles {(0,0),(1,0),(0,1),(1,1)}
         // = indices 0,1,16,17
@@ -175,9 +161,7 @@ module tb_tile_table;
         read_tile(8'd2,  got_filled, got_col); check(!got_filled, "tile 2 not affected");
         read_tile(8'd32, got_filled, got_col); check(!got_filled, "tile 32 not affected");
 
-        // ============================================================
-        suite("QUAD WRITE — 128x128 quad (64 tiles)");
-        // ============================================================
+        suite("QUAD WRITE - 128x128 quad (64 tiles)");
         rst = 1; tick(2); rst = 0; tick(1);
         // 128x128 at (0,0) covers tile rows 0..7, tile cols 0..7 = 64 tiles
         quad_write(8'd0, 8'd0, 8'd128, 6'h3A);
@@ -195,11 +179,9 @@ module tb_tile_table;
             read_tile(8'd128,got_filled, got_col); check(!got_filled, "tile row 8 untouched");
         end
 
-        // ============================================================
-        suite("QUAD WRITE — non-zero offset quad");
-        // ============================================================
+        suite("QUAD WRITE - non-zero offset quad");
         rst = 1; tick(2); rst = 0; tick(1);
-        // 32x32 quad at (128,128) — tile row 8..9, tile col 8..9
+        // 32x32 quad at (128,128) - tile row 8..9, tile col 8..9
         // tile indices: 8*16+8=136, 8*16+9=137, 9*16+8=152, 9*16+9=153
         quad_write(8'd128, 8'd128, 8'd32, 6'h2B);
         read_tile(8'd136, got_filled, got_col); check(got_filled && got_col==6'h2B, "offset tile 136");
@@ -209,9 +191,7 @@ module tb_tile_table;
         read_tile(8'd135, got_filled, got_col); check(!got_filled, "tile before quad untouched");
         read_tile(8'd154, got_filled, got_col); check(!got_filled, "tile after quad untouched");
 
-        // ============================================================
-        suite("COMBINATIONAL READ — zero latency");
-        // ============================================================
+        suite("COMBINATIONAL READ - zero latency");
         rst = 1; tick(2); rst = 0; tick(1);
         single_write(8'd7, 1'b1, 6'h1C);
         // read combinationally without ticking
