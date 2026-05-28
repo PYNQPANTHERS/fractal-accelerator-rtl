@@ -38,7 +38,7 @@
 
 
 
-module multiply_manager #(parameter NARROW_WIDTH = 18, INTEGER_BITS = 2)
+module multiply_manager #(parameter NARROW_WIDTH = 18, INTEGER_BITS = 2, ITERATION_COUNT_WIDTH = 16)
 (
 input clk,
 input rst,
@@ -48,34 +48,38 @@ input start_left, // these are one-cycle pulses
 input start_right,
 input start_wide,
 
-input julia_type; //0 - mandel, 1 - julia
-input [3:0] magnitude_negation_encoding; //{abs x, abs y, neg x, neg y}
-input [4:0] max_iteration;
+input julia_type, //0 - mandel, 1 - julia
+input [3:0] magnitude_negation_encoding, //{abs x, abs y, neg x, neg y}
+input [4:0] max_iteration,
 
-input signed [NARROW_WIDTH-1:0] julia_c_x; 
-input signed [NARROW_WIDTH-1:0] julia_c_y;
+input signed [NARROW_WIDTH-1:0] julia_c_x, 
+input signed [NARROW_WIDTH-1:0] julia_c_y,
 
-input signed [NARROW_WIDTH-1:0] starting_x_reg_1; //upper
-input signed [NARROW_WIDTH-1:0] starting_x_reg_2;
-input signed [NARROW_WIDTH-1:0] starting_y_reg_1;
-input signed [NARROW_WIDTH-1:0] starting_y_reg_2;
+input signed [NARROW_WIDTH-1:0] starting_x_reg_1, //upper
+input signed [NARROW_WIDTH-1:0] starting_x_reg_2,
+input signed [NARROW_WIDTH-1:0] starting_y_reg_1,
+input signed [NARROW_WIDTH-1:0] starting_y_reg_2,
+
+output logic done,
+output logic done_side, // 0 = left, 1 = right (only used for split mode)
+output logic [ITERATION_COUNT_WIDTH-1:0] iteration_out // muxed between both threads
 
 );
 
 localparam NARROW_FRACTIONAL_BITS = NARROW_WIDTH - INTEGER_BITS;
 
 
-reg [2*NARROW_WIDTH-1:0] sum_x_reg_1; //upper
-reg [2*NARROW_WIDTH-1:0] sum_x_reg_2;
-reg [2*NARROW_WIDTH-1:0] sum_y_reg_1;
-reg [2*NARROW_WIDTH-1:0] sum_y_reg_2;
+reg signed [2*NARROW_WIDTH-1:0] sum_x_reg_1; //upper
+reg signed [2*NARROW_WIDTH-1:0] sum_x_reg_2;
+reg signed [2*NARROW_WIDTH-1:0] sum_y_reg_1;
+reg signed [2*NARROW_WIDTH-1:0] sum_y_reg_2;
 
-reg [NARROW_WIDTH-1:0] spare_x_reg_1;
-reg [NARROW_WIDTH-1:0] spare_y_reg_2;
+reg signed [NARROW_WIDTH-1:0] spare_x_reg_1;
+reg signed [NARROW_WIDTH-1:0] spare_x_reg_2;
 
 
-reg [2*NARROW_WIDTH-1:0] magnitude_reg_1; //upper
-reg [2*NARROW_WIDTH-1:0] magnitude_reg_2;
+reg signed [2*NARROW_WIDTH-1:0] magnitude_reg_1; //upper
+reg signed [2*NARROW_WIDTH-1:0] magnitude_reg_2;
 reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_1;
 reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_2;
 
@@ -83,7 +87,7 @@ reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_2;
 
 typedef enum {IDLE, RUNNING} thread_state;
 typedef enum {UNDEFINED, SPLIT, JOINED} joint_state;
-typedef enum {IDLE, ALTER_SUM, X_SQUARED, Y_SQUARED, TWO_I_XY, ADD_COORD, ADD_JULIA} thread_cycle;
+typedef enum {IDLE, ALTER_SUM, X_SQUARED, Y_SQUARED, TWO_I_XY, ADD_COORD, ADD_JULIA, DONE} thread_cycle;
 
 joint_state grouping_status;
 thread_state left_thread;
@@ -93,6 +97,63 @@ thread_state right_thread;
 thread_cycle right_cycle;
 
 
+wire signed [2*NARROW_WIDTH-1:0] encoded_x_reg_1;
+wire signed [2*NARROW_WIDTH-1:0] encoded_x_reg_2;
+wire signed [2*NARROW_WIDTH-1:0] encoded_y_reg_1;
+wire signed [2*NARROW_WIDTH-1:0] encoded_y_reg_2;
+
+
+
+
+sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_encoder (
+    .magnitude_negation_encoding(magnitude_negation_encoding),
+    
+    .sum_x_reg_1(sum_x_reg_1),
+    .sum_x_reg_2(sum_x_reg_2),
+    .sum_y_reg_1(sum_y_reg_1),
+    .sum_y_reg_2(sum_y_reg_2),
+
+    .changed_sum_x_reg_1(encoded_x_reg_1),
+    .changed_sum_x_reg_2(encoded_x_reg_2),
+    .changed_sum_y_reg_1(encoded_y_reg_1),
+    .changed_sum_y_reg_2(encoded_y_reg_2)    
+)
+
+
+
+wire signed [2*NARROW_WIDTH-1:0] left_multiply_result;
+wire [1:0] left_multiply_mode;
+
+always_comb begin
+    case(left_cycle) 
+        X_SQUARED : left_multiply_mode = 2'b00;
+        Y_SQUARED : left_multiply_mode = 2'b01;
+        TWO_I_XY : left_multiply_mode = 2'b10;
+        default : left_multiply_mode = 2'b00;
+    endcase
+end
+
+multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
+(
+    .mode(left_multiply_mode),
+
+    .x(spare_x_reg_1),
+    .y(sum_y_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS]),
+
+    .result(left_multiply_result)
+);
+
+wire left_magnitude_flag;
+
+magnitude_comparison_unit #(.NARROW_WIDTH(NARROW_WIDTH),.INTEGER_BITS(INTEGER_BITS)) left_magnitude 
+(
+    .magnitude(magnitude_reg_1),
+    .mag_flag(left_magnitude_flag)
+);
+
+
+
+
 always_ff @(posedge clk) begin
     if(kill||rst) begin
         grouping_status <= UNDEFINED;
@@ -100,54 +161,135 @@ always_ff @(posedge clk) begin
         right_thread <= IDLE;
         left_cycle <= IDLE;
         right_cycle <= IDLE;
+        magnitude_reg_1 <= '0;
+        magnitude_reg_2 <= '0;
     end
     else begin
         if(start_left) begin
+            magnitude_reg_1 <= '0;
             grouping_status <= SPLIT;
             left_thread <= RUNNING;
-            iteration_reg_1 <= ITERATION_COUNT_WIDTH(1'b0); 
+
+
+            iteration_reg_1 <= '0; 
             if(julia_type) begin //julia set setup
-                sum_x_reg_1 <= {INTEGER_BITS(starting_x_reg_1[NARROW_WIDTH-1]),starting_x_reg_1,NARROW_FRACTIONAL_BITS(1'b0)};
-                sum_y_reg_1 <= {INTEGER_BITS(starting_y_reg_1[NARROW_WIDTH-1]),starting_y_reg_1,NARROW_FRACTIONAL_BITS(1'b0)};
+                sum_x_reg_1 <= signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS;
+                sum_y_reg_1 <= signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS;
             end
             else begin // mandelbrot set setup
-                sum_x_reg_1 <= {NARROW_WIDTH*2(1'b0)};
-                sum_y_reg_1 <= {NARROW_WIDTH*2(1'b0)};             
+                sum_x_reg_1 <= '0;
+                sum_y_reg_1 <= '0;             
             end
-            
+
+            left_cycle <= ALTER_SUM; 
         end
-        else if(start_right) begin
+        else if(left_thread == RUNNING && grouping_status == SPLIT) begin
+            case(left_cycle)
+                ALTER_SUM : begin
+                    sum_x_reg_1 <= encoded_x_reg_1;
+                    spare_x_reg_1 <= encoded_x_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
+                    sum_y_reg_1 <= encoded_y_reg_1;
+                    left_cycle <= X_SQUARED;
+                end
+                X_SQUARED : begin
+                    sum_x_reg_1 <= left_multiply_result;
+                    magnitude_reg_1 <= left_multiply_result;
+                    left_cycle <= Y_SQUARED;
+                end
+
+                Y_SQUARED : begin
+                    sum_x_reg_1 <= sum_x_reg_1 - left_multiply_result;
+                    magnitude_reg_1 <= magnitude_reg_1 + left_multiply_result;
+                    if(left_magnitude_flag) left_cycle <= DONE;
+                    else left_cycle <= TWO_I_XY; 
+                end
+
+                TWO_I_XY : begin
+                    //here we have a flag if the magnitude is greater from the comparitor
+                    if(left_magnitude_flag) left_cycle <= DONE;
+                    else begin
+                        sum_y_reg_1 <= left_multiply_result;
+                        if(julia_type) left_cycle <= ADD_JULIA;
+                        else left_cycle <= ADD_COORD;
+                    end
+                end
+
+                ADD_JULIA : begin
+                    sum_x_reg_1 <= sum_x_reg_1 + (signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_1 <= sum_y_reg_1 + (signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                    left_cycle <= ALTER_SUM;
+                    iteration_reg_1 <= iteration_reg_1 + 1;
+                end
+
+                ADD_COORD : begin
+                    sum_x_reg_1 <= sum_x_reg_1 + (signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_1 <= sum_y_reg_1 + (signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                    left_cycle <= ALTER_SUM;
+                    iteration_reg_1 <= iteration_reg_1 + 1;
+                end
+                default : left_cycle <= left_cycle;
+            endcase
+        
+        
+        
+        
+        end
+
+
+
+
+
+
+
+        if(start_right) begin
+            magnitude_reg_2 <= '0;
             grouping_status <= SPLIT;
             right_thread <= RUNNING;
-            iteration_reg_2 <= ITERATION_COUNT_WIDTH(1'b0); 
+            iteration_reg_2 <= '0; 
             if(julia_type) begin //julia set setup
-                sum_x_reg_2 <= {INTEGER_BITS(starting_x_reg_2[NARROW_WIDTH-1]),starting_x_reg_2,NARROW_FRACTIONAL_BITS(1'b0)};
-                sum_y_reg_2 <= {INTEGER_BITS(starting_y_reg_2[NARROW_WIDTH-1]),starting_y_reg_2,NARROW_FRACTIONAL_BITS(1'b0)};
+                sum_x_reg_2 <= signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS;
+                sum_y_reg_2 <= signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS;
             end
             else begin // mandelbrot set setup
-                sum_x_reg_2 <= {NARROW_WIDTH*2(1'b0)};
-                sum_y_reg_2 <= {NARROW_WIDTH*2(1'b0)};             
+                sum_x_reg_2 <= '0;
+                sum_y_reg_2 <= '0;             
             end
         end
-        else if(start_wide) begin
+        if(start_wide) begin
+            magnitude_reg_1 <= '0;
+            magnitude_reg_2 <= '0;
             grouping_status <= JOINED;
             left_thread <= RUNNING;
             right_thread <= RUNNING;
         end 
+
+
     end
-
-
-
-
-
-
-
 end
 
 
 
+always_comb begin
+    done = 0;
+    done_side = 0;
+    iteration_out = iteration_reg_1;
+    if((grouping_status == JOINED) && (left_cycle == DONE)) begin
+        done = 1;
+        iteration_out = iteration_reg_1;
+    end
+    else if (grouping_status == SPLIT) begin
+        if(left_cycle == DONE) begin
+            done_side = 0;
+            done = 1;
+            iteration_out = iteration_reg_1;
+        end
+        if(right_cycle == DONE) begin //prioritises right side
+            done_side = 1;
+            done = 1;
+            iteration_out = iteration_reg_2;
+        end 
+    end
 
 
-
-
+end
 endmodule
