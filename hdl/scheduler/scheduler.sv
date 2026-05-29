@@ -14,6 +14,7 @@
 //     output logic        sched_reset,
 //     output logic [8:0]  top_left_x,
 //     output logic [8:0]  top_left_y,
+
 //     output logic [8:0]  quad_size,
 //     output logic [10:0] expected_count,
 
