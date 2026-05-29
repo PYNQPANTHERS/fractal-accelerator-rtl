@@ -1,3 +1,47 @@
+// input  logic clk,
+//     input  logic rst,
+//     input  logic start,
+
+//     input  logic [4:0]  equation_id,
+//     input  logic [31:0] centre_x,
+//     input  logic [31:0] centre_y,
+//     input  logic [31:0] zoom_level,
+//     input  logic [11:0] max_iter,
+//     input  logic [9:0]  x_offset,
+//     input  logic [9:0]  y_offset,
+
+//     // Job queue push
+//     output logic [17:0] sched_coord,
+//     output logic        sched_push,
+//     output logic        flush,
+//     input  logic        sched_stall,
+
+//     // Comparator configuration
+//     output logic        sched_reset,
+//     output logic [8:0]  top_left_x,
+//     output logic [8:0]  top_left_y,
+//     output logic [8:0]  quad_size,
+//     output logic [10:0] expected_count,
+
+//     // Comparator results
+//     input  logic        differ,
+//     input  logic        complete,
+//     input  logic [5:0]  ref_colour_o,
+
+//     // tile_table quad write (flood fill path)
+//     output logic        tt_wr_quad_en,
+//     output logic [7:0]  tt_wr_quad_tlx,
+//     output logic [7:0]  tt_wr_quad_tly,
+//     output logic [7:0]  tt_wr_quad_size,
+//     output logic [5:0]  tt_wr_quad_colour,
+
+//     // Tile done (flood fill path)
+//     output logic [255:0] sched_tile_done_set,
+
+
+
+
+
 module schedular #(
     parameter int N = 10, // bit width of 1/16th width 
     parameter int Z = 3,  // max zoom level bit width
@@ -5,21 +49,21 @@ module schedular #(
 )(
     input logic clk, rst, comparator_flag_so_far, comparator_flag_done,
     input logic [C-1:0] colour_from_comparator,
-    input logic [N-1:0] width_pixels,
     input logic [3:0] upper_box,
-    output logic schedular_done_flag,
-    output logic [9:0] x_coord_to_queue, y_coord_to_queue
+    output logic engine_done,
+    output logic [8:0] x_coord_to_queue, y_coord_to_queue,
+    output logic job_queue_push
 );
 
 
-typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, FILL_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
+typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
 my_states current_state, next_state;
 
 logic [N-1:0] top_left_x, top_left_y,
 logic [1:0] box_id;
 logic [N-1:0] pixel_width;
 logic [Z-1:0] zoom_level;
-logic pixel_generator_reset, popped_all_left, popped_all_top;   // CHECK INTERNAL RESETS. CAN THEY BE DONE BY HIGHER LEVEL MODULE??
+logic pixel_generator_reset, popped_all_left, popped_all_top;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 
@@ -67,13 +111,13 @@ assign popped_all_top = stack_data_out.all_top;
 
 
 // stack itself
-logic stack_push, stack_pop, stack_rst;
+logic stack_push, stack_pop;
 logic stack_empty, stack_full;
 
 localparam int STACK_WIDTH = $bits(stack_packet_s);
 // instantiate stack
 schedular_stack #(.WIDTH(STACK_WIDTH), .DEPTH(8)) my_stack (
-    .clk(clk), .rst(stack_rst),
+    .clk(clk), .rst(rst),
     .push(stack_push), .pop(stack_pop),
     .data_in(stack_data_in), .data_out(stack_data_out),
     .full(stack_full), .empty(stack_empty)
@@ -139,7 +183,15 @@ always_ff @ (posedge clk or posedge rst) begin
         end
 
         BEGIN_SEARCH_BOX: begin
+            if(box_id != 1'b11) begin
+                job_queue_push <= 1'b1;
+            end
+        end
 
+        WAIT: begin
+            if(border_pixel_chooser_done) begin
+                
+            end
         end
 
         DESCEND_LEVEL: begin
@@ -152,31 +204,44 @@ always_ff @ (posedge clk or posedge rst) begin
             end
         end
 
+        QUEUE_BOX: begin
+            job_queue_push <= 1'b1;
+            for(int n = 0; i < width_pixels_y; n++ ) begin
+                y_coord_to_queue <= top_left_y + n;
+                for (int i = 0; i < width_pixels_x ; i++) begin
+                    x_coord_to_queue <= top_left_x + i;
+                end
+            end
+        end
+
         FILL_BOX: begin
 
+        end
+
+        NEXT_BOX: begin
+            job_queue_push <= 1'b0;
             if(box_id != 2'b11) begin
                 box_id <= box_id + 1'b1;
                 case(box_id)
                     2'b00: begin
-                        top_left_x <= top_left_x + width_pixels_x;
+                        top_left_x <= top_left_x + width_pixels_x - 1'b1;
                     end
 
                     2'b01: begin
-                        top_left_x <= top_left_x - width_pixels_x + box_transition;               // is only needed when transitioning when in a leftmost box.
+                        top_left_x <= top_left_x - width_pixels_x + 1'b1 + box_transition;               // is only needed when transitioning when in a leftmost box.
                         // set pixel width - 1 if popped_all_left == 1'b1 and current_is_left ==1'b0?? Best way to do it I think!!!!
-                        top_left_y <= top_left_y + width_pixels_y;
+                        top_left_y <= top_left_y + width_pixels_y - 1'b1;
                     end
 
                     2'b10: begin
-                        top_left_x <= top_left_x + width_pixels_x;
+                        top_left_x <= top_left_x + width_pixels_x - 1'b1;
                     end
-
                 endcase
             end
         end
 
         FINISHED: begin
-            upper_box <= upper_box + 1'b1;
+            
         end
     endcase
 end
@@ -189,7 +254,7 @@ always_comb begin
 
     // defaults
     next_state = current_state;
-    stack_rst  = 1'b0;
+    stack_rst  = 1'b0;      // ideally shouldn't be needed
     stack_push = 1'b0;
     stack_pop  = 1'b0;
     schedular_done_flag = 1'b0;
@@ -265,32 +330,33 @@ always_comb begin
             else begin
                 if(!comparator_flag_so_far)
                     // splits again
-                    next_state = DESCEND_LEVEL;    
+                    next_state = DESCEND_LEVEL;
             end
         end
 
         QUEUE_BOX: begin
             // send all coords between topleftx, toplefty and topleftx + width, toplefty + width        TO DO!!!!!
-            if(box_id == 2'b11) begin
-                next_state = INCREASE_LEVEL;
+            if ((x_coord_to_queue == top_left_x + width_pixels_x - 1'b1) && (y_coord_to_queue == top_left_y + width_pixels_y - 1'b1)) begin
+                next_state = NEXT_BOX;
             end
             else begin
-                next_state = BEGIN_SEARCH_BOX;
+                next_state = QUEUE_BOX;
             end
         end
 
         FILL_BOX: begin
 
             // send in the way that Lucca asked, i.e. top left and width.       TO DO!!!!!
+        end
+
+        NEXT_BOX: begin
             if(box_id == 2'b11) begin
                 next_state = INCREASE_LEVEL;
             end
             else begin
                 next_state = BEGIN_SEARCH_BOX;
             end
-            // leaves area blank, this is then dealt with as the BRAM is transported to DRAM.
         end
-
 
         // adds to the stack and changes values of top_left etc.
         DESCEND_LEVEL: begin
@@ -305,6 +371,7 @@ always_comb begin
 
 
         FINISHED: begin
+            engine_done = 1'b1;
             next_state = IDLE;
             schedular_done_flag = 1'b1;     // note that the schedular_done_flag will only pulse for one tick
 //            if(upper_box == 4'd15) begin
