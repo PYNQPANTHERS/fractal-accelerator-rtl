@@ -6,7 +6,7 @@ module border_pixel_chooser #(
     input  logic [N-1:0]  top_left_x,    top_left_y,
     input  logic [N-1:0]  width_pixels_x, width_pixels_y,
     output logic [N-1:0]  x_coord, y_coord,
-    output logic          done_flag;
+    output logic          done_flag
 );
 
     typedef enum logic [2:0] {
@@ -22,9 +22,9 @@ module border_pixel_chooser #(
     logic         both_flags;
 
     // ── Combinational helpers ──────────────────────────────────────────────
-    assign used_tmp          = tmp - 1'b1;
-    assign inverse_tmp       = width - used_tmp;
-    assign next_tmp_val      = tmp <= tmp + (midpoint << 1) + 1'b1;
+    assign used_tmp          = tmp + first_round - 1'b1;
+    assign inverse_tmp       = width - used_tmp - first_round;
+    assign next_tmp_val      = tmp + (midpoint << 1) + 1'b1;
     assign both_flags        = all_left_flag & all_top_flag;
 
     // True when the calculate state will execute its halving (else) branch
@@ -38,9 +38,10 @@ module border_pixel_chooser #(
     //   all_top only  : last when next tmp <= width_x  → skip right & left
     logic last_cycle_next;
     assign last_cycle_next = calc_halving && (
-        ( both_flags                    && (next_tmp_val = (width - 2'd2))) ||
-        (~both_flags & all_left_flag    && (next_tmp_val = width_pixels_x)) ||
-        (~both_flags & all_top_flag     && (next_tmp_val = width_pixels_y))
+        ( both_flags                    && (next_tmp_val == (width - 2'd2))) ||
+        (~both_flags & all_left_flag    && (next_tmp_val == width_pixels_x)) ||
+        (~both_flags & all_top_flag     && (next_tmp_val == width_pixels_y)) ||
+        (~all_left_flag & ~all_top_flag && (next_tmp_val == width_pixels_x - 1'b1))
     );
 
     // ── Sequential logic ───────────────────────────────────────────────────
@@ -106,7 +107,7 @@ module border_pixel_chooser #(
                             tmp <= (midpoint + 1) >> 1;
                         end
                         x_coord <= top_left_x;
-                        y_coord <= top_left_y + inverse_tmp + 1'b1;
+                        y_coord <= top_left_y + inverse_tmp;
                     end
 
                     default: begin
@@ -130,9 +131,9 @@ module border_pixel_chooser #(
             end
 
             calculate: begin
-                if      (both_flags       && last_cycle_next) next_state = IDLE;
+                // if      (both_flags       && last_cycle_next) next_state = IDLE;
                 // all_left_flag: skip top & bottom on last cycle
-                else if (all_left_flag    && last_cycle_next) next_state = left;
+                if (all_left_flag && last_cycle_next) next_state = left;
                 else                                          next_state = top;
             end
 
@@ -140,11 +141,16 @@ module border_pixel_chooser #(
 
             bottom: begin
                 // all_top_flag: skip right & left on last cycle
-                if (all_top_flag && last_cycle) next_state = IDLE;
-                else                            next_state = left;
+                if (all_top_flag && last_cycle) begin
+                    next_state = IDLE;
+                    done_flag = 1'b1;
+                end
+                else begin
+                    next_state = left;
+                end
             end
 
-            left:  next_state = left;
+            left:  next_state = right;
 
             right: begin
                 if(last_cycle) begin

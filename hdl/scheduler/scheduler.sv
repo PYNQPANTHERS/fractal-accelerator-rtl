@@ -46,7 +46,12 @@ module scheduler #(
     output logic engine_done,
     output logic [8:0] jq_x_coord_to_queue, jq_y_coord_to_queue,
     output logic job_queue_push,
-    output logic sched_flush
+    output logic sched_flush,
+    output logic                    tt_wr_quad_en,
+    output logic [7:0]              tt_wr_quad_tlx,
+    output logic [7:0]              tt_wr_quad_tly,
+    output logic [7:0]              tt_wr_quad_size,
+    output logic [COLOUR_WIDTH-1:0] tt_wr_quad_colour
 );
 
 
@@ -124,10 +129,9 @@ assign current_is_left = (box_id[0] == 1'b0);
 // a box is a top quadrant if it's 2'b00 or 2'b01 i.e. if box_id[1] == 1'b0
 assign current_is_top = (box_id[1] == 1'b0);
 
-// when going from box_id 01 to 10, have to minus left width from top_left_x, if all prev were leftmost,
-// then that leftmost box has a smaller pixel_width than the current width by 2.
-logic [1:0] box_transition;
-assign box_transition = {all_left_quadrants & ~current_is_left, 1'b0};
+// pixel width of a notional left-column box at the current zoom/ancestor context.
+// used by the 01→10 x-step in NEXT_BOX, which must subtract w00 (not the right-box width w01).
+logic [8:0] pixel_width_x_left;
 
 
 always_ff @ (posedge clk or posedge rst) begin
@@ -157,9 +161,7 @@ always_ff @ (posedge clk or posedge rst) begin
             end
 
             BEGIN_SEARCH_BOX: begin
-                if(box_id != 1'b11) begin
-                    job_queue_push <= 1'b1;
-                end
+                
             end
 
             WAIT: begin
@@ -192,7 +194,7 @@ always_ff @ (posedge clk or posedge rst) begin
             end
 
             FILL_BOX: begin
-
+                
             end
 
             NEXT_BOX: begin
@@ -205,13 +207,12 @@ always_ff @ (posedge clk or posedge rst) begin
                         end
 
                         2'b01: begin
-                            top_left_x <= top_left_x - pixel_width_x + 1'b1 + box_transition;               // is only needed when transitioning when in a leftmost box.
-                            // set pixel width - 1 if popped_all_left == 1'b1 and current_is_left ==1'b0?? Best way to do it I think!!!!
+                            top_left_x <= top_left_x - pixel_width_x_left + 1'b1;
                             top_left_y <= top_left_y + pixel_width_y - 1'b1;
                         end
 
                         2'b10: begin
-                            top_left_x <= top_left_x + width_pixels_x - 1'b1;
+                            top_left_x <= top_left_x + pixel_width_x - 1'b1;
                         end
                     endcase
                 end
@@ -240,6 +241,11 @@ always_comb begin
     pixel_generator_reset = 1'b0;
     engine_done           = 1'b0;
     sched_flush           = 1'b0;
+    tt_wr_quad_en         = 1'b0;
+    tt_wr_quad_tlx        = '0;
+    tt_wr_quad_tly        = '0;
+    tt_wr_quad_size       = '0;
+    tt_wr_quad_colour     = '0;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
     normal_width = (9'd256 >> (zoom_level + 2'd2)); // divide by 2*(zoom level) + 4 as starting at sixteenths. Choose original width!!!!!!!
@@ -259,8 +265,16 @@ always_comb begin
     end
 
     // pixel width modifiers (one greater if not a leftmost or topmost box)
-    pixel_width_x = normal_width + ~all_left_quadrants; // width_modifiers;
-    pixel_width_y = normal_width + ~all_top_quadrants;
+    pixel_width_x = normal_width[8:0] + ~all_left_quadrants;
+    pixel_width_y = normal_width[8:0] + ~all_top_quadrants;
+
+    // width of a left-column box (box 00 / box 10 equivalent).
+    // at zoom≤1, a left box always has all_left=1 → no +1 correction.
+    // at zoom>1, inherits popped_all_left from the ancestor chain.
+    if (zoom_level <= 4'd1)
+        pixel_width_x_left = normal_width[8:0];
+    else
+        pixel_width_x_left = normal_width[8:0] + ~popped_all_left;
 
 
     case(current_state)
@@ -301,13 +315,9 @@ always_comb begin
         // Therefore can skip saving to stack for case box_id = 2'b11
         BEGIN_SEARCH_BOX: begin
             // adds coordinate jobs to the queue using the border_pixel_chooser module.
-            if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
-                next_state = QUEUE_BOX;
-            end
-            else begin
-                // resets pixel generator
-                pixel_generator_reset = 1'b1;
-                next_state = WAIT;
+            // resets pixel generator
+            pixel_generator_reset = 1'b1;
+            next_state = WAIT;
             end
         end
 
@@ -321,8 +331,13 @@ always_comb begin
             else begin
                 if(!comparator_flag_so_far) begin
                     // splits again
-                    next_state  = DESCEND_LEVEL;
-                    sched_flush = 1'b1;
+                    if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
+                        next_state = QUEUE_BOX;
+                    end
+                    else begin
+                        next_state  = DESCEND_LEVEL;
+                        sched_flush = 1'b1;
+                    end
                 end
             end
         end
@@ -338,8 +353,12 @@ always_comb begin
         end
 
         FILL_BOX: begin
-
-            // send in the way that Lucca asked, i.e. top left and width.       TO DO!!!!!
+            tt_wr_quad_en     = 1'b1;
+            tt_wr_quad_tlx    = top_left_x[7:0];
+            tt_wr_quad_tly    = top_left_y[7:0];
+            tt_wr_quad_size   = normal_width[7:0];
+            tt_wr_quad_colour = comparator_colour;
+            next_state        = NEXT_BOX;
         end
 
         NEXT_BOX: begin
