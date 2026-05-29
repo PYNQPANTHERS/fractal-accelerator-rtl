@@ -50,7 +50,7 @@ module per_sixteenth_engine (
     logic [5:0]  comp_ref_colour_o;
     logic        comp_differ;
     logic        comp_complete;
-    // colour_bram wire
+    // colour_bram wire (ctrl read driven by control_unit; ctrl write also by control_unit)
     logic [8:0]  cbram_ctrl_rd_x;
     logic [8:0]  cbram_ctrl_rd_y;
     logic        cbram_ctrl_rd_en;
@@ -135,12 +135,6 @@ module per_sixteenth_engine (
         .tt_wr_quad_size    (tt_wr_quad_size),
         .tt_wr_quad_colour  (tt_wr_quad_colour),
 
-        // colour_bram read (cached pixel lookup)
-        .sched_rd_x         (cbram_ctrl_rd_x),
-        .sched_rd_y         (cbram_ctrl_rd_y),
-        .sched_rd_en        (cbram_ctrl_rd_en),
-        .sched_rd_data      (cbram_ctrl_rd_data),
-
         // Tile done (flood fill path)
         .sched_tile_done_set(sched_tile_done_set),
 
@@ -171,6 +165,12 @@ module per_sixteenth_engine (
         .iter_x             (cqh_iter_x),
         .iter_y             (cqh_iter_y),
         .iter_colour        (cqh_iter_colour),
+
+        // colour_bram read (check cached colour for already-computed pixels)
+        .cu_rd_x            (cbram_ctrl_rd_x),
+        .cu_rd_y            (cbram_ctrl_rd_y),
+        .cu_rd_en           (cbram_ctrl_rd_en),
+        .cu_rd_data         (cbram_ctrl_rd_data),
 
         // colour_bram write
         .cu_wr_x            (cbram_ctrl_wr_x),
