@@ -5,7 +5,8 @@ module border_pixel_chooser #(
     input  logic          all_left_flag, all_top_flag,
     input  logic [N-1:0]  top_left_x,    top_left_y,
     input  logic [N-1:0]  width_pixels_x, width_pixels_y,
-    output logic [N-1:0]  x_coord, y_coord
+    output logic [N-1:0]  x_coord, y_coord,
+    output logic          done_flag;
 );
 
     typedef enum logic [2:0] {
@@ -124,7 +125,9 @@ module border_pixel_chooser #(
 
         case (current_state)
 
-            IDLE: next_state = IDLE;
+            IDLE: begin
+               next_state = IDLE;
+            end
 
             calculate: begin
                 if      (both_flags       && last_cycle_next) next_state = IDLE;
@@ -144,11 +147,19 @@ module border_pixel_chooser #(
             left:  next_state = left;
 
             right: begin
-                next_state = (used_tmp == width - 1'b1) ? IDLE : calculate;
+                if(last_cycle) begin
+                    next_state = IDLE;
+                    done_flag = 1'b1;
+                end
+                else begin
+                    next_state = calculate;
+                end
             end
 
-            default: next_state = IDLE;
-
+            default: begin
+                next_state = IDLE;
+                done_flag = 1'b0;
+            end
         endcase
     end
 endmodule

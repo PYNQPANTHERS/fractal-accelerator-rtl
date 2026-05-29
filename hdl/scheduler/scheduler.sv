@@ -2,18 +2,12 @@
 //     input  logic rst,
 //     input  logic start,
 
-//     input  logic [4:0]  equation_id,
-//     input  logic [31:0] centre_x,
-//     input  logic [31:0] centre_y,
-//     input  logic [31:0] zoom_level,
-//     input  logic [11:0] max_iter,
-//     input  logic [9:0]  x_offset,
-//     input  logic [9:0]  y_offset,
+
 
 //     // Job queue push
 //     output logic [17:0] sched_coord,
 //     output logic        sched_push,
-//     output logic        flush,
+//     output logic        sched_flush,
 //     input  logic        sched_stall,
 
 //     // Comparator configuration
@@ -41,32 +35,31 @@
 
 
 
-
-module schedular #(
-    parameter int N = 10, // bit width of 1/16th width 
+module scheduler #(
+    parameter int N = 10, // bit width of 1/16th width
     parameter int Z = 3,  // max zoom level bit width
-    parameter int C = 4   // width of colour        DO WE ACTUALLY NEED COLOUR PASSED IN NOW????
+    parameter int COLOUR_WIDTH = 4   // width of colour        DO WE ACTUALLY NEED COLOUR PASSED IN NOW????
 )(
     input logic clk, rst, comparator_flag_so_far, comparator_flag_done,
-    input logic [C-1:0] colour_from_comparator,
-    input logic [3:0] upper_box,
+    input logic [COLOUR_WIDTH-1:0] comparator_colour,
     output logic engine_done,
-    output logic [8:0] x_coord_to_queue, y_coord_to_queue,
-    output logic job_queue_push
+    output logic [8:0] jq_x_coord_to_queue, jq_y_coord_to_queue,
+    output logic job_queue_push,
+    output logic sched_flush
 );
 
 
 typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
 my_states current_state, next_state;
 
-logic [N-1:0] top_left_x, top_left_y,
+logic [8:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
 logic [1:0] box_id;
-logic [N-1:0] pixel_width;
-logic [Z-1:0] zoom_level;
+logic [8:0] pixel_width_x, pixel_width_y;
+logic [3:0] zoom_level;
 logic pixel_generator_reset, popped_all_left, popped_all_top;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
-
+logic border_pixel_chooser_done;
 
 
 
@@ -74,14 +67,15 @@ logic current_is_left, current_is_top;
 border_pixel_chooser #(.N(N), .Z(Z)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset), .top_left_x(top_left_x),
     .top_left_y(top_left_y), .zoom_level(zoom_level),
-    .box_number(box_id), .width_pixels_x(pixel_width_x), .width_pixels_y(width_pixels_y),
-    .x_coord(x coord out to queue), .y_coord(y coord out to queue));
+    .box_number(box_id), .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
+    .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
+    .done_flag(border_pixel_chooser_done));
 
 
 
 // STACK LOGIC
 typedef struct packed {
-    logic [N-1:0] x, tmp_x;
+    logic [N-1:0] x;
     logic [N-1:0] y;
     logic [Z-1:0] zoom;
     logic [1:0]   box;
@@ -94,20 +88,18 @@ stack_packet_s stack_data_in;
 stack_packet_s stack_data_out;
 
 // packing
-assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: all_left_quadrants, all_top: all_top_quadrants};
+assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: popped_all_left, all_top: popped_all_top};
 
 // logic for unpacking
-logic [N-1:0] popped_top_left_x, popped_top_left_y;
-logic [Z-1:0] popped_zoom;
+logic [8:0]   popped_top_left_x, popped_top_left_y;
+logic [3:0]   popped_zoom;
 logic [1:0]   popped_box_id;
 
-// unpacking
+// unpacking (popped_all_left/top are registered in always_ff, not continuous assigns)
 assign popped_top_left_x = stack_data_out.x;
 assign popped_top_left_y = stack_data_out.y;
-assign popped_zoom = stack_data_out.zoom;
-assign popped_box_id = stack_data_out.box;
-assign popped_all_left = stack_data_out.all_left;
-assign popped_all_top = stack_data_out.all_top;
+assign popped_zoom       = stack_data_out.zoom;
+assign popped_box_id     = stack_data_out.box;
 
 
 // stack itself
@@ -126,10 +118,9 @@ schedular_stack #(.WIDTH(STACK_WIDTH), .DEPTH(8)) my_stack (
 
 
 
-
 // a box is a left quadrant if it's 2'b00 or 2'b10 i.e. if box_id[0] == 1'b0
 assign current_is_left = (box_id[0] == 1'b0);
-// then extended to top quadrant
+// a box is a top quadrant if it's 2'b00 or 2'b01 i.e. if box_id[1] == 1'b0
 assign current_is_top = (box_id[1] == 1'b0);
 
 // when going from box_id 01 to 10, have to minus left width from top_left_x, if all prev were leftmost,
@@ -140,132 +131,131 @@ assign box_transition = {all_left_quadrants & ~current_is_left, 1'b0};
 
 always_ff @ (posedge clk or posedge rst) begin
     if(rst) begin
-        current_state <= STARTUP;
-        upper_box <= 4'd0;
-        popped_all_left <= 1'b1;
-        popped_all_top <= 1'b1;
+        current_state   <= STARTUP;
+        popped_all_left <= 1'b0;
+        popped_all_top  <= 1'b0;
     end
     else begin
         current_state <= next_state;
-    end
-
-    case(current_state)
-        STARTUP: begin
-            box_id <= '0;
-            zoom_level <= '0;
-
-            top_left_x <= ins_top_left_x;
-            top_left_y <= ins_top_left_y;   // could be calculated if needed.
-            // if(upper_box == 4'b0000 or upper_box == 4'b0100 or upper_box == 4'b1000 or upper_box = 4'b1100)
-            // then begin with popped_all_left high
-            if(upper_box[1:0] == 2'b0) begin
-                popped_all_left <= 1'b1;
-            end
-            else begin
-                popped_all_left <= 1'b0;
+        case(current_state)
+            STARTUP: begin
+                box_id     <= '0;
+                zoom_level <= '0;
+                top_left_x <= '0;
+                top_left_y <= '0;   // could be calculated if needed.
             end
 
-            // if(upper_box == 4'b0000 or upper_box == 4'b0001 or upper_box == 4'b0010 or upper_box = 4'b0011)
-            // then begin with popped_all_left high
-            if (upper_box[3:2] == 2'b0) begin
-                popped_all_top <= 1'b1;
+            INCREASE_LEVEL_SECOND: begin
+                top_left_x      <= popped_top_left_x;
+                top_left_y      <= popped_top_left_y;
+                zoom_level      <= popped_zoom;
+                box_id          <= popped_box_id;
+                // restore ancestor flags from the stack entry
+                popped_all_left <= stack_data_out.all_left;
+                popped_all_top  <= stack_data_out.all_top;
             end
-            else begin
-                popped_all_top <= 1'b0;
-            end
-        end
 
-        INCREASE_LEVEL_SECOND: begin
-            top_left_x <= popped_top_left_x;
-            top_left_y <= popped_top_left_y;
-            zoom_level <= popped_zoom;
-            box_id <= popped_box_id;
-        end
-
-        BEGIN_SEARCH_BOX: begin
-            if(box_id != 1'b11) begin
-                job_queue_push <= 1'b1;
-            end
-        end
-
-        WAIT: begin
-            if(border_pixel_chooser_done) begin
-                
-            end
-        end
-
-        DESCEND_LEVEL: begin
-            zoom_level <= zoom_level + 1'b1;
-            box_id <= 2'b0;
-            zoom_level <= zoom_level + 1'b1;
-            if(box_id == 2'b11) begin
-               popped_all_left <= 1'b0;
-               popped_all_top <= 1'b0; 
-            end
-        end
-
-        QUEUE_BOX: begin
-            job_queue_push <= 1'b1;
-            for(int n = 0; i < width_pixels_y; n++ ) begin
-                y_coord_to_queue <= top_left_y + n;
-                for (int i = 0; i < width_pixels_x ; i++) begin
-                    x_coord_to_queue <= top_left_x + i;
+            BEGIN_SEARCH_BOX: begin
+                if(box_id != 1'b11) begin
+                    job_queue_push <= 1'b1;
                 end
             end
-        end
 
-        FILL_BOX: begin
-
-        end
-
-        NEXT_BOX: begin
-            job_queue_push <= 1'b0;
-            if(box_id != 2'b11) begin
-                box_id <= box_id + 1'b1;
-                case(box_id)
-                    2'b00: begin
-                        top_left_x <= top_left_x + width_pixels_x - 1'b1;
-                    end
-
-                    2'b01: begin
-                        top_left_x <= top_left_x - width_pixels_x + 1'b1 + box_transition;               // is only needed when transitioning when in a leftmost box.
-                        // set pixel width - 1 if popped_all_left == 1'b1 and current_is_left ==1'b0?? Best way to do it I think!!!!
-                        top_left_y <= top_left_y + width_pixels_y - 1'b1;
-                    end
-
-                    2'b10: begin
-                        top_left_x <= top_left_x + width_pixels_x - 1'b1;
-                    end
-                endcase
+            WAIT: begin
+                jq_x_coord_to_queue <= x_coord_to_queue;
+                jq_y_coord_to_queue <= y_coord_to_queue;
+                if(border_pixel_chooser_done) begin
+                    job_queue_push <= 0;
+                end
+                if(!comparator_flag_so_far) begin
+                    job_queue_push <= 0;
+                end
             end
-        end
 
-        FINISHED: begin
-            
-        end
-    endcase
+            DESCEND_LEVEL: begin
+                box_id          <= 2'b0;
+                zoom_level      <= zoom_level + 1'b1;
+                // save current all_left/top so the child level can use them
+                popped_all_left <= all_left_quadrants;
+                popped_all_top  <= all_top_quadrants;
+            end
+
+            QUEUE_BOX: begin
+                job_queue_push <= 1'b1;
+                for(int n = 0; n < pixel_width_y; n++ ) begin
+                    jq_y_coord_to_queue <= top_left_y + n;
+                    for (int i = 0; i < pixel_width_x ; i++) begin
+                        jq_x_coord_to_queue <= top_left_x + i;
+                    end
+                end
+            end
+
+            FILL_BOX: begin
+
+            end
+
+            NEXT_BOX: begin
+                job_queue_push <= 1'b0;
+                if(box_id != 2'b11) begin
+                    box_id <= box_id + 1'b1;
+                    case(box_id)
+                        2'b00: begin
+                            top_left_x <= top_left_x + pixel_width_x - 1'b1;
+                        end
+
+                        2'b01: begin
+                            top_left_x <= top_left_x - pixel_width_x + 1'b1 + box_transition;               // is only needed when transitioning when in a leftmost box.
+                            // set pixel width - 1 if popped_all_left == 1'b1 and current_is_left ==1'b0?? Best way to do it I think!!!!
+                            top_left_y <= top_left_y + pixel_width_y - 1'b1;
+                        end
+
+                        2'b10: begin
+                            top_left_x <= top_left_x + width_pixels_x - 1'b1;
+                        end
+                    endcase
+                end
+            end
+
+            FINISHED: begin
+
+            end
+        endcase
+    end
+
+
 end
 
 
 // pixel width logic
-logic [9:0] normal_width;       // CHANGE THIS with the value in normal_width in always comb.
+logic [9:0] normal_width;
 
 always_comb begin
 
     // defaults
-    next_state = current_state;
-    stack_rst  = 1'b0;      // ideally shouldn't be needed
-    stack_push = 1'b0;
-    stack_pop  = 1'b0;
-    schedular_done_flag = 1'b0;
+    next_state            = current_state;
+    stack_push            = 1'b0;
+    stack_pop             = 1'b0;
+    schedular_done_flag   = 1'b0;
     pixel_generator_reset = 1'b0;
-
+    engine_done           = 1'b0;
+    sched_flush           = 1'b0;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
     normal_width = (9'd256 >> (zoom_level + 2'd2)); // divide by 2*(zoom level) + 4 as starting at sixteenths. Choose original width!!!!!!!
 
-    all_left_quadrants = popped_all_left && current_is_left;
-    all_top_quadrants = popped_all_top && current_is_top;
+    // zoom=0: no pixel-width correction applies (root level)
+    // zoom=1: only the current box position determines left/top status
+    // zoom>1: must also check all ancestors were left/top (stored in popped_all_left/top)
+    if (zoom_level == 4'd0) begin
+        all_left_quadrants = 1'b0;
+        all_top_quadrants  = 1'b0;
+    end else if (zoom_level == 4'd1) begin
+        all_left_quadrants = current_is_left;
+        all_top_quadrants  = current_is_top;
+    end else begin
+        all_left_quadrants = popped_all_left && current_is_left;
+        all_top_quadrants  = popped_all_top  && current_is_top;
+    end
 
     // pixel width modifiers (one greater if not a leftmost or topmost box)
     pixel_width_x = normal_width + ~all_left_quadrants; // width_modifiers;
@@ -275,16 +265,16 @@ always_comb begin
     case(current_state)
 
         IDLE: begin
-            if(instruction)begin
+            if(instruction)begin            // TO DO!!!
                 next_state = STARTUP;
             end
             else begin
-                next_state = IDLE
+                next_state = IDLE;
             end
         end
 
         STARTUP: begin
-            stack_rst = 1'b1;
+            stack_rst  = 1'b1;
             next_state = BEGIN_SEARCH_BOX;
         end
 
@@ -295,7 +285,7 @@ always_comb begin
                 next_state = FINISHED;
             end
             else begin
-                stack_pop = 1'b1;           // Fire the pop signal
+                stack_pop  = 1'b1;           // Fire the pop signal
                 next_state = INCREASE_LEVEL_SECOND;
             end
             // Note: stack_data_out will be valid on the NEXT clock cycle
@@ -310,7 +300,7 @@ always_comb begin
         // Therefore can skip saving to stack for case box_id = 2'b11
         BEGIN_SEARCH_BOX: begin
             // adds coordinate jobs to the queue using the border_pixel_chooser module.
-            if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0. 
+            if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
                 next_state = QUEUE_BOX;
             end
             else begin
@@ -328,15 +318,17 @@ always_comb begin
             if(comparator_flag_done)
                 next_state = FILL_BOX;
             else begin
-                if(!comparator_flag_so_far)
+                if(!comparator_flag_so_far) begin
                     // splits again
-                    next_state = DESCEND_LEVEL;
+                    next_state  = DESCEND_LEVEL;
+                    sched_flush = 1'b1;
+                end
             end
         end
 
         QUEUE_BOX: begin
             // send all coords between topleftx, toplefty and topleftx + width, toplefty + width        TO DO!!!!!
-            if ((x_coord_to_queue == top_left_x + width_pixels_x - 1'b1) && (y_coord_to_queue == top_left_y + width_pixels_y - 1'b1)) begin
+            if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 1'b1) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 1'b1)) begin
                 next_state = NEXT_BOX;
             end
             else begin
@@ -372,8 +364,7 @@ always_comb begin
 
         FINISHED: begin
             engine_done = 1'b1;
-            next_state = IDLE;
-            schedular_done_flag = 1'b1;     // note that the schedular_done_flag will only pulse for one tick
+            next_state  = IDLE;
 //            if(upper_box == 4'd15) begin
 //                next_state = IDLE;
 //                schedular_done_flag = 1'b1;     // note that the schedular_done_flag will only pulse for one tick
