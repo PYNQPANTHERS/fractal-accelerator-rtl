@@ -3,7 +3,7 @@ module multiply #(parameter NARROW_WIDTH = 18)(
     input  signed [NARROW_WIDTH-1:0]   y,
     input  [1:0]                        mode,
 
-    output signed [2*NARROW_WIDTH-1:0] result
+    output logic signed [2*NARROW_WIDTH-1:0] result
 );
 
 always_comb begin

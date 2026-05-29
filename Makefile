@@ -17,6 +17,7 @@ BUILD_DIR  := sim/build
 
 # Collect all HDL sources automatically
 HDL_SRCS := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/*.sv))
+HDL_SRCS := $(filter-out hdl/worker_core/core_top.sv,$(HDL_SRCS))
 
 IVFLAGS := -g2012 -Wall -Wno-timescale
 

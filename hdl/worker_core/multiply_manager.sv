@@ -25,7 +25,7 @@
  *   starting_x_reg_2, starting_y_reg_2 — right core input coordinates
  *
  * Outputs:
- *   done      — pulses high for one cycle when a result is ready
+ *   done      — stays high when a result is ready
  *   side_done — 0: left result, 1: right result. Undefined in wide mode.
  *   iteration_count — the output result, valid when done is high
  *
@@ -38,11 +38,12 @@
 
 
 
-module multiply_manager #(parameter NARROW_WIDTH = 18, INTEGER_BITS = 2, ITERATION_COUNT_WIDTH = 16)
+module multiply_manager #(parameter NARROW_WIDTH = 18, INTEGER_BITS = 2, ITERATION_COUNT_WIDTH = 16, LOWEST_MAX_ITERATION_POWER = 6)
 (
 input clk,
 input rst,
 input kill,
+input received,
 
 input start_left, // these are one-cycle pulses
 input start_right,
@@ -74,6 +75,35 @@ reg signed [2*NARROW_WIDTH-1:0] sum_x_reg_2;
 reg signed [2*NARROW_WIDTH-1:0] sum_y_reg_1;
 reg signed [2*NARROW_WIDTH-1:0] sum_y_reg_2;
 
+wire sum_x_reg_1_overflow_flag;
+wire sum_x_reg_2_overflow_flag;
+wire sum_y_reg_1_overflow_flag;
+wire sum_y_reg_2_overflow_flag;
+
+
+coord_flagger #(.NARROW_WIDTH(NARROW_WIDTH), .NARROW_FRACTIONAL_BITS(NARROW_FRACTIONAL_BITS), .INTEGER_BITS(INTEGER_BITS)) x_1 
+(
+.coordinate(sum_x_reg_1),
+.flag(sum_x_reg_1_overflow_flag)
+);
+coord_flagger #(.NARROW_WIDTH(NARROW_WIDTH), .NARROW_FRACTIONAL_BITS(NARROW_FRACTIONAL_BITS), .INTEGER_BITS(INTEGER_BITS)) x_2 
+(
+.coordinate(sum_x_reg_2),
+.flag(sum_x_reg_2_overflow_flag)
+);
+coord_flagger #(.NARROW_WIDTH(NARROW_WIDTH), .NARROW_FRACTIONAL_BITS(NARROW_FRACTIONAL_BITS), .INTEGER_BITS(INTEGER_BITS)) y_1 
+(
+.coordinate(sum_y_reg_1),
+.flag(sum_y_reg_1_overflow_flag)
+);
+coord_flagger #(.NARROW_WIDTH(NARROW_WIDTH), .NARROW_FRACTIONAL_BITS(NARROW_FRACTIONAL_BITS), .INTEGER_BITS(INTEGER_BITS)) y_2 
+(
+.coordinate(sum_y_reg_2),
+.flag(sum_y_reg_2_overflow_flag)
+);
+
+
+
 reg signed [NARROW_WIDTH-1:0] spare_x_reg_1;
 reg signed [NARROW_WIDTH-1:0] spare_x_reg_2;
 
@@ -85,9 +115,9 @@ reg [ITERATION_COUNT_WIDTH-1:0] iteration_reg_2;
 
 
 
-typedef enum {IDLE, RUNNING} thread_state;
+typedef enum {T_IDLE, RUNNING} thread_state;
 typedef enum {UNDEFINED, SPLIT, JOINED} joint_state;
-typedef enum {IDLE, ALTER_SUM, X_SQUARED, Y_SQUARED, TWO_I_XY, ADD_COORD, ADD_JULIA, DONE} thread_cycle;
+typedef enum {C_IDLE, ALTER_SUM, X_SQUARED, Y_SQUARED, TWO_I_XY, ADD_COORD, ADD_JULIA, DONE} thread_cycle;
 
 joint_state grouping_status;
 thread_state left_thread;
@@ -117,12 +147,12 @@ sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_en
     .changed_sum_x_reg_2(encoded_x_reg_2),
     .changed_sum_y_reg_1(encoded_y_reg_1),
     .changed_sum_y_reg_2(encoded_y_reg_2)    
-)
+);
 
 
 
 wire signed [2*NARROW_WIDTH-1:0] left_multiply_result;
-wire [1:0] left_multiply_mode;
+logic [1:0] left_multiply_mode;
 
 always_comb begin
     case(left_cycle) 
@@ -151,16 +181,24 @@ magnitude_comparison_unit #(.NARROW_WIDTH(NARROW_WIDTH),.INTEGER_BITS(INTEGER_BI
     .mag_flag(left_magnitude_flag)
 );
 
+wire left_max_iteration_flag;
+
+max_iteration_flagger #(.ITERATION_COUNT_WIDTH(ITERATION_COUNT_WIDTH), .LOWEST_MAX_ITERATION_POWER(LOWEST_MAX_ITERATION_POWER)) left_iteration_flagger (
+    .iteration_count(iteration_reg_1),
+    .max_iteration(max_iteration),
+    .flag(left_max_iteration_flag)
+);
+
 
 
 
 always_ff @(posedge clk) begin
     if(kill||rst) begin
         grouping_status <= UNDEFINED;
-        left_thread <= IDLE;
-        right_thread <= IDLE;
-        left_cycle <= IDLE;
-        right_cycle <= IDLE;
+        left_thread <= T_IDLE;
+        right_thread <= T_IDLE;
+        left_cycle <= C_IDLE;
+        right_cycle <= C_IDLE;
         magnitude_reg_1 <= '0;
         magnitude_reg_2 <= '0;
     end
@@ -173,8 +211,8 @@ always_ff @(posedge clk) begin
 
             iteration_reg_1 <= '0; 
             if(julia_type) begin //julia set setup
-                sum_x_reg_1 <= signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS;
-                sum_y_reg_1 <= signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS;
+                sum_x_reg_1 <= $signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS;
+                sum_y_reg_1 <= $signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS;
             end
             else begin // mandelbrot set setup
                 sum_x_reg_1 <= '0;
@@ -186,10 +224,15 @@ always_ff @(posedge clk) begin
         else if(left_thread == RUNNING && grouping_status == SPLIT) begin
             case(left_cycle)
                 ALTER_SUM : begin
-                    sum_x_reg_1 <= encoded_x_reg_1;
-                    spare_x_reg_1 <= encoded_x_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
-                    sum_y_reg_1 <= encoded_y_reg_1;
-                    left_cycle <= X_SQUARED;
+                    if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) left_cycle <= DONE;
+                    else begin
+                        sum_x_reg_1 <= encoded_x_reg_1;
+                        spare_x_reg_1 <= encoded_x_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
+                        sum_y_reg_1 <= encoded_y_reg_1;
+                        if(left_max_iteration_flag) left_cycle <= DONE;
+                        else left_cycle <= X_SQUARED;
+                    end
+                    
                 end
                 X_SQUARED : begin
                     sum_x_reg_1 <= left_multiply_result;
@@ -215,17 +258,24 @@ always_ff @(posedge clk) begin
                 end
 
                 ADD_JULIA : begin
-                    sum_x_reg_1 <= sum_x_reg_1 + (signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= sum_y_reg_1 + (signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                    sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_1 <= sum_y_reg_1 + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                     left_cycle <= ALTER_SUM;
                     iteration_reg_1 <= iteration_reg_1 + 1;
                 end
 
                 ADD_COORD : begin
-                    sum_x_reg_1 <= sum_x_reg_1 + (signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= sum_y_reg_1 + (signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                    sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_1 <= sum_y_reg_1 + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
                     left_cycle <= ALTER_SUM;
                     iteration_reg_1 <= iteration_reg_1 + 1;
+                end
+
+                DONE : begin
+                    if((done_side == 0) && received) begin
+                        left_thread <= T_IDLE;
+                        left_cycle <= C_IDLE;
+                    end
                 end
                 default : left_cycle <= left_cycle;
             endcase
@@ -247,8 +297,8 @@ always_ff @(posedge clk) begin
             right_thread <= RUNNING;
             iteration_reg_2 <= '0; 
             if(julia_type) begin //julia set setup
-                sum_x_reg_2 <= signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS;
-                sum_y_reg_2 <= signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS;
+                sum_x_reg_2 <= $signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS;
+                sum_y_reg_2 <= $signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS;
             end
             else begin // mandelbrot set setup
                 sum_x_reg_2 <= '0;
