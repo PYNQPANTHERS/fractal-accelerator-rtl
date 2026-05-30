@@ -10,8 +10,8 @@
 # Waveforms are written to sim/waves/<tb_name>.vcd
 
 
-HDL_DIRS   := hdl/queues hdl/comparator #hdl/iterator hdl/scheduler hdl/comparator hdl/arbiter hdl/top
-TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/integration
+HDL_DIRS   := hdl/queues hdl/comparator hdl/cluster hdl/control_unit
+TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/control_unit
 SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 
@@ -48,7 +48,7 @@ run:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  Running:   $(TB_NAME)"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
+	vvp $(OUT) +vcd=$(VCD)
 	@echo ""
 	@echo "  Waveform: $(VCD)"
 	@echo ""

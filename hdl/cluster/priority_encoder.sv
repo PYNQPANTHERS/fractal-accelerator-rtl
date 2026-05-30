@@ -26,5 +26,4 @@ module priority_encoder #(
             end
         end
     end
-
 endmodule

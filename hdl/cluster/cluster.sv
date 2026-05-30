@@ -1,8 +1,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // cluster
 //   Pool of CLUSTER_SIZE fractal cores with local arbitration, pixel-address
-//   bookkeeping, and result buffering using local fifo
-//.  needs a FSM for the different data transfers to wait for datapath to be free again
+//   bookkeeping, and result buffering using a local FIFO.
+//
+//   Dispatch:
+//     disp_valid held high for the full multi-word transfer to ONE cluster.
+//     The first cycle of disp_valid_q selects and starts the winning core and
+//     writes its pixel address into pixel_mem.
+//
+//   Pixel address:
+//     disp_pixel_addr is always PIXEL_ADDR_W bits = {row[7:0], col[7:0]}.
+//     The same format is used for both narrow and wide Z transfers — the
+//     address width does not change with wide mode.
+//
+//   Result:
+//     When any core finishes, pa_rdata reads the stored address out of
+//     pixel_mem and the result is pushed to the output FIFO.
 // ─────────────────────────────────────────────────────────────────────────────
 module cluster #(
     parameter  int CLUSTER_SIZE  = 8,
@@ -14,7 +27,7 @@ module cluster #(
     input  logic                     clk,
     input  logic                     rst_n,
 
-    // dispatch in
+    // dispatch in — disp_valid held for all words of one transfer
     input  logic                     disp_valid,
     input  logic [PIXEL_ADDR_W-1:0]  disp_pixel_addr,
     input  logic [JOB_DATA_W-1:0]    disp_job_data,
@@ -28,20 +41,11 @@ module cluster #(
     output logic [PIXEL_W-1:0]       result_data,
     input  logic                     result_ready
 );
-    // state just to hold for certain amount of cycles for full data to be sent
-    typedef enum data_type {
-        IDLE,
-        LOAD_OPCODE         // one cycle
-        LOAD_Z_NARROW,      // holds handshake for 2
-        LOAD_Z_WIDE,        // holds handshake for 4
-        LOAD_C_NARROW,      // holds handshake for 2
-        LOAD_C_WIDE         // holds handshake for 4
-      } name;
 
-    // register dispatch inputs
-    logic                     disp_valid_q;
-    logic [PIXEL_ADDR_W-1:0]  disp_pixel_addr_q;
-    logic [JOB_DATA_W-1:0]    disp_job_data_q;
+    // pipeline dispatch inputs one cycle to meet timing
+    logic                    disp_valid_q;
+    logic [PIXEL_ADDR_W-1:0] disp_pixel_addr_q;
+    logic [JOB_DATA_W-1:0]   disp_job_data_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -56,16 +60,16 @@ module cluster #(
     end
 
     // per-core signals
-    logic [CLUSTER_SIZE-1:0]  core_wants_job;
-    logic [CLUSTER_SIZE-1:0]  core_start;
-    logic [CLUSTER_SIZE-1:0]  core_done;
-    logic [CLUSTER_SIZE-1:0]  core_received;
-    logic [PIXEL_W-1:0]       core_result [CLUSTER_SIZE];
+    logic [CLUSTER_SIZE-1:0] core_wants_job;
+    logic [CLUSTER_SIZE-1:0] core_start;
+    logic [CLUSTER_SIZE-1:0] core_done;
+    logic [CLUSTER_SIZE-1:0] core_received;
+    logic [PIXEL_W-1:0]      core_result [CLUSTER_SIZE];
 
-    // wants encoder
-    logic [CLUSTER_SIZE-1:0]  wants_onehot;
-    logic [LOCAL_IDX_W-1:0]   local_winner_idx;
-    logic                     local_any_free;
+    // wants encoder — picks the next free core for dispatch
+    logic [CLUSTER_SIZE-1:0] wants_onehot;
+    logic [LOCAL_IDX_W-1:0]  local_winner_idx;
+    logic                    local_any_free;
 
     priority_encoder #(.BUS_WIDTH(CLUSTER_SIZE)) u_wants_enc (
         .core_bus    (core_wants_job),
@@ -79,33 +83,19 @@ module cluster #(
         else        cluster_wants_job <= local_any_free;
     end
 
-    // dispatch routing
     assign core_start = disp_valid_q ? wants_onehot : '0;
 
-    // pixel-address RAM
-    logic [PIXEL_ADDR_W-1:0] pixel_addr_mem [CLUSTER_SIZE];
-    logic                    pa_we;
+    // pixel-address register file 
+    // written on dispatch, read combinationally when a core finishes
+    logic [PIXEL_ADDR_W-1:0] pixel_mem [CLUSTER_SIZE];
     logic [PIXEL_ADDR_W-1:0] pa_rdata;
 
-    assign pa_we = disp_valid_q && local_any_free;
-
     always_ff @(posedge clk) begin
-        if (pa_we) pixel_addr_mem[local_winner_idx] <= disp_pixel_addr_q;
+        if (disp_valid_q && local_any_free)
+            pixel_mem[local_winner_idx] <= disp_pixel_addr_q;
     end
 
-    // done encoder (declared early so pa_rdata can reference done_winner_idx)
-    logic [CLUSTER_SIZE-1:0]  done_onehot;
-    logic [LOCAL_IDX_W-1:0]   done_winner_idx;
-    logic                     any_done;
-
-    priority_encoder #(.BUS_WIDTH(CLUSTER_SIZE)) u_done_enc (
-        .core_bus    (core_done),
-        .core_select (done_onehot),
-        .core_address(done_winner_idx),
-        .any_valid   (any_done)
-    );
-
-    assign pa_rdata = pixel_addr_mem[done_winner_idx];
+   
 
     // cores
     generate
@@ -114,17 +104,41 @@ module cluster #(
                 .JOB_DATA_W (JOB_DATA_W),
                 .PIXEL_W    (PIXEL_W)
             ) u_core (
-                .clk        (clk),
-                .rst_n      (rst_n),
-                .live_data  (core_start[g]),       // selects this core
-                .data_in    (disp_job_data_q),     // job payload
-                .ready      (core_wants_job[g]),   // ready for job
-                .done       (core_done[g]),        // done flag
-                .result     (core_result[g]),      // iteration count
-                .received   (core_received[g])     // handshake: FIFO took it
+                .clk      (clk),
+                .rst_n    (rst_n),
+                .live_data(core_start[g]),
+                .data_in  (disp_job_data_q),
+                .ready    (core_wants_job[g]),
+                .done     (core_done[g]),
+                .result   (core_result[g]),
+                .received (core_received[g])
             );
         end
     endgenerate
+
+
+     // done encoder — picks the next finished core to drain
+    logic [CLUSTER_SIZE-1:0] done_onehot;
+    logic [LOCAL_IDX_W-1:0]  done_winner_idx;
+    logic                    any_done;
+
+    priority_encoder #(.BUS_WIDTH(CLUSTER_SIZE)) u_done_enc (
+        .core_bus    (core_done),
+        .core_select (done_onehot),
+        .core_address(done_winner_idx),
+        .any_valid   (any_done)
+    );
+
+
+    // comb pixel read
+    always_comb begin:
+        if (narrow) begin
+            pa_rdata = pixel_mem[{done_winner_idx, left_right}];
+        end
+        else pa_rdata = pixel_mem[{done_winner_idx, 1'b0}];
+    end
+
+
 
     // result FIFO
     localparam int FIFO_DW    = PIXEL_ADDR_W + PIXEL_W;
@@ -139,9 +153,8 @@ module cluster #(
     logic               fifo_empty;
 
     assign fifo_wr_en   = any_done && !fifo_full;
-    assign fifo_wr_data = { pa_rdata, core_result[done_winner_idx] };
+    assign fifo_wr_data = {pa_rdata, core_result[done_winner_idx]};
 
-    // handshake back to the winning core
     assign core_received = fifo_wr_en ? done_onehot : '0;
 
     sync_fifo #(.DW(FIFO_DW), .DEPTH(FIFO_DEPTH)) u_result_fifo (
