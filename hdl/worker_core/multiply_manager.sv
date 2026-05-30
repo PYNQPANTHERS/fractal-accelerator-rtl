@@ -163,6 +163,18 @@ always_comb begin
     endcase
 end
 
+wire signed [2*NARROW_WIDTH-1:0] right_multiply_result;
+logic [1:0] right_multiply_mode;
+
+always_comb begin
+    case(right_cycle) 
+        X_SQUARED : right_multiply_mode = 2'b00;
+        Y_SQUARED : right_multiply_mode = 2'b01;
+        TWO_I_XY : right_multiply_mode = 2'b10;
+        default : right_multiply_mode = 2'b00;
+    endcase
+end
+
 multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
 (
     .mode(left_multiply_mode),
@@ -173,6 +185,16 @@ multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply
     .result(left_multiply_result)
 );
 
+multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
+(
+    .mode(right_multiply_mode),
+
+    .x(spare_x_reg_2),
+    .y(sum_y_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS]),
+
+    .result(right_multiply_result)
+);
+
 wire left_magnitude_flag;
 
 magnitude_comparison_unit #(.NARROW_WIDTH(NARROW_WIDTH),.INTEGER_BITS(INTEGER_BITS)) left_magnitude 
@@ -181,12 +203,28 @@ magnitude_comparison_unit #(.NARROW_WIDTH(NARROW_WIDTH),.INTEGER_BITS(INTEGER_BI
     .mag_flag(left_magnitude_flag)
 );
 
+wire right_magnitude_flag;
+
+magnitude_comparison_unit #(.NARROW_WIDTH(NARROW_WIDTH),.INTEGER_BITS(INTEGER_BITS)) right_magnitude 
+(
+    .magnitude(magnitude_reg_2),
+    .mag_flag(right_magnitude_flag)
+);
+
 wire left_max_iteration_flag;
 
 max_iteration_flagger #(.ITERATION_COUNT_WIDTH(ITERATION_COUNT_WIDTH), .LOWEST_MAX_ITERATION_POWER(LOWEST_MAX_ITERATION_POWER)) left_iteration_flagger (
     .iteration_count(iteration_reg_1),
     .max_iteration(max_iteration),
     .flag(left_max_iteration_flag)
+);
+
+wire right_max_iteration_flag;
+
+max_iteration_flagger #(.ITERATION_COUNT_WIDTH(ITERATION_COUNT_WIDTH), .LOWEST_MAX_ITERATION_POWER(LOWEST_MAX_ITERATION_POWER)) right_iteration_flagger (
+    .iteration_count(iteration_reg_2),
+    .max_iteration(max_iteration),
+    .flag(right_max_iteration_flag)
 );
 
 
@@ -279,10 +317,6 @@ always_ff @(posedge clk) begin
                 end
                 default : left_cycle <= left_cycle;
             endcase
-        
-        
-        
-        
         end
 
 
@@ -295,6 +329,8 @@ always_ff @(posedge clk) begin
             magnitude_reg_2 <= '0;
             grouping_status <= SPLIT;
             right_thread <= RUNNING;
+
+
             iteration_reg_2 <= '0; 
             if(julia_type) begin //julia set setup
                 sum_x_reg_2 <= $signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS;
@@ -304,6 +340,67 @@ always_ff @(posedge clk) begin
                 sum_x_reg_2 <= '0;
                 sum_y_reg_2 <= '0;             
             end
+
+            right_cycle <= ALTER_SUM; 
+        end
+        else if(right_thread == RUNNING && grouping_status == SPLIT) begin
+            case(right_cycle)
+                ALTER_SUM : begin
+                    if(sum_x_reg_2_overflow_flag || sum_y_reg_2_overflow_flag) right_cycle <= DONE;
+                    else begin
+                        sum_x_reg_2 <= encoded_x_reg_2;
+                        spare_x_reg_2 <= encoded_x_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
+                        sum_y_reg_2 <= encoded_y_reg_2;
+                        if(right_max_iteration_flag) right_cycle <= DONE;
+                        else right_cycle <= X_SQUARED;
+                    end
+                    
+                end
+                X_SQUARED : begin
+                    sum_x_reg_2 <= right_multiply_result;
+                    magnitude_reg_2 <= right_multiply_result;
+                    right_cycle <= Y_SQUARED;
+                end
+
+                Y_SQUARED : begin
+                    sum_x_reg_2 <= sum_x_reg_2 - right_multiply_result;
+                    magnitude_reg_2 <= magnitude_reg_2 + right_multiply_result;
+                    if(right_magnitude_flag) right_cycle <= DONE;
+                    else right_cycle <= TWO_I_XY; 
+                end
+
+                TWO_I_XY : begin
+                    //here we have a flag if the magnitude is greater from the comparitor
+                    if(right_magnitude_flag) right_cycle <= DONE;
+                    else begin
+                        sum_y_reg_2 <= right_multiply_result;
+                        if(julia_type) right_cycle <= ADD_JULIA;
+                        else right_cycle <= ADD_COORD;
+                    end
+                end
+
+                ADD_JULIA : begin
+                    sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_2 <= sum_y_reg_2 + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                    right_cycle <= ALTER_SUM;
+                    iteration_reg_2 <= iteration_reg_2 + 1;
+                end
+
+                ADD_COORD : begin
+                    sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_2 <= sum_y_reg_2 + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                    right_cycle <= ALTER_SUM;
+                    iteration_reg_2 <= iteration_reg_2 + 1;
+                end
+
+                DONE : begin
+                    if((done_side == 1) && received) begin
+                        right_thread <= T_IDLE;
+                        right_cycle <= C_IDLE;
+                    end
+                end
+                default : right_cycle <= right_cycle;
+            endcase
         end
         if(start_wide) begin
             magnitude_reg_1 <= '0;

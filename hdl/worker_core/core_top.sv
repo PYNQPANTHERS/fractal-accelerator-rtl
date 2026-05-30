@@ -4,7 +4,7 @@
 
 
 module core_top 
-#(parameter NARROW_WIDTH = 18, ITERATION_COUNT_WIDTH = 16)
+#(parameter NARROW_WIDTH = 18, ITERATION_COUNT_WIDTH = 16, INTEGER_BITS = 2, LOWEST_MAX_ITERATION_POWER = 6)
 (
 input clk,
 input rst,
@@ -15,17 +15,18 @@ input [NARROW_WIDTH-1:0] data_in,
 
 //this is to communicate to stack when done
 output done,
-output side_done, //0 = left, 1 = right
+output done_side, //0 = left, 1 = right
+output logic will_load_into, //0 = left, 1 = right
 input received,
 
 
 
-output wire ready,
-output reg [ITERATION_COUNT_WIDTH-1:0] iteration_count
+output logic ready,
+output logic [ITERATION_COUNT_WIDTH-1:0] iteration_count
 );
 
 typedef enum {BOTH_IDLE, L_ACTIVE_R_IDLE, L_IDLE_R_ACTIVE, BOTH_ACTIVE, LOADING_OPCODES, LOADING_JULIA} state;
-typedef enum {NARROW = 1'b0, WIDE = 1'b1} width;
+typedef enum {NARROW = 0, WIDE = 1} width;
 
 
 reg start_left;
@@ -58,31 +59,35 @@ reg [NARROW_WIDTH-1:0] starting_y_reg_2;
 //square what is in the sum registers 
 
 
-
+reg kill;
 
 reg [1:0] general_counter; //1 bit counter
 
 always_ff @(posedge clk) begin
     if(rst) begin
         core_state <= BOTH_IDLE;
-        done <= 1'b0;
+        //done <= 1'b0;
         start_left <= 1'b0;
         start_right <= 1'b0;
         start_wide <= 1'b0;
         received_during_live_signal <= 1'b0;
+        kill <= 1'b0;
     end
     else begin
         if(opcode_reset) begin
             core_state <= LOADING_OPCODES;
-            done <= 1'b0;
+            //done <= 1'b0;
             general_counter <= 2'b0;
             start_left <= 1'b0;
             start_right <= 1'b0;
             start_wide <= 1'b0;
             received_during_live_signal <= 1'b0;
+            kill <= 1'b1;
+            
         end
 
         else begin
+            kill <= 1'b0;
         
             case (core_state)
             
@@ -91,7 +96,7 @@ always_ff @(posedge clk) begin
                                 julia_type <= opcode[9];
                                 magnitude_negation_encoding <= opcode[8:5];
                                 max_iteration <= opcode[4:0];
-                                if(opcode[11]) begin
+                                if(opcode[9]) begin
                                     core_state <= LOADING_JULIA;
                                     general_counter <= 2'b00;
                                 end
@@ -235,7 +240,7 @@ always_ff @(posedge clk) begin
                         core_state <= BOTH_IDLE;
                     end
                     else begin
-                        if(side_done) begin
+                        if(done_side) begin
                             core_state <= L_ACTIVE_R_IDLE;
                         end
                         else begin
@@ -261,16 +266,59 @@ always_ff @(posedge clk) begin
         
         end
     end
-end
 
 
 
 always_comb begin
-    if(core_state == BOTH_ACTIVE) ready = 1'b0;
-    else ready = 1'b1;
+    case(core_state)
+        BOTH_ACTIVE : ready = 0;
+        LOADING_JULIA : ready = 0;
+        LOADING_OPCODES : ready = 0;
+        default : ready = 1'b1;
+    endcase
+end
+
+always_comb begin
+    case (core_state)
+        BOTH_IDLE : will_load_into = 0;
+        L_ACTIVE_R_IDLE : will_load_into = 1; 
+        L_IDLE_R_ACTIVE : will_load_into = 0;
+        default : will_load_into = 0;
+    endcase
+
 end
 
 
+
+
+multiply_manager #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS), .ITERATION_COUNT_WIDTH(ITERATION_COUNT_WIDTH), .LOWEST_MAX_ITERATION_POWER(LOWEST_MAX_ITERATION_POWER)) m_manage
+(
+.clk(clk),
+.rst(rst),
+.kill(kill),
+.received(received),
+
+.start_left(start_left), // these are one-cycle pulses
+.start_right(start_right),
+.start_wide(start_wide),
+
+.julia_type(julia_type), //0 - mandel, 1 - julia
+.magnitude_negation_encoding(magnitude_negation_encoding), //{abs x, abs y, neg x, neg y}
+.max_iteration(max_iteration),
+
+.julia_c_x(julia_c_x), 
+.julia_c_y(julia_c_y),
+
+.starting_x_reg_1(starting_x_reg_1), //upper
+.starting_x_reg_2(starting_x_reg_2),
+.starting_y_reg_1(starting_y_reg_1),
+.starting_y_reg_2(starting_y_reg_2),
+
+.done(done),
+.done_side(done_side), // 0 = left, 1 = right (only used for split mode)
+.iteration_out(iteration_count) // muxed between both threads
+
+);
 
 
 
