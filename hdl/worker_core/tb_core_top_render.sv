@@ -188,7 +188,7 @@ task automatic render_frame(input int frame_id);
 
     fork
         // ── Producer ──────────────────────────────
-        begin
+        begin : producer
             for (int p = 0; p < PIXELS; p++) begin
                 col = p % WIDTH;
                 row = p / WIDTH;
@@ -214,20 +214,24 @@ task automatic render_frame(input int frame_id);
         end
 
         // ── Consumer ──────────────────────────────
-        begin
+        begin : consumer
             for (int p = 0; p < PIXELS; p++) begin
-                logic s;
-                int   px;
                 wait(done === 1'b1);
                 @(posedge clk); #1;
-                s  = done_side;
-                px = side_pixel_idx[s];
-                frame_buf[frame_id][px] = iteration_count;
-                side_occupied[s] = 0;
-                received = 1;
-                @(posedge clk); #1;
-                received = 0;
-                collected++;
+
+                begin
+                    logic s;
+                    int   px;
+                    s  = done_side;
+                    px = side_pixel_idx[s];
+                    frame_buf[frame_id][px] = iteration_count;
+                    side_occupied[s] = 0;
+
+                    received = 1;
+                    @(posedge clk); #1;
+                    received = 0;
+                    collected++;
+                end
             end
         end
     join
@@ -238,11 +242,6 @@ task automatic render_frame(input int frame_id);
              frame_end_cycle[frame_id],
              frame_end_cycle[frame_id] - frame_start_cycle[frame_id],
              PIXELS);
-    $display("  [frame %0d] sample pixels: [0]=%0d [centre]=%0d [last]=%0d",
-         frame_id,
-         frame_buf[frame_id][0],
-         frame_buf[frame_id][PIXELS/2],
-         frame_buf[frame_id][PIXELS-1]);
 endtask
 
 // ──────────────────────────────────────────────
@@ -287,13 +286,11 @@ initial begin
     $display("\n══ Frame 0: Mandelbrot  %0dx%0d ══", WIDTH, HEIGHT);
     send_opcode(build_opcode(0, 0, 0, 0, 0, 0, MAX_ITER_FIELD));
     render_frame(0);
-    repeat(10) @(posedge clk); #1;
 
     // ── Frame 1 : Burning Ship ────────────────
     $display("\n══ Frame 1: Burning Ship  %0dx%0d ══", WIDTH, HEIGHT);
     send_opcode(build_opcode(0, 0, 1, 1, 0, 0, MAX_ITER_FIELD));
     render_frame(1);
-    repeat(10) @(posedge clk); #1;
 
     // ── Frame 2 : Julia ───────────────────────
     $display("\n══ Frame 2: Julia (c=%.3f+%.3fi)  %0dx%0d ══",

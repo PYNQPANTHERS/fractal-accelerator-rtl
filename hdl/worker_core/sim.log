@@ -1,0 +1,577 @@
+VCD info: dumpfile core_top_tb.vcd opened for output.
+VCD warning: tb_core_top_render.sv:333: $dumpfile called after $dumpvars started,
+                                        using existing file (core_top_tb.vcd).
+Starting render: 128x128 pixels, max_iter=2^9=512
+
+── Config: narrow Mandelbrot, 256 max iterations ──
+
+══ Frame 0: Mandelbrot  128x128 ══
+
+── Batch: 200 coords (140-pt grid + 60 special) ──
+  [frame 0] start cycle 8
+  [dispatch #000] x= -2.000 y= -1.250 → side 0  (s0=1 s1=0)
+  [dispatch #001] x= -1.769 y= -1.250 → side 1  (s0=1 s1=1)
+  [result  #000] side=0  iters=    1  lat=13 cyc  (s0=1 s1=0)
+  [dispatch #002] x= -1.538 y= -1.250 → side 0  (s0=2 s1=1)
+  [result  #001] side=1  iters=    1  lat=14 cyc  (s0=1 s1=1)
+  [dispatch #003] x= -1.308 y= -1.250 → side 1  (s0=2 s1=2)
+  [result  #002] side=0  iters=    2  lat=16 cyc  (s0=2 s1=1)
+  [dispatch #004] x= -1.077 y= -1.250 → side 0  (s0=3 s1=2)
+  [result  #003] side=1  iters=    2  lat=16 cyc  (s0=2 s1=2)
+  [dispatch #005] x= -0.846 y= -1.250 → side 1  (s0=3 s1=3)
+  [result  #004] side=0  iters=    2  lat=19 cyc  (s0=3 s1=2)
+  [dispatch #006] x= -0.615 y= -1.250 → side 0  (s0=4 s1=3)
+  [result  #005] side=1  iters=    3  lat=21 cyc  (s0=3 s1=3)
+  [dispatch #007] x= -0.385 y= -1.250 → side 1  (s0=4 s1=4)
+  [result  #006] side=0  iters=    3  lat=21 cyc  (s0=4 s1=3)
+  [dispatch #008] x= -0.154 y= -1.250 → side 0  (s0=5 s1=4)
+  [result  #007] side=1  iters=    3  lat=21 cyc  (s0=4 s1=4)
+  [dispatch #009] x=  0.077 y= -1.250 → side 1  (s0=5 s1=5)
+  [result  #009] side=1  iters=    2  lat=18 cyc  (s0=4 s1=5)
+  [dispatch #010] x=  0.308 y= -1.250 → side 1  (s0=5 s1=6)
+  [result  #008] side=0  iters=    3  lat=26 cyc  (s0=5 s1=5)
+  [dispatch #011] x=  0.538 y= -1.250 → side 0  (s0=6 s1=6)
+  [result  #010] side=1  iters=    2  lat=16 cyc  (s0=5 s1=6)
+  [dispatch #012] x=  0.769 y= -1.250 → side 1  (s0=6 s1=7)
+  [result  #011] side=0  iters=    2  lat=16 cyc  (s0=6 s1=6)
+  [dispatch #013] x=  1.000 y= -1.250 → side 0  (s0=7 s1=7)
+  [result  #012] side=1  iters=    2  lat=16 cyc  (s0=6 s1=7)
+  [dispatch #014] x= -2.000 y= -0.972 → side 1  (s0=7 s1=8)
+  [result  #013] side=0  iters=    2  lat=16 cyc  (s0=7 s1=7)
+  [dispatch #015] x= -1.769 y= -0.972 → side 0  (s0=8 s1=8)
+  [result  #014] side=1  iters=    1  lat=13 cyc  (s0=7 s1=8)
+  [dispatch #016] x= -1.538 y= -0.972 → side 1  (s0=8 s1=9)
+  [result  #015] side=0  iters=    1  lat=14 cyc  (s0=8 s1=8)
+  [dispatch #017] x= -1.308 y= -0.972 → side 0  (s0=9 s1=9)
+  [result  #016] side=1  iters=    2  lat=16 cyc  (s0=8 s1=9)
+  [dispatch #018] x= -1.077 y= -0.972 → side 1  (s0=9 s1=10)
+  [result  #017] side=0  iters=    3  lat=21 cyc  (s0=9 s1=9)
+  [dispatch #019] x= -0.846 y= -0.972 → side 0  (s0=10 s1=10)
+  [result  #018] side=1  iters=    3  lat=21 cyc  (s0=9 s1=10)
+  [dispatch #020] x= -0.615 y= -0.972 → side 1  (s0=10 s1=11)
+  [result  #019] side=0  iters=    3  lat=21 cyc  (s0=10 s1=10)
+  [dispatch #021] x= -0.385 y= -0.972 → side 0  (s0=11 s1=11)
+  [result  #020] side=1  iters=    4  lat=26 cyc  (s0=10 s1=11)
+  [dispatch #022] x= -0.154 y= -0.972 → side 1  (s0=11 s1=12)
+  [result  #021] side=0  iters=    5  lat=31 cyc  (s0=11 s1=11)
+  [dispatch #023] x=  0.077 y= -0.972 → side 0  (s0=12 s1=12)
+  [result  #023] side=0  iters=    5  lat=31 cyc  (s0=12 s1=11)
+  [dispatch #024] x=  0.308 y= -0.972 → side 0  (s0=13 s1=12)
+  [result  #022] side=1  iters=    9  lat=54 cyc  (s0=12 s1=12)
+  [dispatch #025] x=  0.538 y= -0.972 → side 1  (s0=13 s1=13)
+  [result  #025] side=1  iters=    2  lat=15 cyc  (s0=12 s1=13)
+  [dispatch #026] x=  0.769 y= -0.972 → side 1  (s0=13 s1=14)
+  [result  #024] side=0  iters=    3  lat=26 cyc  (s0=13 s1=13)
+  [dispatch #027] x=  1.000 y= -0.972 → side 0  (s0=14 s1=14)
+  [result  #026] side=1  iters=    2  lat=16 cyc  (s0=13 s1=14)
+  [dispatch #028] x= -2.000 y= -0.694 → side 1  (s0=14 s1=15)
+  [result  #027] side=0  iters=    2  lat=16 cyc  (s0=14 s1=14)
+  [dispatch #029] x= -1.769 y= -0.694 → side 0  (s0=15 s1=15)
+  [result  #028] side=1  iters=    1  lat=13 cyc  (s0=14 s1=15)
+  [dispatch #030] x= -1.538 y= -0.694 → side 1  (s0=15 s1=16)
+  [result  #029] side=0  iters=    3  lat=21 cyc  (s0=15 s1=15)
+  [dispatch #031] x= -1.308 y= -0.694 → side 0  (s0=16 s1=16)
+  [result  #030] side=1  iters=    3  lat=21 cyc  (s0=15 s1=16)
+  [dispatch #032] x= -1.077 y= -0.694 → side 1  (s0=16 s1=17)
+  [result  #031] side=0  iters=    3  lat=21 cyc  (s0=16 s1=16)
+  [dispatch #033] x= -0.846 y= -0.694 → side 0  (s0=17 s1=17)
+  [result  #032] side=1  iters=    3  lat=24 cyc  (s0=16 s1=17)
+  [dispatch #034] x= -0.615 y= -0.694 → side 1  (s0=17 s1=18)
+  [result  #033] side=0  iters=    4  lat=29 cyc  (s0=17 s1=17)
+  [dispatch #035] x= -0.385 y= -0.694 → side 0  (s0=18 s1=18)
+  [result  #034] side=1  iters=    8  lat=49 cyc  (s0=17 s1=18)
+  [dispatch #036] x= -0.154 y= -0.694 → side 1  (s0=18 s1=19)
+  [result  #035] side=0  iters=    9  lat=51 cyc  (s0=18 s1=18)
+  [dispatch #037] x=  0.077 y= -0.694 → side 0  (s0=19 s1=19)
+  [result  #037] side=0  iters=    9  lat=54 cyc  (s0=19 s1=18)
+  [dispatch #038] x=  0.308 y= -0.694 → side 0  (s0=20 s1=19)
+  [result  #038] side=0  iters=    7  lat=41 cyc  (s0=20 s1=18)
+  [dispatch #039] x=  0.538 y= -0.694 → side 0  (s0=21 s1=19)
+  [result  #039] side=0  iters=    3  lat=24 cyc  (s0=21 s1=18)
+  [dispatch #040] x=  0.769 y= -0.694 → side 0  (s0=22 s1=19)
+  [result  #040] side=0  iters=    3  lat=21 cyc  (s0=22 s1=18)
+  [dispatch #041] x=  1.000 y= -0.694 → side 0  (s0=23 s1=19)
+  [result  #041] side=0  iters=    2  lat=16 cyc  (s0=23 s1=18)
+  [dispatch #042] x= -2.000 y= -0.417 → side 0  (s0=24 s1=19)
+  [result  #042] side=0  iters=    1  lat=13 cyc  (s0=24 s1=18)
+  [dispatch #043] x= -1.769 y= -0.417 → side 0  (s0=25 s1=19)
+  [result  #043] side=0  iters=    3  lat=21 cyc  (s0=25 s1=18)
+  [dispatch #044] x= -1.538 y= -0.417 → side 0  (s0=26 s1=19)
+  [result  #044] side=0  iters=    4  lat=26 cyc  (s0=26 s1=18)
+  [dispatch #045] x= -1.308 y= -0.417 → side 0  (s0=27 s1=19)
+  [result  #045] side=0  iters=    7  lat=41 cyc  (s0=27 s1=18)
+  [dispatch #046] x= -1.077 y= -0.417 → side 0  (s0=28 s1=19)
+  [result  #046] side=0  iters=    6  lat=39 cyc  (s0=28 s1=18)
+  [dispatch #047] x= -0.846 y= -0.417 → side 0  (s0=29 s1=19)
+  [result  #036] side=1  iters=   64  lat=326 cyc  (s0=28 s1=19)
+  [dispatch #048] x= -0.615 y= -0.417 → side 1  (s0=29 s1=20)
+  [result  #047] side=0  iters=    7  lat=41 cyc  (s0=29 s1=19)
+  [dispatch #049] x= -0.385 y= -0.417 → side 0  (s0=30 s1=20)
+  [result  #048] side=1  iters=   64  lat=326 cyc  (s0=29 s1=20)
+  [dispatch #050] x= -0.154 y= -0.417 → side 1  (s0=30 s1=21)
+  [result  #049] side=0  iters=   64  lat=326 cyc  (s0=30 s1=20)
+  [dispatch #051] x=  0.077 y= -0.417 → side 0  (s0=31 s1=21)
+  [result  #050] side=1  iters=   64  lat=326 cyc  (s0=30 s1=21)
+  [dispatch #052] x=  0.308 y= -0.417 → side 1  (s0=31 s1=22)
+  [result  #051] side=0  iters=   64  lat=326 cyc  (s0=31 s1=21)
+  [dispatch #053] x=  0.538 y= -0.417 → side 0  (s0=32 s1=22)
+  [result  #053] side=0  iters=    4  lat=29 cyc  (s0=32 s1=21)
+  [dispatch #054] x=  0.769 y= -0.417 → side 0  (s0=33 s1=22)
+  [result  #054] side=0  iters=    3  lat=21 cyc  (s0=33 s1=21)
+  [dispatch #055] x=  1.000 y= -0.417 → side 0  (s0=34 s1=22)
+  [result  #055] side=0  iters=    2  lat=19 cyc  (s0=34 s1=21)
+  [dispatch #056] x= -2.000 y= -0.139 → side 0  (s0=35 s1=22)
+  [result  #056] side=0  iters=    1  lat=13 cyc  (s0=35 s1=21)
+  [dispatch #057] x= -1.769 y= -0.139 → side 0  (s0=36 s1=22)
+  [result  #057] side=0  iters=    4  lat=26 cyc  (s0=36 s1=21)
+  [dispatch #058] x= -1.538 y= -0.139 → side 0  (s0=37 s1=22)
+  [result  #058] side=0  iters=    6  lat=36 cyc  (s0=37 s1=21)
+  [dispatch #059] x= -1.308 y= -0.139 → side 0  (s0=38 s1=22)
+  [result  #059] side=0  iters=   10  lat=59 cyc  (s0=38 s1=21)
+  [dispatch #060] x= -1.077 y= -0.139 → side 0  (s0=39 s1=22)
+  [result  #052] side=1  iters=   64  lat=326 cyc  (s0=38 s1=22)
+  [dispatch #061] x= -0.846 y= -0.139 → side 1  (s0=39 s1=23)
+  [result  #060] side=0  iters=   64  lat=326 cyc  (s0=39 s1=22)
+  [dispatch #062] x= -0.615 y= -0.139 → side 0  (s0=40 s1=23)
+  [result  #061] side=1  iters=   64  lat=326 cyc  (s0=39 s1=23)
+  [dispatch #063] x= -0.385 y= -0.139 → side 1  (s0=40 s1=24)
+  [result  #062] side=0  iters=   64  lat=326 cyc  (s0=40 s1=23)
+  [dispatch #064] x= -0.154 y= -0.139 → side 0  (s0=41 s1=24)
+  [result  #063] side=1  iters=   64  lat=326 cyc  (s0=40 s1=24)
+  [dispatch #065] x=  0.077 y= -0.139 → side 1  (s0=41 s1=25)
+  [result  #064] side=0  iters=   64  lat=326 cyc  (s0=41 s1=24)
+  [dispatch #066] x=  0.308 y= -0.139 → side 0  (s0=42 s1=25)
+  [result  #065] side=1  iters=   64  lat=326 cyc  (s0=41 s1=25)
+  [dispatch #067] x=  0.538 y= -0.139 → side 1  (s0=42 s1=26)
+  [result  #067] side=1  iters=    4  lat=29 cyc  (s0=41 s1=26)
+  [dispatch #068] x=  0.769 y= -0.139 → side 1  (s0=42 s1=27)
+  [result  #068] side=1  iters=    3  lat=21 cyc  (s0=41 s1=27)
+  [dispatch #069] x=  1.000 y= -0.139 → side 1  (s0=42 s1=28)
+  [result  #069] side=1  iters=    2  lat=19 cyc  (s0=41 s1=28)
+  [dispatch #070] x= -2.000 y=  0.139 → side 1  (s0=42 s1=29)
+  [result  #070] side=1  iters=    1  lat=13 cyc  (s0=41 s1=29)
+  [dispatch #071] x= -1.769 y=  0.139 → side 1  (s0=42 s1=30)
+  [result  #071] side=1  iters=    4  lat=26 cyc  (s0=41 s1=30)
+  [dispatch #072] x= -1.538 y=  0.139 → side 1  (s0=42 s1=31)
+  [result  #072] side=1  iters=    6  lat=36 cyc  (s0=41 s1=31)
+  [dispatch #073] x= -1.308 y=  0.139 → side 1  (s0=42 s1=32)
+  [result  #073] side=1  iters=   10  lat=59 cyc  (s0=41 s1=32)
+  [dispatch #074] x= -1.077 y=  0.139 → side 1  (s0=42 s1=33)
+  [result  #066] side=0  iters=   64  lat=326 cyc  (s0=42 s1=32)
+  [dispatch #075] x= -0.846 y=  0.139 → side 0  (s0=43 s1=33)
+  [result  #074] side=1  iters=   64  lat=326 cyc  (s0=42 s1=33)
+  [dispatch #076] x= -0.615 y=  0.139 → side 1  (s0=43 s1=34)
+  [result  #075] side=0  iters=   64  lat=326 cyc  (s0=43 s1=33)
+  [dispatch #077] x= -0.385 y=  0.139 → side 0  (s0=44 s1=34)
+  [result  #076] side=1  iters=   64  lat=326 cyc  (s0=43 s1=34)
+  [dispatch #078] x= -0.154 y=  0.139 → side 1  (s0=44 s1=35)
+  [result  #077] side=0  iters=   64  lat=326 cyc  (s0=44 s1=34)
+  [dispatch #079] x=  0.077 y=  0.139 → side 0  (s0=45 s1=35)
+  [result  #078] side=1  iters=   64  lat=326 cyc  (s0=44 s1=35)
+  [dispatch #080] x=  0.308 y=  0.139 → side 1  (s0=45 s1=36)
+  [result  #079] side=0  iters=   64  lat=326 cyc  (s0=45 s1=35)
+  [dispatch #081] x=  0.538 y=  0.139 → side 0  (s0=46 s1=36)
+  [result  #081] side=0  iters=    4  lat=29 cyc  (s0=46 s1=35)
+  [dispatch #082] x=  0.769 y=  0.139 → side 0  (s0=47 s1=36)
+  [result  #082] side=0  iters=    3  lat=21 cyc  (s0=47 s1=35)
+  [dispatch #083] x=  1.000 y=  0.139 → side 0  (s0=48 s1=36)
+  [result  #083] side=0  iters=    2  lat=19 cyc  (s0=48 s1=35)
+  [dispatch #084] x= -2.000 y=  0.417 → side 0  (s0=49 s1=36)
+  [result  #084] side=0  iters=    1  lat=13 cyc  (s0=49 s1=35)
+  [dispatch #085] x= -1.769 y=  0.417 → side 0  (s0=50 s1=36)
+  [result  #085] side=0  iters=    3  lat=21 cyc  (s0=50 s1=35)
+  [dispatch #086] x= -1.538 y=  0.417 → side 0  (s0=51 s1=36)
+  [result  #086] side=0  iters=    4  lat=26 cyc  (s0=51 s1=35)
+  [dispatch #087] x= -1.308 y=  0.417 → side 0  (s0=52 s1=36)
+  [result  #087] side=0  iters=    7  lat=41 cyc  (s0=52 s1=35)
+  [dispatch #088] x= -1.077 y=  0.417 → side 0  (s0=53 s1=36)
+  [result  #088] side=0  iters=    6  lat=39 cyc  (s0=53 s1=35)
+  [dispatch #089] x= -0.846 y=  0.417 → side 0  (s0=54 s1=36)
+  [result  #089] side=0  iters=    7  lat=41 cyc  (s0=54 s1=35)
+  [dispatch #090] x= -0.615 y=  0.417 → side 0  (s0=55 s1=36)
+  [result  #080] side=1  iters=   64  lat=326 cyc  (s0=54 s1=36)
+  [dispatch #091] x= -0.385 y=  0.417 → side 1  (s0=55 s1=37)
+  [result  #090] side=0  iters=   64  lat=326 cyc  (s0=55 s1=36)
+  [dispatch #092] x= -0.154 y=  0.417 → side 0  (s0=56 s1=37)
+  [result  #091] side=1  iters=   64  lat=326 cyc  (s0=55 s1=37)
+  [dispatch #093] x=  0.077 y=  0.417 → side 1  (s0=56 s1=38)
+  [result  #092] side=0  iters=   64  lat=326 cyc  (s0=56 s1=37)
+  [dispatch #094] x=  0.308 y=  0.417 → side 0  (s0=57 s1=38)
+  [result  #093] side=1  iters=   64  lat=326 cyc  (s0=56 s1=38)
+  [dispatch #095] x=  0.538 y=  0.417 → side 1  (s0=57 s1=39)
+  [result  #095] side=1  iters=    4  lat=29 cyc  (s0=56 s1=39)
+  [dispatch #096] x=  0.769 y=  0.417 → side 1  (s0=57 s1=40)
+  [result  #096] side=1  iters=    3  lat=21 cyc  (s0=56 s1=40)
+  [dispatch #097] x=  1.000 y=  0.417 → side 1  (s0=57 s1=41)
+  [result  #097] side=1  iters=    2  lat=19 cyc  (s0=56 s1=41)
+  [dispatch #098] x= -2.000 y=  0.694 → side 1  (s0=57 s1=42)
+  [result  #098] side=1  iters=    1  lat=13 cyc  (s0=56 s1=42)
+  [dispatch #099] x= -1.769 y=  0.694 → side 1  (s0=57 s1=43)
+  [result  #099] side=1  iters=    3  lat=21 cyc  (s0=56 s1=43)
+  [dispatch #100] x= -1.538 y=  0.694 → side 1  (s0=57 s1=44)
+  [result  #100] side=1  iters=    3  lat=21 cyc  (s0=56 s1=44)
+  [dispatch #101] x= -1.308 y=  0.694 → side 1  (s0=57 s1=45)
+  [result  #101] side=1  iters=    3  lat=21 cyc  (s0=56 s1=45)
+  [dispatch #102] x= -1.077 y=  0.694 → side 1  (s0=57 s1=46)
+  [result  #102] side=1  iters=    3  lat=24 cyc  (s0=56 s1=46)
+  [dispatch #103] x= -0.846 y=  0.694 → side 1  (s0=57 s1=47)
+  [result  #103] side=1  iters=    4  lat=29 cyc  (s0=56 s1=47)
+  [dispatch #104] x= -0.615 y=  0.694 → side 1  (s0=57 s1=48)
+  [result  #104] side=1  iters=    8  lat=49 cyc  (s0=56 s1=48)
+  [dispatch #105] x= -0.385 y=  0.694 → side 1  (s0=57 s1=49)
+  [result  #094] side=0  iters=   64  lat=326 cyc  (s0=57 s1=48)
+  [dispatch #106] x= -0.154 y=  0.694 → side 0  (s0=58 s1=49)
+  [result  #105] side=1  iters=    9  lat=51 cyc  (s0=57 s1=49)
+  [dispatch #107] x=  0.077 y=  0.694 → side 1  (s0=58 s1=50)
+  [result  #107] side=1  iters=    9  lat=54 cyc  (s0=57 s1=50)
+  [dispatch #108] x=  0.308 y=  0.694 → side 1  (s0=58 s1=51)
+  [result  #108] side=1  iters=    7  lat=41 cyc  (s0=57 s1=51)
+  [dispatch #109] x=  0.538 y=  0.694 → side 1  (s0=58 s1=52)
+  [result  #109] side=1  iters=    3  lat=24 cyc  (s0=57 s1=52)
+  [dispatch #110] x=  0.769 y=  0.694 → side 1  (s0=58 s1=53)
+  [result  #110] side=1  iters=    3  lat=21 cyc  (s0=57 s1=53)
+  [dispatch #111] x=  1.000 y=  0.694 → side 1  (s0=58 s1=54)
+  [result  #111] side=1  iters=    2  lat=16 cyc  (s0=57 s1=54)
+  [dispatch #112] x= -2.000 y=  0.972 → side 1  (s0=58 s1=55)
+  [result  #112] side=1  iters=    1  lat=13 cyc  (s0=57 s1=55)
+  [dispatch #113] x= -1.769 y=  0.972 → side 1  (s0=58 s1=56)
+  [result  #113] side=1  iters=    1  lat=14 cyc  (s0=57 s1=56)
+  [dispatch #114] x= -1.538 y=  0.972 → side 1  (s0=58 s1=57)
+  [result  #114] side=1  iters=    2  lat=16 cyc  (s0=57 s1=57)
+  [dispatch #115] x= -1.308 y=  0.972 → side 1  (s0=58 s1=58)
+  [result  #115] side=1  iters=    3  lat=21 cyc  (s0=57 s1=58)
+  [dispatch #116] x= -1.077 y=  0.972 → side 1  (s0=58 s1=59)
+  [result  #116] side=1  iters=    3  lat=21 cyc  (s0=57 s1=59)
+  [dispatch #117] x= -0.846 y=  0.972 → side 1  (s0=58 s1=60)
+  [result  #117] side=1  iters=    3  lat=21 cyc  (s0=57 s1=60)
+  [dispatch #118] x= -0.615 y=  0.972 → side 1  (s0=58 s1=61)
+  [result  #118] side=1  iters=    4  lat=26 cyc  (s0=57 s1=61)
+  [dispatch #119] x= -0.385 y=  0.972 → side 1  (s0=58 s1=62)
+  [result  #106] side=0  iters=   64  lat=326 cyc  (s0=58 s1=61)
+  [dispatch #120] x= -0.154 y=  0.972 → side 0  (s0=59 s1=62)
+  [result  #119] side=1  iters=    5  lat=31 cyc  (s0=58 s1=62)
+  [dispatch #121] x=  0.077 y=  0.972 → side 1  (s0=59 s1=63)
+  [result  #121] side=1  iters=    5  lat=31 cyc  (s0=58 s1=63)
+  [dispatch #122] x=  0.308 y=  0.972 → side 1  (s0=59 s1=64)
+  [result  #120] side=0  iters=    9  lat=54 cyc  (s0=59 s1=63)
+  [dispatch #123] x=  0.538 y=  0.972 → side 0  (s0=60 s1=64)
+  [result  #122] side=1  iters=    3  lat=23 cyc  (s0=59 s1=64)
+  [dispatch #124] x=  0.769 y=  0.972 → side 1  (s0=60 s1=65)
+  [result  #123] side=0  iters=    2  lat=18 cyc  (s0=60 s1=64)
+  [dispatch #125] x=  1.000 y=  0.972 → side 0  (s0=61 s1=65)
+  [result  #124] side=1  iters=    2  lat=16 cyc  (s0=60 s1=65)
+  [dispatch #126] x= -2.000 y=  1.250 → side 1  (s0=61 s1=66)
+  [result  #125] side=0  iters=    2  lat=16 cyc  (s0=61 s1=65)
+  [dispatch #127] x= -1.769 y=  1.250 → side 0  (s0=62 s1=66)
+  [result  #126] side=1  iters=    1  lat=13 cyc  (s0=61 s1=66)
+  [dispatch #128] x= -1.538 y=  1.250 → side 1  (s0=62 s1=67)
+  [result  #127] side=0  iters=    1  lat=14 cyc  (s0=62 s1=66)
+  [dispatch #129] x= -1.308 y=  1.250 → side 0  (s0=63 s1=67)
+  [result  #128] side=1  iters=    2  lat=16 cyc  (s0=62 s1=67)
+  [dispatch #130] x= -1.077 y=  1.250 → side 1  (s0=63 s1=68)
+  [result  #129] side=0  iters=    2  lat=16 cyc  (s0=63 s1=67)
+  [dispatch #131] x= -0.846 y=  1.250 → side 0  (s0=64 s1=68)
+  [result  #130] side=1  iters=    2  lat=19 cyc  (s0=63 s1=68)
+  [dispatch #132] x= -0.615 y=  1.250 → side 1  (s0=64 s1=69)
+  [result  #131] side=0  iters=    3  lat=21 cyc  (s0=64 s1=68)
+  [dispatch #133] x= -0.385 y=  1.250 → side 0  (s0=65 s1=69)
+  [result  #132] side=1  iters=    3  lat=21 cyc  (s0=64 s1=69)
+  [dispatch #134] x= -0.154 y=  1.250 → side 1  (s0=65 s1=70)
+  [result  #133] side=0  iters=    3  lat=21 cyc  (s0=65 s1=69)
+  [dispatch #135] x=  0.077 y=  1.250 → side 0  (s0=66 s1=70)
+  [result  #134] side=1  iters=    3  lat=24 cyc  (s0=65 s1=70)
+  [dispatch #136] x=  0.308 y=  1.250 → side 1  (s0=66 s1=71)
+  [result  #135] side=0  iters=    2  lat=20 cyc  (s0=66 s1=70)
+  [dispatch #137] x=  0.538 y=  1.250 → side 0  (s0=67 s1=71)
+  [result  #136] side=1  iters=    2  lat=16 cyc  (s0=66 s1=71)
+  [dispatch #138] x=  0.769 y=  1.250 → side 1  (s0=67 s1=72)
+  [result  #137] side=0  iters=    2  lat=16 cyc  (s0=67 s1=71)
+  [dispatch #139] x=  1.000 y=  1.250 → side 0  (s0=68 s1=72)
+  [result  #138] side=1  iters=    2  lat=16 cyc  (s0=67 s1=72)
+  [dispatch #140] x=  0.000 y=  0.000 → side 1  (s0=68 s1=73)
+  [result  #139] side=0  iters=    2  lat=16 cyc  (s0=68 s1=72)
+  [dispatch #141] x= -0.500 y=  0.000 → side 0  (s0=69 s1=73)
+  [result  #140] side=1  iters=   64  lat=326 cyc  (s0=68 s1=73)
+  [dispatch #142] x= -0.100 y=  0.100 → side 1  (s0=69 s1=74)
+  [result  #141] side=0  iters=   64  lat=326 cyc  (s0=69 s1=73)
+  [dispatch #143] x=  0.100 y= -0.100 → side 0  (s0=70 s1=74)
+  [result  #142] side=1  iters=   64  lat=326 cyc  (s0=69 s1=74)
+  [dispatch #144] x= -0.200 y=  0.200 → side 1  (s0=70 s1=75)
+  [result  #143] side=0  iters=   64  lat=326 cyc  (s0=70 s1=74)
+  [dispatch #145] x= -0.300 y=  0.100 → side 0  (s0=71 s1=75)
+  [result  #144] side=1  iters=   64  lat=326 cyc  (s0=70 s1=75)
+  [dispatch #146] x=  0.000 y= -0.300 → side 1  (s0=71 s1=76)
+  [result  #145] side=0  iters=   64  lat=326 cyc  (s0=71 s1=75)
+  [dispatch #147] x= -0.400 y=  0.000 → side 0  (s0=72 s1=76)
+  [result  #146] side=1  iters=   64  lat=326 cyc  (s0=71 s1=76)
+  [dispatch #148] x= -0.750 y=  0.000 → side 1  (s0=72 s1=77)
+  [result  #147] side=0  iters=   64  lat=326 cyc  (s0=72 s1=76)
+  [dispatch #149] x= -1.250 y=  0.000 → side 0  (s0=73 s1=77)
+  [result  #148] side=1  iters=   64  lat=326 cyc  (s0=72 s1=77)
+  [dispatch #150] x=  2.000 y=  0.000 → side 1  (s0=73 s1=78)
+  [result  #149] side=0  iters=   64  lat=326 cyc  (s0=73 s1=77)
+  [dispatch #151] x= -2.000 y=  0.000 → side 0  (s0=74 s1=78)
+  [result  #150] side=1  iters=    1  lat=13 cyc  (s0=73 s1=78)
+  [dispatch #152] x=  0.000 y=  2.000 → side 1  (s0=74 s1=79)
+  [result  #151] side=0  iters=    1  lat=13 cyc  (s0=74 s1=78)
+  [dispatch #153] x=  0.000 y= -2.000 → side 0  (s0=75 s1=79)
+  [result  #152] side=1  iters=    1  lat=14 cyc  (s0=74 s1=79)
+  [dispatch #154] x=  1.500 y=  1.500 → side 1  (s0=75 s1=80)
+  [result  #153] side=0  iters=    1  lat=14 cyc  (s0=75 s1=79)
+  [dispatch #155] x= -1.500 y= -1.500 → side 0  (s0=76 s1=80)
+  [result  #154] side=1  iters=    1  lat=14 cyc  (s0=75 s1=80)
+  [dispatch #156] x=  1.800 y=  0.500 → side 1  (s0=76 s1=81)
+  [result  #155] side=0  iters=    1  lat=14 cyc  (s0=76 s1=80)
+  [dispatch #157] x= -1.800 y= -0.500 → side 0  (s0=77 s1=81)
+  [result  #156] side=1  iters=    2  lat=16 cyc  (s0=76 s1=81)
+  [dispatch #158] x=  1.000 y=  1.800 → side 1  (s0=77 s1=82)
+  [result  #157] side=0  iters=    3  lat=21 cyc  (s0=77 s1=81)
+  [dispatch #159] x= -1.000 y= -1.800 → side 0  (s0=78 s1=82)
+  [result  #158] side=1  iters=    1  lat=14 cyc  (s0=77 s1=82)
+  [dispatch #160] x= -0.750 y=  0.100 → side 1  (s0=78 s1=83)
+  [result  #159] side=0  iters=    1  lat=14 cyc  (s0=78 s1=82)
+  [dispatch #161] x= -0.750 y= -0.100 → side 0  (s0=79 s1=83)
+  [result  #160] side=1  iters=   33  lat=171 cyc  (s0=78 s1=83)
+  [dispatch #162] x= -1.250 y=  0.050 → side 1  (s0=79 s1=84)
+  [result  #161] side=0  iters=   33  lat=171 cyc  (s0=79 s1=83)
+  [dispatch #163] x= -1.250 y= -0.050 → side 0  (s0=80 s1=84)
+  [result  #162] side=1  iters=   44  lat=226 cyc  (s0=79 s1=84)
+  [dispatch #164] x=  0.280 y=  0.010 → side 1  (s0=80 s1=85)
+  [result  #163] side=0  iters=   46  lat=236 cyc  (s0=80 s1=84)
+  [dispatch #165] x=  0.280 y= -0.010 → side 0  (s0=81 s1=85)
+  [result  #164] side=1  iters=   40  lat=206 cyc  (s0=80 s1=85)
+  [dispatch #166] x= -0.125 y=  0.740 → side 1  (s0=81 s1=86)
+  [result  #165] side=0  iters=   40  lat=209 cyc  (s0=81 s1=85)
+  [dispatch #167] x= -0.125 y= -0.740 → side 0  (s0=82 s1=86)
+  [result  #166] side=1  iters=   64  lat=326 cyc  (s0=81 s1=86)
+  [dispatch #168] x= -1.755 y=  0.020 → side 1  (s0=82 s1=87)
+  [result  #167] side=0  iters=   64  lat=326 cyc  (s0=82 s1=86)
+  [dispatch #169] x= -1.755 y= -0.020 → side 0  (s0=83 s1=87)
+  [result  #168] side=1  iters=   16  lat=89 cyc  (s0=82 s1=87)
+  [dispatch #170] x=  1.000 y=  0.000 → side 1  (s0=83 s1=88)
+  [result  #170] side=1  iters=    2  lat=16 cyc  (s0=82 s1=88)
+  [dispatch #171] x= -1.000 y=  0.000 → side 1  (s0=83 s1=89)
+  [result  #169] side=0  iters=   16  lat=87 cyc  (s0=83 s1=88)
+  [dispatch #172] x=  0.500 y=  0.000 → side 0  (s0=84 s1=89)
+  [result  #172] side=0  iters=    5  lat=31 cyc  (s0=84 s1=88)
+  [dispatch #173] x= -1.500 y=  0.000 → side 0  (s0=85 s1=89)
+  [result  #171] side=1  iters=   64  lat=326 cyc  (s0=84 s1=89)
+  [dispatch #174] x=  0.250 y=  0.000 → side 1  (s0=85 s1=90)
+  [result  #173] side=0  iters=   64  lat=326 cyc  (s0=85 s1=89)
+  [dispatch #175] x= -0.750 y=  0.000 → side 0  (s0=86 s1=90)
+  [result  #174] side=1  iters=   64  lat=326 cyc  (s0=85 s1=90)
+  [dispatch #176] x=  0.000 y=  1.000 → side 1  (s0=86 s1=91)
+  [result  #175] side=0  iters=   64  lat=326 cyc  (s0=86 s1=90)
+  [dispatch #177] x=  0.000 y= -1.000 → side 0  (s0=87 s1=91)
+  [result  #176] side=1  iters=   64  lat=326 cyc  (s0=86 s1=91)
+  [dispatch #178] x=  0.000 y=  0.500 → side 1  (s0=87 s1=92)
+  [result  #177] side=0  iters=   64  lat=326 cyc  (s0=87 s1=91)
+  [dispatch #179] x=  0.000 y= -0.500 → side 0  (s0=88 s1=92)
+  [result  #178] side=1  iters=   64  lat=326 cyc  (s0=87 s1=92)
+  [dispatch #180] x=  1.990 y=  0.000 → side 1  (s0=88 s1=93)
+  [result  #180] side=1  iters=    2  lat=16 cyc  (s0=87 s1=93)
+  [dispatch #181] x= -1.990 y=  0.000 → side 1  (s0=88 s1=94)
+  [result  #179] side=0  iters=   64  lat=326 cyc  (s0=88 s1=93)
+  [dispatch #182] x=  0.000 y=  1.990 → side 0  (s0=89 s1=94)
+  [result  #182] side=0  iters=    2  lat=16 cyc  (s0=89 s1=93)
+  [dispatch #183] x=  0.000 y= -1.990 → side 0  (s0=90 s1=94)
+  [result  #183] side=0  iters=    2  lat=16 cyc  (s0=90 s1=93)
+  [dispatch #184] x=  0.000 y=  0.000 → side 0  (s0=91 s1=94)
+  [result  #181] side=1  iters=   64  lat=326 cyc  (s0=90 s1=94)
+  [dispatch #185] x=  2.000 y=  0.000 → side 1  (s0=91 s1=95)
+  [result  #185] side=1  iters=    1  lat=13 cyc  (s0=90 s1=95)
+  [dispatch #186] x= -0.500 y=  0.000 → side 1  (s0=91 s1=96)
+  [result  #184] side=0  iters=   64  lat=326 cyc  (s0=91 s1=95)
+  [dispatch #187] x=  1.500 y=  1.500 → side 0  (s0=92 s1=96)
+  [result  #187] side=0  iters=    1  lat=14 cyc  (s0=92 s1=95)
+  [dispatch #188] x=  0.001 y=  0.000 → side 0  (s0=93 s1=96)
+  [result  #186] side=1  iters=   64  lat=326 cyc  (s0=92 s1=96)
+  [dispatch #189] x= -0.001 y=  0.000 → side 1  (s0=93 s1=97)
+  [result  #188] side=0  iters=   64  lat=326 cyc  (s0=93 s1=96)
+  [dispatch #190] x=  0.000 y=  0.001 → side 0  (s0=94 s1=97)
+  [result  #189] side=1  iters=   64  lat=326 cyc  (s0=93 s1=97)
+  [dispatch #191] x=  0.000 y= -0.001 → side 1  (s0=94 s1=98)
+  [result  #190] side=0  iters=   64  lat=326 cyc  (s0=94 s1=97)
+  [dispatch #192] x= -1.750 y= -1.000 → side 0  (s0=95 s1=98)
+  [result  #192] side=0  iters=    1  lat=14 cyc  (s0=95 s1=97)
+  [dispatch #193] x= -1.000 y= -0.500 → side 0  (s0=96 s1=98)
+  [result  #193] side=0  iters=    5  lat=31 cyc  (s0=96 s1=97)
+  [dispatch #194] x= -0.250 y=  0.000 → side 0  (s0=97 s1=98)
+  [result  #191] side=1  iters=   64  lat=326 cyc  (s0=96 s1=98)
+  [dispatch #195] x=  0.500 y=  0.500 → side 1  (s0=97 s1=99)
+  [result  #195] side=1  iters=    5  lat=31 cyc  (s0=96 s1=99)
+  [dispatch #196] x=  1.250 y=  1.000 → side 1  (s0=97 s1=100)
+  [result  #196] side=1  iters=    2  lat=16 cyc  (s0=96 s1=100)
+  [dispatch #197] x= -0.600 y=  0.400 → side 1  (s0=97 s1=101)
+  [result  #194] side=0  iters=   64  lat=326 cyc  (s0=97 s1=100)
+  [dispatch #198] x=  0.300 y= -0.500 → side 0  (s0=98 s1=101)
+  [result  #197] side=1  iters=   64  lat=326 cyc  (s0=97 s1=101)
+  [dispatch #199] x= -1.100 y=  0.200 → side 1  (s0=98 s1=102)
+
+  [producer done] all 200 dispatched
+  [result  #198] side=0  iters=   64  lat=326 cyc  (s0=98 s1=101)
+  [result  #199] side=1  iters=   64  lat=326 cyc  (s0=98 s1=102)
+  [consumer done] all 200 collected
+
+── Determinism (repeated coordinates) ──
+  coord[140]=(0,0)    iter=64    coord[184]=(0,0)    iter=64
+  coord[150]=(2,0)    iter=1    coord[185]=(2,0)    iter=1
+  coord[141]=(-0.5,0) iter=64    coord[186]=(-0.5,0) iter=64
+  coord[154]=(1.5,1.5) iter=1   coord[187]=(1.5,1.5) iter=1
+
+── Exterior escape sanity ──
+  coord[150]=(2,0)      iter=1  (expect fast)
+  coord[151]=(-2,0)     iter=1  (expect fast)
+  coord[152]=(0,2)      iter=1  (expect fast)
+  coord[153]=(0,-2)     iter=1  (expect fast)
+  coord[154]=(1.5,1.5)  iter=1  (expect fast)
+
+── Latency (dispatch → result, cycles) ──
+  min=13  max=326  avg=115  samples=200
+
+── Thread utilisation ──
+  Side 0 : dispatched=98  results=98
+  Side 1 : dispatched=102  results=102
+  Total  : dispatched=200  results=200
+
+── Checks ──
+  PASS  Both sides received work (side 0)
+  PASS  Both sides received work (side 1)
+  PASS  Total dispatched == BATCH_SIZE
+  PASS  Total collected  == BATCH_SIZE
+  PASS  Side 0 results match dispatches
+  PASS  Side 1 results match dispatches
+  PASS  Every dispatch matched a result
+  PASS  Load balance: side 0 < 70% of total
+  PASS  Load balance: side 1 < 70% of total
+  PASS  Determinism: (0,0) repeated \342\206\222 same iters
+  PASS  Determinism: (2,0) repeated \342\206\222 same iters
+  PASS  Determinism: (-0.5,0) repeated \342\206\222 same iters
+  PASS  Determinism: (1.5,1.5) repeated \342\206\222 same iters
+  PASS  Exterior escape: (2,0)    iter < 20
+  PASS  Exterior escape: (-2,0)   iter < 20
+  PASS  Exterior escape: (0,2)    iter < 20
+  PASS  Exterior escape: (0,-2)   iter < 20
+  PASS  Exterior escape: (1.5,1.5) iter < 20
+  PASS  Exterior escape: (-1.5,-1.5) iter < 20
+  FAIL  Interior max iters: (0,0)   == 256
+  FAIL  Interior max iters: (-0.5,0) == 256
+  FAIL  Interior max iters: (-0.1,0.1) == 256
+  PASS  Min latency > 0
+  PASS  Latency spread: max > min * 4
+  PASS  No result has 0 iterations
+  PASS  No orphaned dispatches
+
+── Phase 2: Burning Ship, 20 coords ──
+  [BS dispatch #00] x= 0.000 y= 0.000 → side 0
+  [BS dispatch #01] x= 2.000 y= 0.000 → side 1
+  [BS result  #01] side=1 iters=1
+  [BS dispatch #02] x=-1.750 y=-0.030 → side 1
+  [BS result  #02] side=1 iters=10
+  [BS dispatch #03] x=-2.000 y= 0.000 → side 1
+  [BS result  #03] side=1 iters=1
+  [BS dispatch #04] x=-0.500 y=-0.500 → side 1
+  [BS result  #00] side=0 iters=64
+  [BS dispatch #05] x= 0.000 y= 2.000 → side 0
+  [BS result  #05] side=0 iters=1
+  [BS dispatch #06] x=-1.800 y=-0.020 → side 0
+  [BS result  #06] side=0 iters=8
+  [BS dispatch #07] x= 1.500 y= 1.500 → side 0
+  [BS result  #07] side=0 iters=1
+  [BS dispatch #08] x=-0.300 y=-0.300 → side 0
+  [BS result  #04] side=1 iters=64
+  [BS dispatch #09] x= 0.000 y=-2.000 → side 1
+  [BS result  #09] side=1 iters=1
+  [BS dispatch #10] x=-1.900 y=-0.010 → side 1
+  [BS result  #10] side=1 iters=7
+  [BS dispatch #11] x= 1.800 y= 0.500 → side 1
+  [BS result  #11] side=1 iters=2
+  [BS dispatch #12] x=-0.100 y=-0.100 → side 1
+  [BS result  #08] side=0 iters=64
+  [BS dispatch #13] x=-1.500 y=-1.500 → side 0
+  [BS result  #13] side=0 iters=1
+  [BS dispatch #14] x=-1.760 y=-0.025 → side 0
+  [BS result  #12] side=1 iters=64
+  [BS dispatch #15] x= 0.500 y= 1.800 → side 1
+  [BS result  #14] side=0 iters=13
+  [BS dispatch #16] x=-0.200 y=-0.200 → side 0
+  [BS result  #15] side=1 iters=2
+  [BS dispatch #17] x=-0.500 y= 1.000 → side 1
+  [BS result  #17] side=1 iters=4
+  [BS dispatch #18] x= 0.000 y= 0.000 → side 1
+  [BS result  #16] side=0 iters=64
+  [BS dispatch #19] x= 2.000 y= 0.000 → side 0
+  [BS result  #19] side=0 iters=1
+  [BS result  #18] side=1 iters=64
+
+── Phase 2 Checks ──
+  PASS  BS: total dispatched == BS_BATCH
+  PASS  BS: total collected  == BS_BATCH
+  PASS  BS: side 0 results match dispatches
+  PASS  BS: side 1 results match dispatches
+  PASS  BS: exterior (2,0) escapes fast
+  PASS  BS: exterior (-2,0) escapes fast
+  PASS  BS: exterior (0,2) escapes fast
+  PASS  BS: exterior (1.5,1.5) escapes fast
+  PASS  BS: determinism (0,0) repeated
+  PASS  BS: determinism (2,0) repeated
+
+── Phase 3: Julia (c = -0.700 + 0.270i), 20 coords ──
+  [JL dispatch #00] z0=( 0.000, 0.000) → side 0
+  [JL dispatch #01] z0=( 2.000, 0.000) → side 1
+  [JL result  #01] side=1 iters=1
+  [JL dispatch #02] z0=( 0.500, 0.500) → side 1
+  [JL result  #02] side=1 iters=5
+  [JL dispatch #03] z0=(-2.000, 0.000) → side 1
+  [JL result  #03] side=1 iters=1
+  [JL dispatch #04] z0=( 0.300, 0.300) → side 1
+  [JL result  #00] side=0 iters=64
+  [JL dispatch #05] z0=( 0.000, 2.000) → side 0
+  [JL result  #05] side=0 iters=1
+  [JL dispatch #06] z0=(-0.500,-0.500) → side 0
+  [JL result  #04] side=1 iters=64
+  [JL dispatch #07] z0=( 1.500, 1.500) → side 1
+  [JL result  #07] side=1 iters=1
+  [JL dispatch #08] z0=( 0.100, 0.100) → side 1
+  [JL result  #06] side=0 iters=64
+  [JL dispatch #09] z0=( 0.000,-2.000) → side 0
+  [JL result  #09] side=0 iters=1
+  [JL dispatch #10] z0=(-0.300,-0.300) → side 0
+  [JL result  #08] side=1 iters=64
+  [JL dispatch #11] z0=( 1.800, 0.500) → side 1
+  [JL result  #11] side=1 iters=2
+  [JL dispatch #12] z0=( 0.000, 0.500) → side 1
+  [JL result  #10] side=0 iters=64
+  [JL dispatch #13] z0=(-1.800,-0.500) → side 0
+  [JL result  #13] side=0 iters=3
+  [JL dispatch #14] z0=(-0.100, 0.200) → side 0
+  [JL result  #12] side=1 iters=64
+  [JL dispatch #15] z0=( 0.500, 1.800) → side 1
+  [JL result  #15] side=1 iters=2
+  [JL dispatch #16] z0=( 0.200,-0.200) → side 1
+  [JL result  #14] side=0 iters=64
+  [JL dispatch #17] z0=(-0.500, 1.000) → side 0
+  [JL result  #17] side=0 iters=4
+  [JL dispatch #18] z0=( 0.000, 0.000) → side 0
+  [JL result  #16] side=1 iters=64
+  [JL dispatch #19] z0=( 2.000, 0.000) → side 1
+  [JL result  #19] side=1 iters=1
+  [JL result  #18] side=0 iters=64
+
+── Phase 3 Checks ──
+  PASS  JL: total dispatched == JL_BATCH
+  PASS  JL: total collected  == JL_BATCH
+  PASS  JL: side 0 results match dispatches
+  PASS  JL: side 1 results match dispatches
+  PASS  JL: exterior (2,0) escapes fast
+  PASS  JL: exterior (-2,0) escapes fast
+  PASS  JL: exterior (0,2) escapes fast
+  PASS  JL: exterior (1.5,1.5) escapes fast
+  PASS  JL: determinism (0,0) repeated
+  PASS  JL: determinism (2,0) repeated
+  PASS  JL: interior z0=(0,0) does not escape instantly
+
+══════════════════════════════════════
+  44 passed  3 failed
+══════════════════════════════════════
+
