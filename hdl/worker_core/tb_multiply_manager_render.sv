@@ -20,8 +20,8 @@ module tb_multiply_manager_render;
     localparam int LOW                   = 0;
 
     localparam int NFRAC   = NARROW_WIDTH - INTEGER_BITS;  // 16
-    localparam int WIDTH   = 512;
-    localparam int HEIGHT  = 512;
+    localparam int WIDTH   = 128;
+    localparam int HEIGHT  = 128;
     localparam real XMIN   = -1.5;
     localparam real XMAX   =  1.5;
     localparam real YMIN   = -1.5;
@@ -29,7 +29,7 @@ module tb_multiply_manager_render;
 
     // max_iteration field: DUT iteration ceiling = 2^(max_iteration + LOW)
     // 5'd9 -> 512 iterations, a good balance of detail vs sim time
-    localparam logic [4:0] MAX_ITER = 5'd10;
+    localparam logic [4:0] MAX_ITER = 5'd9;
 
     // ----- DUT I/O -----
     logic clk, rst, kill, received;
@@ -88,10 +88,10 @@ module tb_multiply_manager_render;
 
         int unsigned cyc;
 
-        starting_x_reg_1 = px;
-        starting_y_reg_1 = py;
+        starting_x_reg_2 = px;
+        starting_y_reg_2 = py;
 
-        @(negedge clk); start_left=1; @(negedge clk); start_left=0;
+        @(negedge clk); start_right=1; @(negedge clk); start_right=0;
 
         cyc = 0;
         while (!done && cyc <= 1_000_000) begin
@@ -118,7 +118,7 @@ module tb_multiply_manager_render;
         do_reset();
 
         // fixed config for all pixels: standard Mandelbrot
-        julia_type                  = 1'b1;
+        julia_type                  = 1'b0;
         magnitude_negation_encoding = 4'b0000;
         max_iteration               = MAX_ITER;
         julia_c_x                   = to_q216(-0.74);
