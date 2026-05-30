@@ -22,14 +22,14 @@ module border_pixel_chooser #(
     logic         both_flags;
 
     // ── Combinational helpers ──────────────────────────────────────────────
-    assign used_tmp          = tmp + first_round - 1'b1;
-    assign inverse_tmp       = width - used_tmp - first_round;
-    assign next_tmp_val      = tmp + (midpoint << 1) + 1'b1;
+    assign used_tmp          = tmp + first_round;
+    assign inverse_tmp       = width - 1'b1 - tmp;
+    assign next_tmp_val      = tmp + (midpoint - 1'b1 << 1);
     assign both_flags        = all_left_flag & all_top_flag;
 
     // True when the calculate state will execute its halving (else) branch
     logic calc_halving;
-    assign calc_halving = ~(((tmp << 1) < (top_left_x + width)) && ~first_round);
+    assign calc_halving = ~((next_tmp_val < (top_left_x + width)) && ~first_round);
 
     // Detects whether the upcoming halving step is the last subdivision level
     // needing a skip, evaluated per-flag combination:
@@ -37,12 +37,7 @@ module border_pixel_chooser #(
     //   all_left only : last when next tmp <= width_y  → skip top & bottom
     //   all_top only  : last when next tmp <= width_x  → skip right & left
     logic last_cycle_next;
-    assign last_cycle_next = calc_halving && (
-        ( both_flags                    && (next_tmp_val == (width - 2'd2))) ||
-        (~both_flags & all_left_flag    && (next_tmp_val == width_pixels_x)) ||
-        (~both_flags & all_top_flag     && (next_tmp_val == width_pixels_y)) ||
-        (~all_left_flag & ~all_top_flag && (next_tmp_val == width_pixels_x - 1'b1))
-    );
+    assign last_cycle_next = (next_tmp_val == (width - 2'd2));
 
     // ── Sequential logic ───────────────────────────────────────────────────
     always_ff @(posedge clk, posedge rst) begin
@@ -59,10 +54,10 @@ module border_pixel_chooser #(
         else begin
             if (rst_start) begin
                 tmp           <= '0;
-                width         <= (width_pixels_x >= width_pixels_y)
-                                    ? width_pixels_x : width_pixels_y;
-                midpoint      <= (width_pixels_x >= width_pixels_y)
-                                    ? width_pixels_x : width_pixels_y;
+                width         <= (all_left_flag)
+                                    ? width_pixels_x + 1'b1 : width_pixels_x;
+                midpoint      <= (all_left_flag)
+                                    ? width_pixels_x + 1'b1 : width_pixels_x;
                 first_round   <= 1'b1;
                 last_cycle    <= 1'b0;
                 x_coord       <= top_left_x;
@@ -74,40 +69,34 @@ module border_pixel_chooser #(
 
                 case (current_state)
 
-                    calculate: begin
-                        last_cycle <= last_cycle_next;
-                        if (!calc_halving) begin
-                            tmp <= tmp + (midpoint << 1) + 1'b1;
-                        end
-                        else begin
-                            midpoint <= (midpoint + 1) >> 1;
-                            tmp <= (midpoint + 1) >> 1;
-                            first_round <= 1'b0;
-                        end
-                    end
-
                     top: begin
-                        x_coord <= top_left_x + used_tmp;
+                        x_coord <= top_left_x + tmp;
                         y_coord <= top_left_y;
                     end
 
                     bottom: begin
-                        x_coord <= top_left_x + inverse_tmp;
-                        y_coord <= top_left_y + width - 1'b1;
-                    end
-
-                    right: begin
-                        x_coord <= top_left_x + width - 1'b1;
-                        y_coord <= top_left_y + used_tmp;
+                        x_coord <= top_left_x + inverse_tmp - all_left_flag;
+                        y_coord <= top_left_y + width - all_top_flag - 1'b1;
                     end
 
                     left: begin
-                        if(tmp == width - 2'd2) begin
-                            midpoint <= (midpoint + 1) >> 1;
-                            tmp <= (midpoint + 1) >> 1;
-                        end
                         x_coord <= top_left_x;
-                        y_coord <= top_left_y + inverse_tmp;
+                        y_coord <= top_left_y + inverse_tmp - all_top_flag;
+                    end
+
+                    right: begin
+                        x_coord <= top_left_x + width - all_left_flag - 1'b1;
+                        y_coord <= top_left_y + tmp;
+                        
+                        last_cycle <= last_cycle_next;
+                        if (!calc_halving) begin
+                            tmp <= tmp + (midpoint - 1'b1 << 1);
+                        end
+                        else begin
+                            midpoint <= (midpoint + 1) >> 1;
+                            tmp <= ((midpoint + 1) >> 1) - 1'b1;
+                            first_round <= 1'b0;
+                        end
                     end
 
                     default: begin
@@ -128,13 +117,6 @@ module border_pixel_chooser #(
 
             IDLE: begin
                next_state = IDLE;
-            end
-
-            calculate: begin
-                // if      (both_flags       && last_cycle_next) next_state = IDLE;
-                // all_left_flag: skip top & bottom on last cycle
-                if (all_left_flag && last_cycle_next) next_state = left;
-                else                                          next_state = top;
             end
 
             top:    next_state = bottom;
@@ -158,7 +140,16 @@ module border_pixel_chooser #(
                     done_flag = 1'b1;
                 end
                 else begin
-                    next_state = calculate;
+                    if(both_flags && last_cycle_next) begin
+                        next_state = IDLE;
+                        done_flag = 1'b1;
+                    end
+
+                    else if(all_left_flag && last_cycle_next)
+                        next_state = left;
+
+                    else
+                        next_state = top;
                 end
             end
 
