@@ -112,11 +112,13 @@ module border_pixel_chooser #(
     // ── Next-state logic ───────────────────────────────────────────────────
     always_comb begin
         next_state = current_state;
+        done_flag = 1'b0;
 
         case (current_state)
 
             IDLE: begin
                next_state = IDLE;
+               done_flag = 1'b1;
             end
 
             top:    next_state = bottom;
@@ -125,7 +127,6 @@ module border_pixel_chooser #(
                 // all_top_flag: skip right & left on last cycle
                 if (all_top_flag && last_cycle) begin
                     next_state = IDLE;
-                    done_flag = 1'b1;
                 end
                 else begin
                     next_state = left;
@@ -137,12 +138,10 @@ module border_pixel_chooser #(
             right: begin
                 if(last_cycle) begin
                     next_state = IDLE;
-                    done_flag = 1'b1;
                 end
                 else begin
                     if(both_flags && last_cycle_next) begin
                         next_state = IDLE;
-                        done_flag = 1'b1;
                     end
 
                     else if(all_left_flag && last_cycle_next)
@@ -155,7 +154,6 @@ module border_pixel_chooser #(
 
             default: begin
                 next_state = IDLE;
-                done_flag = 1'b0;
             end
         endcase
     end

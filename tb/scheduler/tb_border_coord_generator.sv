@@ -220,11 +220,11 @@ module tb_border_coord_generator;
         run_test(64, 65, 1, 0, "64x65  al=1 at=0");
         run_test(65, 64, 0, 1, "65x64  al=0 at=1");
 
-        // ── 126/127 group  (user-specified) ───────────────────────────────
-        run_test(126, 126, 1, 1, "126x126 al=1 at=1");
-        run_test(127, 127, 0, 0, "127x127 al=0 at=0");
-        run_test(126, 127, 1, 0, "126x127 al=1 at=0");
-        run_test(127, 126, 0, 1, "127x126 al=0 at=1");
+        // ── 128/129 group (duplicate with extended coverage) ──────────────
+        run_test(128, 128, 1, 1, "128x128 al=1 at=1 (2)");
+        run_test(129, 129, 0, 0, "129x129 al=0 at=0 (2)");
+        run_test(128, 129, 1, 0, "128x129 al=1 at=0 (2)");
+        run_test(129, 128, 0, 1, "129x128 al=0 at=1 (2)");
 
         // ── 128/129 group  (first-split level: normal_width=128) ──────────
         run_test(128, 128, 1, 1, "128x128 al=1 at=1");
