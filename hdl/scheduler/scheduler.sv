@@ -167,11 +167,15 @@ always_ff @ (posedge clk or posedge rst) begin
             WAIT: begin
                 jq_x_coord_to_queue <= x_coord_to_queue;
                 jq_y_coord_to_queue <= y_coord_to_queue;
-                if(border_pixel_chooser_done) begin
-                    job_queue_push <= 0;
-                end
+
                 if(!comparator_flag_so_far) begin
                     job_queue_push <= 0;
+                end
+                else if(border_pixel_chooser_done) begin
+                    job_queue_push <= 0;
+                end
+                else begin
+                    job_queue_push <= 1;
                 end
             end
 
@@ -342,6 +346,8 @@ always_comb begin
             end
         end
 
+        
+
         QUEUE_BOX: begin
             // send all coords between topleftx, toplefty and topleftx + width, toplefty + width        TO DO!!!!!
             if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 1'b1) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 1'b1)) begin
@@ -385,13 +391,6 @@ always_comb begin
         FINISHED: begin
             engine_done = 1'b1;
             next_state  = IDLE;
-//            if(upper_box == 4'd15) begin
-//                next_state = IDLE;
-//                schedular_done_flag = 1'b1;     // note that the schedular_done_flag will only pulse for one tick
-//            end
-//            else begin
-//                next_state = STARTUP;
-//            end
             // When the highest level box is completed
             // increment box id by 1 if not already 2'b11
             // could mean finished all or just finished a sixteenth.
