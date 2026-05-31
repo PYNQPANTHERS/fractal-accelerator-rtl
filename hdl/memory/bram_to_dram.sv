@@ -32,7 +32,7 @@ module bram_to_dram (
 
     input  logic [31:0]  sixteenth_base_addr,
 
-    output logic         quarter_complete
+    output logic         sixteenth_complete
 );
 
     typedef enum logic [2:0] {
@@ -74,7 +74,7 @@ module bram_to_dram (
     end
 
     assign tt_rd_index    = cur_tile;
-    assign quarter_complete = (transferred == '1) && engine_done;
+    assign sixteenth_complete = (transferred == '1) && engine_done;
 
     // fill word — 8 pixels of same colour packed into 64 bits
     logic [63:0] fill_word;
