@@ -50,7 +50,6 @@ localparam int PIXELS                 = WIDTH * HEIGHT;
 logic clk, rst;
 logic opcode_reset;
 logic live_data;
-logic [10:0]             opcode;
 logic [NARROW_WIDTH-1:0] data_in;
 
 logic done;
@@ -73,7 +72,6 @@ core_top #(
     .rst            (rst),
     .opcode_reset   (opcode_reset),
     .live_data      (live_data),
-    .opcode         (opcode),
     .data_in        (data_in),
     .done           (done),
     .done_side      (done_side),
@@ -141,8 +139,8 @@ always @(posedge clk) cycle_count++;
 task automatic send_opcode(input logic [10:0] opc);
     @(posedge clk); #1;
     opcode_reset = 1;
-    opcode       = opc;
     @(posedge clk); #1;
+    data_in      = {{(NARROW_WIDTH-11){1'b0}}, opc};
     opcode_reset = 0;
     @(posedge clk); #1;
 endtask
@@ -150,8 +148,8 @@ endtask
 task automatic send_julia_opcode(input logic [10:0] opc, input real cx, input real cy);
     @(posedge clk); #1;
     opcode_reset = 1;
-    opcode       = opc;
     @(posedge clk); #1;       // DUT latches opcode on this edge
+    data_in = {{(NARROW_WIDTH-11){1'b0}}, opc};
     opcode_reset = 0;
     @(posedge clk); #1;
     data_in      = fp(cx);    // cx on cycle immediately after reset
@@ -271,7 +269,6 @@ initial begin
     opcode_reset = 0;
     live_data    = 0;
     received     = 0;
-    opcode       = '0;
     data_in      = '0;
     cycle_count  = 0;
     side_occupied[0] = 0;

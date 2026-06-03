@@ -1,6 +1,6 @@
 // needs to be updated with opcodes coming through datapath
 
-
+//opcode format //{Width[10], Julia[9], |x|[8], |y|[7], -x[6], -y[5], MaxIter[4:0]}
 
 
 module core_top 
@@ -10,7 +10,7 @@ input clk,
 input rst,
 input opcode_reset,
 input live_data, // live_data is the signal the control unit sends to a core to tell the core it is sending data that needs to be stored 
-input [10:0] opcode, //{Width[10], Julia[9], |x|[8], |y|[7], -x[6], -y[5], MaxIter[4:0]}
+//input [10:0] 
 input [NARROW_WIDTH-1:0] data_in,
 
 //this is to communicate to stack when done
@@ -92,11 +92,11 @@ always_ff @(posedge clk) begin
             case (core_state)
             
             LOADING_OPCODES : begin 
-                                width_mode <= opcode[10];
-                                julia_type <= opcode[9];
-                                magnitude_negation_encoding <= opcode[8:5];
-                                max_iteration <= opcode[4:0];
-                                if(opcode[9]) begin
+                                width_mode <= data_in[10];
+                                julia_type <= data_in[9];
+                                magnitude_negation_encoding <= data_in[8:5];
+                                max_iteration <= data_in[4:0];
+                                if(data_in[9]) begin
                                     core_state <= LOADING_JULIA;
                                     general_counter <= 2'b00;
                                 end
