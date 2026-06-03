@@ -7,7 +7,7 @@ module per_sixteenth_engine (
     // Control
     input  logic start,
     output logic engine_done,
-    output logic quarter_complete,
+    output logic sixteenth_complete,
 
     // Config from sixteenth_controller
     input  logic [4:0]  equation_id,
@@ -318,7 +318,7 @@ module per_sixteenth_engine (
         .cache_valid_index  (),
         .cache_valid_value  (),
         .sixteenth_base_addr(sixteenth_base_addr),
-        .quarter_complete   (quarter_complete)
+        .sixteenth_complete   (sixteenth_complete)
     );
 
 endmodule

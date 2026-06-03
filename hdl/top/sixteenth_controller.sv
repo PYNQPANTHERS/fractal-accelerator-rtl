@@ -33,7 +33,7 @@ module sixteenth_controller (
     output logic [31:0] sixteenth_base_addr,
 
     // Engine done signal
-    input  logic quarter_complete,
+    input  logic sixteenth_complete,
 
     // Interrupt to PS
     output logic all_done
@@ -102,7 +102,7 @@ module sixteenth_controller (
                 RENDER: begin
                     engine_rst <= 1'b0;
                     start      <= 1'b1;
-                    if (quarter_complete) begin
+                    if (sixteenth_complete) begin
                         start <= 1'b0;
                         state <= NEXT;
                     end

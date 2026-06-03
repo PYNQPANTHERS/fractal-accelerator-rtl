@@ -18,7 +18,6 @@ module comparator (
     output logic        comp_pop,
 
     // Flags to scheduler 
-    output logic [5:0]  ref_colour_o,
     output logic        differ,           // latches high if any colour mismatch seen
     output logic        complete          // latches high when seen_count == expected_count
 );
@@ -75,7 +74,6 @@ module comparator (
             // Latch complete when we have seen all expected border pixels
             if (seen_count + 1'b1 == expected_count)
                 complete <= 1'b1;
-                ref_colour_o <= ref_colour;
         end
         // Out-of-bounds entries: comp_pop still fires (entry consumed) but no state changes 
         // Stale results from previous quads are discarded

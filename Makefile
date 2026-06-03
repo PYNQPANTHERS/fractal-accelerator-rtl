@@ -10,13 +10,14 @@
 # Waveforms are written to sim/waves/<tb_name>.vcd
 
 
-HDL_DIRS   := hdl/queues hdl/comparator hdl/memory hdl/stubs hdl/top #hdl/iterator hdl/scheduler hdl/arbiter
-TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/integration tb/memory tb/top
+HDL_DIRS   := hdl/queues hdl/comparator hdl/worker_core #hdl/iterator hdl/scheduler hdl/comparator hdl/arbiter hdl/top
+TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/integration
 SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 
 # Collect all HDL sources automatically
 HDL_SRCS := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/*.sv))
+HDL_SRCS := $(filter-out hdl/worker_core/core_top.sv,$(HDL_SRCS))
 
 IVFLAGS := -g2012 -Wall -Wno-timescale
 
