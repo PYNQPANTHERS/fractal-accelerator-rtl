@@ -44,7 +44,7 @@ def load_csv(path: str) -> np.ndarray:
     height = rows.max() + 1
     frame  = np.zeros((height, width), dtype=np.float64)
     frame[rows, cols] = iters
-    return frame
+    return np.flipud(frame)
 
 
 def apply_colormap(frame: np.ndarray, cmap_name: str, log_scale: bool,

@@ -144,7 +144,6 @@ task automatic send_opcode(input logic [10:0] opc);
     opcode       = opc;
     @(posedge clk); #1;
     opcode_reset = 0;
-    opcode       = '0;
     @(posedge clk); #1;
 endtask
 
@@ -154,7 +153,7 @@ task automatic send_julia_opcode(input logic [10:0] opc, input real cx, input re
     opcode       = opc;
     @(posedge clk); #1;       // DUT latches opcode on this edge
     opcode_reset = 0;
-    opcode       = '0;
+    @(posedge clk); #1;
     data_in      = fp(cx);    // cx on cycle immediately after reset
     @(posedge clk); #1;
     data_in      = fp(cy);    // cy on the cycle after that
