@@ -55,7 +55,7 @@ module scheduler #(
 );
 
 
-typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
+typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
 my_states current_state, next_state;
 
 logic [8:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
@@ -94,7 +94,7 @@ stack_packet_s stack_data_in;
 stack_packet_s stack_data_out;
 
 // packing
-assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: popped_all_left, all_top: popped_all_top};
+assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: all_left_quadrants, all_top: all_top_quadrants};
 
 // logic for unpacking
 logic [8:0]   popped_top_left_x, popped_top_left_y;
@@ -187,13 +187,19 @@ always_ff @ (posedge clk or posedge rst) begin
                 popped_all_top  <= all_top_quadrants;
             end
 
+            QUEUE_BOX_INIT: begin
+                jq_x_coord_to_queue <= top_left_x;
+                jq_y_coord_to_queue <= top_left_y;
+                job_queue_push      <= 1'b1;
+            end
+
             QUEUE_BOX: begin
-                job_queue_push <= 1'b1;
-                for(int n = 0; n < pixel_width_y; n++ ) begin
-                    jq_y_coord_to_queue <= top_left_y + n;
-                    for (int i = 0; i < pixel_width_x ; i++) begin
-                        jq_x_coord_to_queue <= top_left_x + i;
-                    end
+
+                if (jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) begin
+                    jq_x_coord_to_queue <= top_left_x;
+                    jq_y_coord_to_queue <= jq_y_coord_to_queue + 1'b1;
+                end else begin
+                    jq_x_coord_to_queue <= jq_x_coord_to_queue + 1'b1;
                 end
             end
 
@@ -212,7 +218,8 @@ always_ff @ (posedge clk or posedge rst) begin
 
                         2'b01: begin
                             top_left_x <= top_left_x - pixel_width_x_left + 1'b1;
-                            top_left_y <= top_left_y + pixel_width_y - 1'b1;
+                            top_left_y <= top_left_y + pixel_width_y - 1'b1;    // pixel_width_y here reflects box_id 01 (pre-increment),
+                            // which is the correct top-row height
                         end
 
                         2'b10: begin
@@ -252,7 +259,7 @@ always_comb begin
     tt_wr_quad_colour     = '0;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
-    normal_width = (9'd256 >> (zoom_level + 2'd2)); // divide by 2*(zoom level) + 4 as starting at sixteenths. Choose original width!!!!!!!
+    normal_width = (9'd256 >> (zoom_level)); // divide by 2^(zoom level) as starting at sixteenths. Original width = 
 
     // zoom=0: no pixel-width correction applies (root level)
     // zoom=1: only the current box position determines left/top status
@@ -322,7 +329,6 @@ always_comb begin
             // resets pixel generator
             pixel_generator_reset = 1'b1;
             next_state = WAIT;
-            end
         end
 
 
@@ -336,7 +342,7 @@ always_comb begin
                 if(!comparator_flag_so_far) begin
                     // splits again
                     if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
-                        next_state = QUEUE_BOX;
+                        next_state = QUEUE_BOX_INIT;
                     end
                     else begin
                         next_state  = DESCEND_LEVEL;
@@ -348,9 +354,12 @@ always_comb begin
 
         
 
+        QUEUE_BOX_INIT: begin
+            next_state = QUEUE_BOX;
+        end
+
         QUEUE_BOX: begin
-            // send all coords between topleftx, toplefty and topleftx + width, toplefty + width        TO DO!!!!!
-            if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 1'b1) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 1'b1)) begin
+            if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 2'd2)) begin
                 next_state = NEXT_BOX;
             end
             else begin
