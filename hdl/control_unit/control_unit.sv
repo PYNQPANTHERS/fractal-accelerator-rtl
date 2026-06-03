@@ -1,20 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// control_unit (thin top)
-//
-//   Wires together:
-//     - translate        : pixel coord -> complex plane (combinational)
-//     - frame_fsm        : sequencer + scheduler handshake + bram check gate
-//     - bram_read        : status-BRAM lookup (started/done/miss per pixel)
-//     - load_sequencer   : multi-cycle transfer counter
-//     - cluster_arbiter  : cluster priority encoder + winner lock
-//     - job_datapath     : coord latch + word mux -> disp_job_data
-//     - CLUSTER_COUNT x cluster
-//     - result arbiter   : priority-picks the first cluster with a valid result
-//     - result FIFO      : output buffer, handshake independent of dispatch side
-//
-//   TODO:
-//     - pan_x / pan_y / zoom tied off
-//     - finish bram write logic
+// control_unit 
 // ─────────────────────────────────────────────────────────────────────────────
 module control_unit #(
     parameter int DATA_WIDTH    = 17,
@@ -24,16 +9,25 @@ module control_unit #(
     parameter int PIXEL_ADDR_W  = 16,
     parameter int JOB_DATA_W    = 18,
     parameter int PIXEL_W       = 8,
-    parameter int OPCODE_W      = 5
+    parameter int OPCODE_W      = 5,
+    parameter int LOWEST_MAX_ITER_POW = 6
 ) (
     input  logic            clk,
     input  logic            rst,
+    input  logic            opcode_reset,
 
     // frame control
     input  logic            start_flag,
     input  logic            width_flag,
     input  logic [4:0]      fractal_type,
     input  logic [4:0]      iteration_count,
+    input  logic [DATA_WIDTH-1:0] pan_x,
+    input  logic [DATA_WIDTH-1:0] pan_y,
+    input  logic [3:0]            zoom,
+
+    // best to recieve c in complex as could be out of current frame
+    input  logic []                 c_x,
+    input  logic []                 c_y,
 
     // scheduler handshake (pixel coords in)
     input  logic                    job_valid,
@@ -48,23 +42,19 @@ module control_unit #(
     input  logic                    result_ready,
 
     // external BRAM interface — 1-cycle read latency
-    // rd_en asserted cycle N → rd_data valid cycle N+1
     output logic                    bram_rd_en,
-    output logic [PIXEL_W-1:0]      bram_pixel_a,   // row coordinate
-    output logic [PIXEL_W-1:0]      bram_pixel_b,   // col coordinate
-    input  logic [15:0]             bram_rd_data,   // [7:0]=status  [15:8]=colour
+    output logic [PIXEL_W-1:0]      bram_pixel_a,
+    output logic [PIXEL_W-1:0]      bram_pixel_b,
+    input  logic [7:0]              bram_rd_data,
     output logic                    bram_wr_en,
     output logic [PIXEL_W-1:0]      bram_wr_pixel_a,
     output logic [PIXEL_W-1:0]      bram_wr_pixel_b,
     output logic [7:0]              bram_wr_data
 );
 
-    // ──────────────────────────────────────────────────────────────
-    // local params
-    // ──────────────────────────────────────────────────────────────
     localparam int Z_WIDTH      = DATA_WIDTH + 1;
     localparam int Z_WIDE       = Z_WIDTH * 2 - 1;
-    localparam int CLUST_ADDR_W = $clog2(CLUSTER_COUNT);
+    localparam int CLUST_ADDR_W = (CLUSTER_COUNT > 1) ? $clog2(CLUSTER_COUNT) : 1;
     localparam int WORDS_NARROW = 2;
     localparam int WORDS_WIDE   = 4;
     localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W;
@@ -74,9 +64,11 @@ module control_unit #(
     assign julia = fractal_type[4];
     assign wide  = width_flag;
 
-    // ──────────────────────────────────────────────────────────────
-    // latched pixel coords (captured on job accept)
-    // ──────────────────────────────────────────────────────────────
+    // forward-declare strobes so coord latch block can reference accept_pulse
+    logic opcode_broadcast_en, load_c_en, load_z_en;
+    logic start_load_pulse, accept_pulse, capture_winner;
+    logic check_bram;
+
     logic [PIXEL_WIDTH-1:0] coord_a_q, coord_b_q;
 
     always_ff @(posedge clk) begin
@@ -89,23 +81,14 @@ module control_unit #(
         end
     end
 
-    // ──────────────────────────────────────────────────────────────
-    // translate — runs on latched coords
-    // ──────────────────────────────────────────────────────────────
-    logic [DATA_WIDTH-1:0] pan_x, pan_y;
-    logic [3:0]            zoom;
-    logic [Z_WIDE-1:0]     z_real, z_imag;
-
-    assign pan_x = '0;  // TODO
-    assign pan_y = '0;  // TODO
-    assign zoom  = '0;  // TODO
+    logic [Z_WIDE-1:0] z_real, z_imag;
 
     translate #(
         .DATA_WIDTH (Z_WIDE),
         .RESOLUTION (PIXEL_WIDTH)
     ) cheezy_translator (
-        .pan_x  (pan_x),
-        .pan_y  (pan_y),
+        .pan_x  ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
+        .pan_y  ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
         .a      (coord_a_q),
         .b      (coord_b_q),
         .zoom   (zoom),
@@ -113,34 +96,23 @@ module control_unit #(
         .z_imag (z_imag)
     );
 
-    // ──────────────────────────────────────────────────────────────
-    // FSM control strobes
-    // ──────────────────────────────────────────────────────────────
-    logic opcode_broadcast_en, load_c_en, load_z_en;
-    logic start_load_pulse, accept_pulse, capture_winner;
-    logic check_bram;
-
-    // ──────────────────────────────────────────────────────────────
-    // bram_read status BRAM lookup for completed pixel
-    // a/b are 8-bit pixel coordinates 
-    // ──────────────────────────────────────────────────────────────
     logic bram_miss, bram_started, bram_done;
-    logic [4:0] bram_colour;
+    logic [5:0] bram_colour;
 
-    // bram_done fast-path: pixel already computed, push directly to result FIFO
     logic                    bram_res_pending;
     logic [PIXEL_ADDR_W-1:0] bram_res_pixel_addr;
     logic [PIXEL_W-1:0]      bram_res_data;
 
     assign bram_res_pending    = bram_done;
     assign bram_res_pixel_addr = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
-    assign bram_res_data       = {{(PIXEL_W-5){1'b0}}, bram_colour};
+    assign bram_res_data       = {{(PIXEL_W-6){1'b0}}, bram_colour};
 
-    bram_read #(
-        .PIXEL_ADDR_W (PIXEL_ADDR_W),
-        .PIXEL_W      (PIXEL_W),
-        .COLOURWIDTH  (5)
-    ) u_bram_read (
+    assign bram_pixel_a = coord_a_q[PIXEL_W-1:0];
+    assign bram_pixel_b = coord_b_q[PIXEL_W-1:0];
+
+    bram_read_write #(
+        .PIXEL_W (PIXEL_W)
+    ) u_bram_rw (
         .clk          (clk),
         .rst          (rst),
         .check_bram   (check_bram),
@@ -148,47 +120,34 @@ module control_unit #(
         .b            (coord_b_q[PIXEL_W-1:0]),
         .bram_rd_en   (bram_rd_en),
         .bram_rd_data (bram_rd_data),
+        .bram_wr_en   (bram_wr_en),
+        .bram_wr_a    (bram_wr_pixel_a),
+        .bram_wr_b    (bram_wr_pixel_b),
+        .bram_wr_data (bram_wr_data),
+        .res_valid    (1'b0),      // TODO: wire result write path
+        .res_a        ('0),
+        .res_b        ('0),
+        .res_colour   ('0),
+        .res_rd_en    (),
         .miss         (bram_miss),
         .started      (bram_started),
         .done         (bram_done),
         .colour       (bram_colour)
     );
 
-    // pixel coords wired directly to BRAM address ports
-    assign bram_pixel_a = coord_a_q[PIXEL_W-1:0];
-    assign bram_pixel_b = coord_b_q[PIXEL_W-1:0];
-
-    // write path not yet implemented — tied off
-    assign bram_wr_en      = 1'b0;  // TODO: wire to result write path
-    assign bram_wr_pixel_a = '0;
-    assign bram_wr_pixel_b = '0;
-    assign bram_wr_data    = '0;
-
-    // ──────────────────────────────────────────────────────────────
-    // dispatch arbiter (cluster-level)
-    // ──────────────────────────────────────────────────────────────
     logic [CLUSTER_COUNT-1:0] chosen_onehot;
     logic [CLUST_ADDR_W-1:0]  chosen_idx;
     logic                     chosen_valid;
     logic                     any_cluster_free;
 
-    // ──────────────────────────────────────────────────────────────
-    // sequencer
-    // ──────────────────────────────────────────────────────────────
     localparam int SEQ_CNT_W = $clog2(WORDS_WIDE + 1 + 1);
     logic [SEQ_CNT_W-1:0] word_idx;
     logic                 load_active, load_last;
     logic [SEQ_CNT_W-1:0] n_words;
     assign n_words = wide ? WORDS_WIDE[SEQ_CNT_W-1:0] : WORDS_NARROW[SEQ_CNT_W-1:0];
 
-    // ──────────────────────────────────────────────────────────────
-    // datapath
-    // ──────────────────────────────────────────────────────────────
     logic [JOB_DATA_W-1:0] disp_job_data;
 
-    // ──────────────────────────────────────────────────────────────
-    // cluster signals
-    // ──────────────────────────────────────────────────────────────
     logic [CLUSTER_COUNT-1:0]  cluster_wants_job;
     logic [CLUSTER_COUNT-1:0]  cluster_disp_valid;
     logic [PIXEL_ADDR_W-1:0]   disp_pixel_addr;
@@ -197,16 +156,9 @@ module control_unit #(
     logic [PIXEL_ADDR_W-1:0]   cluster_result_pixel_addr [CLUSTER_COUNT];
     logic [PIXEL_W-1:0]        cluster_result_data       [CLUSTER_COUNT];
 
-    assign disp_pixel_addr = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
+    assign disp_pixel_addr   = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
     assign cluster_disp_valid = load_z_en ? chosen_onehot : '0;
 
-    // ──────────────────────────────────────────────────────────────
-    // result arbiter :
-    // priority-pick from clusters with valid results
-    // mirrors the cluster-internal done arbiter pattern.
-    // adds the BRAM result to this wuth maximum priority so is always
-    // taken ensuring no stall
-    // ──────────────────────────────────────────────────────────────
     logic [CLUSTER_COUNT-1:0] res_arb_onehot;
     logic [CLUST_ADDR_W-1:0]  res_arb_idx;
     logic                     res_arb_any;
@@ -218,21 +170,12 @@ module control_unit #(
         .any_valid   (res_arb_any)
     );
 
-    // ──────────────────────────────────────────────────────────────
-    // result output FIFO
-    // filled by the result arbiter drained by comp unit
-    // via an independent valid/ready handshake.
-    // ──────────────────────────────────────────────────────────────
     logic                    res_fifo_wr_en;
     logic [RES_FIFO_DW-1:0]  res_fifo_wr_data;
     logic                    res_fifo_full;
-
     logic                    res_fifo_rd_en;
     logic [RES_FIFO_DW-1:0]  res_fifo_rd_data;
     logic                    res_fifo_empty;
-
-    // Result FIFO write mux — BRAM result always wins.
-    // and written out stalling fifo from draining
 
     always_comb begin
         res_fifo_wr_en       = 1'b0;
@@ -264,14 +207,11 @@ module control_unit #(
         .empty  (res_fifo_empty)
     );
 
-    // output handshake — fully independent of the dispatch FSM
-    assign result_valid                        = !res_fifo_empty;
-    assign {result_pixel_addr, result_data}    = res_fifo_rd_data;
-    assign res_fifo_rd_en                      = result_valid && result_ready;
+    assign result_valid                     = !res_fifo_empty;
+    assign {result_pixel_addr, result_data} = res_fifo_rd_data;
+    assign res_fifo_rd_en                   = result_valid && result_ready;
 
-    // ──────────────────────────────────────────────────────────────
-    // sub-modules
-    // ──────────────────────────────────────────────────────────────
+
     frame_fsm u_fsm (
         .clk                 (clk),
         .rst                 (rst),
@@ -338,13 +278,16 @@ module control_unit #(
     generate
         for (genvar g = 0; g < CLUSTER_COUNT; g++) begin : gen_clusters
             cluster #(
-                .CLUSTER_SIZE (CLUSTER_SIZE),
-                .PIXEL_ADDR_W (PIXEL_ADDR_W),
-                .PIXEL_W      (PIXEL_W),
-                .JOB_DATA_W   (JOB_DATA_W)
+                .CLUSTER_SIZE        (CLUSTER_SIZE),
+                .PIXEL_ADDR_W        (PIXEL_ADDR_W),
+                .PIXEL_W             (PIXEL_W),
+                .JOB_DATA_W          (JOB_DATA_W),
+                .LOWEST_MAX_ITER_POW (LOWEST_MAX_ITER_POW)
             ) u_cluster (
                 .clk               (clk),
-                .rst_n             (~rst),
+                .rst_n             (rst),
+                .wide              (wide),
+                .opcode_reset      (opcode_reset),
                 .disp_valid        (cluster_disp_valid[g]),
                 .disp_pixel_addr   (disp_pixel_addr),
                 .disp_job_data     (disp_job_data),

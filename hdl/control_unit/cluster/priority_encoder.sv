@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 module priority_encoder #(
     parameter  int BUS_WIDTH   = 8,
-    localparam int ADDRESS_LEN = $clog2(BUS_WIDTH)
+    localparam int ADDRESS_LEN = (BUS_WIDTH > 1) ? $clog2(BUS_WIDTH) : 1
 ) (
     input  logic [BUS_WIDTH-1:0]   core_bus,
     output logic [BUS_WIDTH-1:0]   core_select,

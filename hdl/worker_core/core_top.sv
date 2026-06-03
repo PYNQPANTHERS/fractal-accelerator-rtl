@@ -91,8 +91,8 @@ always_ff @(posedge clk) begin
         
             case (core_state)
             
-            LOADING_OPCODES : begin 
-                                width_mode <= opcode[10];
+            LOADING_OPCODES : begin
+                                width_mode <= width'(opcode[10]);
                                 julia_type <= opcode[9];
                                 magnitude_negation_encoding <= opcode[8:5];
                                 max_iteration <= opcode[4:0];
@@ -132,16 +132,16 @@ always_ff @(posedge clk) begin
                                 end
                                 else begin
                                     case(general_counter)
-                                        2'b00 : begin 
+                                        2'b00 : begin
                                                 starting_x_reg_2 <= data_in;
                                                 general_counter <= 2'b01;
                                                 end
-                                        2'b01 : begin 
-                                                starting_y_reg_2 <= data_in;
+                                        2'b01 : begin
+                                                starting_x_reg_1 <= data_in;
                                                 general_counter <= 2'b10;
                                                 end
-                                        2'b10 : begin 
-                                                starting_x_reg_1 <= data_in;
+                                        2'b10 : begin
+                                                starting_y_reg_2 <= data_in;
                                                 general_counter <= 2'b11;
                                                 end
                                         2'b11 : begin

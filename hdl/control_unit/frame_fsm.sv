@@ -1,29 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // frame_fsm
-//   High-level sequencer. The SCHEDULER (upstream) owns pixel iteration and
-//   hands us one pixel at a time over a ready/valid handshake. We translate
-//   the coordinate and stream the resulting Z value to a free cluster.
-//
-//   Per-frame:  IDLE -> OPCODE_BROADCAST -> (Julia: LOAD_C_*) -> JOB_WAIT
-//
-//   Per-pixel loop:
-//     JOB_WAIT   : job_ready asserted ONLY when a cluster is free.
-//                  Accept on (job_valid && job_ready). On accept:
-//                    - coords latched (job_datapath, via accept_pulse)
-//                    - free cluster captured/locked (cluster_arbiter)
-//                    - go to CHECK_BRAM
-//     CHECK_BRAM : assert check_bram, wait 2 cycles for bram_read to decode.
-//                    bram_done    -> pixel already finished, skip -> JOB_WAIT
-//                    bram_started -> pixel in progress elsewhere, skip -> JOB_WAIT
-//                    bram_miss    -> not started, dispatch -> LOAD_Z_*
-//     LOAD_Z_*   : stream Z words to the locked cluster (multi-cycle).
-//                  on load_last -> back to JOB_WAIT.
-//
-//   TODO:
-//     - Decide how a frame formally ends (frame_end input?) and whether to
-//       return to IDLE.
-//     - bram_done path: route colour directly to output FIFO, bypass cluster.
-//     - Confirm LOAD_C streaming matches what cores expect.
 // ─────────────────────────────────────────────────────────────────────────────
 module frame_fsm (
     input  logic clk,
@@ -42,9 +18,9 @@ module frame_fsm (
     input  logic any_cluster_free,
 
     // bram read results (valid for one cycle in bram_read's DECODE state)
-    input  logic bram_miss,       // pixel not started, not done → dispatch
-    input  logic bram_started,    // pixel in flight elsewhere → skip
-    input  logic bram_done,       // pixel already computed → skip
+    input  logic bram_miss,       // pixel not started, not done    -> dispatch
+    input  logic bram_started,    // pixel in flight elsewhere      -> skip
+    input  logic bram_done,       // pixel already compute          -> skip
 
     // strobes
     output logic check_bram,         // held high while in CHECK_BRAM state

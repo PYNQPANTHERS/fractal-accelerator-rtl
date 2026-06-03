@@ -93,6 +93,35 @@ $(SIM_DIR):
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
+# ── control_unit render testbench ──────────────────────────────────────────────
+CU_SRCS := \
+	hdl/control_unit/control_unit.sv \
+	hdl/control_unit/frame_fsm.sv \
+	hdl/control_unit/bram_read_write.sv \
+	hdl/control_unit/sequencer.sv \
+	hdl/control_unit/cluster_arbiter.sv \
+	hdl/control_unit/job_datapath.sv \
+	hdl/control_unit/translate.sv \
+	hdl/control_unit/cluster/cluster.sv \
+	hdl/control_unit/cluster/priority_encoder.sv \
+	hdl/control_unit/cluster/sync_fifo.sv \
+	hdl/worker_core/core_top.sv \
+	hdl/worker_core/multiply_manager.sv \
+	hdl/worker_core/multiply.sv \
+	hdl/worker_core/coord_flagger.sv \
+	hdl/worker_core/max_iteration_flagger.sv \
+	hdl/worker_core/magnitude_comparison_unit.sv \
+	hdl/worker_core/sum_alter.sv
+
+.PHONY: cu
+cu:
+	mkdir -p $(BUILD_DIR) sim/render
+	iverilog $(IVFLAGS) -o $(BUILD_DIR)/tb_control_unit.out \
+		$(CU_SRCS) hdl/control_unit/tb_control_unit.sv
+	vvp $(BUILD_DIR)/tb_control_unit.out
+	@echo ""
+	@echo "  Render: python3 hdl/worker_core/render.py --csv sim/render/frame.csv --max-iter 128 --out sim/render/frame.png"
+
 # Clean
 .PHONY: clean
 clean:
