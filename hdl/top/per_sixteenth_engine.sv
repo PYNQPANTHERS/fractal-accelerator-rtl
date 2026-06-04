@@ -63,13 +63,15 @@ module per_sixteenth_engine (
     logic        cbram_b2d_rd_en;
     logic        cbram_b2d_rd_grant;
     logic [63:0] cbram_b2d_rd_data;
-    // state_bram wires (driven by control_unit
-    logic [8:0]  sbram_a_x;
-    logic [8:0]  sbram_a_y;
-    logic        sbram_a_rd;
-    logic        sbram_a_we;
-    logic [1:0]  sbram_a_wstate;
-    logic [1:0]  sbram_a_rstate;
+    // state_bram wires (driven by control_unit)
+    logic [8:0]  sbram_x;
+    logic [8:0]  sbram_y;
+    logic        sbram_rd;
+    logic        sbram_we;
+    logic [1:0]  sbram_wstate;
+    logic [1:0]  sbram_rstate;
+    logic        sbram_rd_valid;
+    logic        sbram_wr_done;
     // tile_table wire
     logic        tt_wr_single_en;
     logic [7:0]  tt_wr_single_index;
@@ -179,12 +181,12 @@ module per_sixteenth_engine (
         .cu_wr_data         (cbram_ctrl_wr_data),
 
         // state_bram
-        .sb_x               (sbram_a_x),
-        .sb_y               (sbram_a_y),
-        .sb_rd              (sbram_a_rd),
-        .sb_we              (sbram_a_we),
-        .sb_wstate          (sbram_a_wstate),
-        .sb_rstate          (sbram_a_rstate),
+        .sb_x               (sbram_x),
+        .sb_y               (sbram_y),
+        .sb_rd              (sbram_rd),
+        .sb_we              (sbram_we),
+        .sb_wstate          (sbram_wstate),
+        .sb_rstate          (sbram_rstate),
 
         // tile_table single write (tiled path)
         .tt_wr_single_en    (tt_wr_single_en),
@@ -267,12 +269,14 @@ module per_sixteenth_engine (
     state_bram u_state_bram (
         .clk     (clk),
         .rst     (rst),
-        .a_x     (sbram_a_x),
-        .a_y     (sbram_a_y),
-        .a_rd    (sbram_a_rd),
-        .a_we    (sbram_a_we),
-        .a_wstate(sbram_a_wstate),
-        .a_rstate(sbram_a_rstate)
+        .x       (sbram_x),
+        .y       (sbram_y),
+        .rd      (sbram_rd),
+        .we      (sbram_we),
+        .wstate  (sbram_wstate),
+        .rstate  (sbram_rstate),
+        .rd_valid(sbram_rd_valid),
+        .wr_done (sbram_wr_done)
     );
 
     // tile_table
