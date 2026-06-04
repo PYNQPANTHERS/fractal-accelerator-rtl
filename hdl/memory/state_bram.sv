@@ -1,77 +1,88 @@
-// Packed 2-bit state storage for one 256x256 sixteenth.
-// 4 pixels per byte, tile-ordered addressing.
-// State: 00=uncomputed, 01=in-progress, 11=done, 10=unused
+// Double-BRAM ping-pong: rst flips the active BRAM; inactive is cleared to 00 in background
+// Simultaneous rd + we to the same address returns the value before the write (READ_FIRST)
 
 module state_bram (
     input  logic        clk,
     input  logic        rst,
 
-    input  logic [8:0]  a_x,
-    input  logic [8:0]  a_y,
-    input  logic        a_rd,
-    input  logic        a_we,
-    input  logic [1:0]  a_wstate,
-    output logic [1:0]  a_rstate
+    input  logic [8:0]  x,
+    input  logic [8:0]  y,
+    input  logic        rd,
+    input  logic        we,
+    input  logic [1:0]  wstate,
+    output logic [1:0]  rstate,
+    output logic        rd_valid,  // high 1 cycle after rd when rst=0
+    output logic        wr_done    // high 1 cycle after we when rst=0
 );
 
-    (* ram_style = "block" *)
-    logic [7:0] mem [0:16383];
+    (* ram_style = "block" *) logic [1:0] mem_a [0:65535];
+    (* ram_style = "block" *) logic [1:0] mem_b [0:65535];
 
-    logic [15:0] tile_addr;
-    logic [13:0] byte_addr;
-    logic [1:0]  bit_slot;
+    logic        active;       // 0 = mem_a active, 1 = mem_b active
+    logic        clr_active;
+    logic [15:0] clr_addr;
+    logic        rst_d;
 
-    assign tile_addr = {a_y[7:4], a_x[7:4], a_y[3:0], a_x[3:0]};
-    assign byte_addr = tile_addr[15:2];
-    assign bit_slot  = tile_addr[1:0];
+    logic [15:0] pixel_addr;
+    assign pixel_addr = {y[7:0], x[7:0]};
 
-    // Registered read
-    logic [7:0] rd_byte;
-    logic       post_rst;
+    always_ff @(posedge clk) rst_d <= rst;
+
+    // Rising edge of rst: flip active BRAM and restart background clear
+    always_ff @(posedge clk) begin
+        if (rst && !rst_d) begin
+            active     <= ~active;
+            clr_active <= 1'b1;
+            clr_addr   <= 16'h0;
+        end else if (clr_active) begin
+            if (clr_addr == 16'hFFFF)
+                clr_active <= 1'b0;
+            else
+                clr_addr <= clr_addr + 1;
+        end
+    end
+
+    // Write steering: user writes go to active BRAM; bg-clear writes go to inactive
+    logic        we_a,    we_b;
+    logic [15:0] waddr_a, waddr_b;
+    logic [1:0]  wdata_a, wdata_b;
+
+    always_comb begin
+        if (!active) begin
+            we_a    = we & ~rst;  waddr_a = pixel_addr;  wdata_a = wstate;
+            we_b    = clr_active;   waddr_b = clr_addr;    wdata_b = 2'b00;
+        end else begin
+            we_a    = clr_active;   waddr_a = clr_addr;    wdata_a = 2'b00;
+            we_b    = we & ~rst;  waddr_b = pixel_addr;  wdata_b = wstate;
+        end
+    end
+
+    logic [1:0] rdata_a, rdata_b;
 
     always_ff @(posedge clk) begin
-        if (rst)
-            post_rst <= 1'b1;
-        else if (a_rd)
-            post_rst <= 1'b0;
-        if (a_rd)
-            rd_byte <= mem[byte_addr];
+        if (we_a) mem_a[waddr_a] <= wdata_a;
+        rdata_a <= mem_a[pixel_addr];
     end
 
-    logic [7:0] rd_byte_out;
-    assign rd_byte_out = post_rst ? 8'h00 : rd_byte;
-
-    always_comb begin
-        case (bit_slot)
-            2'b00: a_rstate = rd_byte_out[1:0];
-            2'b01: a_rstate = rd_byte_out[3:2];
-            2'b10: a_rstate = rd_byte_out[5:4];
-            default: a_rstate = rd_byte_out[7:6];
-        endcase
+    always_ff @(posedge clk) begin
+        if (we_b) mem_b[waddr_b] <= wdata_b;
+        rdata_b <= mem_b[pixel_addr];
     end
 
-    // Read-modify-write
-    logic [7:0] cur_byte, new_byte;
-    assign cur_byte = mem[byte_addr];
+    assign rstate = active ? rdata_b : rdata_a;
 
-    always_comb begin
-        new_byte = cur_byte;
-        case (bit_slot)
-            2'b00: new_byte[1:0] = a_wstate;
-            2'b01: new_byte[3:2] = a_wstate;
-            2'b10: new_byte[5:4] = a_wstate;
-            default: new_byte[7:6] = a_wstate;
-        endcase
-    end
+    always_ff @(posedge clk) rd_valid <= rd & ~rst;
+    always_ff @(posedge clk) wr_done  <= we & ~rst;
 
     initial begin
-        for (int i = 0; i < 16384; i++)
-            mem[i] = 8'h00;
-    end
-
-    always_ff @(posedge clk) begin
-        if (a_we && !rst)
-            mem[byte_addr] <= new_byte;
+        active     = 1'b0;
+        clr_active = 1'b0;
+        clr_addr   = 16'h0;
+        rst_d      = 1'b0;
+        for (int i = 0; i < 65536; i++) begin
+            mem_a[i] = 2'b00;
+            mem_b[i] = 2'b00;
+        end
     end
 
 endmodule
