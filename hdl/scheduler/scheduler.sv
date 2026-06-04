@@ -1,13 +1,8 @@
-// input  logic clk,
-//     input  logic rst,
-//     input  logic start,
-
-
 
 //     // Job queue push
 //     output logic [17:0] sched_coord,
 //     output logic        sched_push,
-//     output logic        sched_flush,
+//     output logic        job_queue_flush,
 //     input  logic        sched_stall,
 
 //     // Comparator configuration
@@ -19,16 +14,9 @@
 //     output logic [10:0] expected_count,
 
 //     // Comparator results
-//     input  logic        differ,
-//     input  logic        complete,
-//     input  logic [5:0]  ref_colour_o,
-
-//     // tile_table quad write (flood fill path)
-//     output logic        tt_wr_quad_en,
-//     output logic [7:0]  tt_wr_quad_tlx,
-//     output logic [7:0]  tt_wr_quad_tly,
-//     output logic [7:0]  tt_wr_quad_size,
-//     output logic [5:0]  tt_wr_quad_colour,
+//     input  logic        differ, called compartor_flag_so_far
+//     input  logic        complete, called comparator_flag_done
+//     input  logic [5:0]  ref_colour_o, called comparator_colour
 
 //     // Tile done (flood fill path)
 //     output logic [255:0] sched_tile_done_set,
@@ -41,14 +29,25 @@ module scheduler #(
     parameter int Z = 3,  // max zoom level bit width
     parameter int COLOUR_WIDTH = 4   // width of colour        DO WE ACTUALLY NEED COLOUR PASSED IN NOW????
 )(
-    input logic clk, rst, comparator_flag_so_far, comparator_flag_done,
-    input logic [COLOUR_WIDTH-1:0] comparator_colour,
-    output logic engine_done,
-    output logic [8:0] jq_x_coord_to_queue, jq_y_coord_to_queue,
-    output logic job_queue_push,
-    output logic sched_flush,
+    // general logic
+    input logic                     clk,
+    input logic                     rst,
+    input logic                     start,
+    output logic                    engine_done,
+
+    // comparator communications
+    input logic                     comparator_flag_so_far,
+    input logic                     comparator_flag_done,
+    input logic [COLOUR_WIDTH-1:0]  comparator_colour,
+    
+    // job queue logic
+    output logic [8:0]              jq_x_coord_to_queue, jq_y_coord_to_queue,
+    output logic                    job_queue_push,
+    output logic                    job_queue_flush,
+
+    // fill box logic
     output logic                    tt_wr_quad_en,
-    output logic [7:0]              tt_wr_quad_tlx,
+    output logic [7:0]              tt_wr_quad_tlx,t
     output logic [7:0]              tt_wr_quad_tly,
     output logic [7:0]              tt_wr_quad_size,
     output logic [COLOUR_WIDTH-1:0] tt_wr_quad_colour
@@ -66,14 +65,17 @@ logic pixel_generator_reset, popped_all_left, popped_all_top;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 logic border_pixel_chooser_done;
+// Internal counter registers (only used by QUEUE_BOX)
+logic [8:0] qbox_x, qbox_y;
 
 
 
 // border pixel coordinate generator
-border_pixel_chooser #(.N(N), .Z(Z)) pixel_generator(
-    .clk(clk), .rst(rst), .rst_start(pixel_generator_reset), .top_left_x(top_left_x),
-    .top_left_y(top_left_y), .zoom_level(zoom_level),
-    .box_number(box_id), .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
+border_pixel_chooser #(.N(N)) pixel_generator(
+    .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
+    .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
+    .top_left_x(top_left_x), .top_left_y(top_left_y),
+    .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
     .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
     .done_flag(border_pixel_chooser_done));
 
@@ -114,7 +116,7 @@ logic stack_empty, stack_full;
 
 localparam int STACK_WIDTH = $bits(stack_packet_s);
 // instantiate stack
-schedular_stack #(.WIDTH(STACK_WIDTH), .DEPTH(8)) my_stack (
+scheduler_stack #(.WIDTH(STACK_WIDTH), .DEPTH(3)) my_stack (
     .clk(clk), .rst(rst),
     .push(stack_push), .pop(stack_pop),
     .data_in(stack_data_in), .data_out(stack_data_out),
@@ -136,7 +138,7 @@ logic [8:0] pixel_width_x_left;
 
 always_ff @ (posedge clk or posedge rst) begin
     if(rst) begin
-        current_state   <= STARTUP;
+        current_state   <= IDLE;
         popped_all_left <= 1'b0;
         popped_all_top  <= 1'b0;
     end
@@ -168,15 +170,15 @@ always_ff @ (posedge clk or posedge rst) begin
                 jq_x_coord_to_queue <= x_coord_to_queue;
                 jq_y_coord_to_queue <= y_coord_to_queue;
 
-                if(!comparator_flag_so_far) begin
-                    job_queue_push <= 0;
-                end
-                else if(border_pixel_chooser_done) begin
-                    job_queue_push <= 0;
-                end
-                else begin
-                    job_queue_push <= 1;
-                end
+                // if(!comparator_flag_so_far) begin
+                //     job_queue_push <= 0;
+                // end
+                // else if(border_pixel_chooser_done) begin
+                //     job_queue_push <= 0;
+                // end
+                // else begin
+                //     job_queue_push <= 1;
+                // end
             end
 
             DESCEND_LEVEL: begin
@@ -188,18 +190,26 @@ always_ff @ (posedge clk or posedge rst) begin
             end
 
             QUEUE_BOX_INIT: begin
-                jq_x_coord_to_queue <= top_left_x;
-                jq_y_coord_to_queue <= top_left_y;
-                job_queue_push      <= 1'b1;
+                // jq_x_coord_to_queue <= top_left_x;
+                // jq_y_coord_to_queue <= top_left_y;
+                // job_queue_push      <= 1'b1;
+                qbox_x <= top_left_x;
+                qbox_y <= top_left_y;
             end
 
             QUEUE_BOX: begin
-
-                if (jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) begin
-                    jq_x_coord_to_queue <= top_left_x;
-                    jq_y_coord_to_queue <= jq_y_coord_to_queue + 1'b1;
-                end else begin
-                    jq_x_coord_to_queue <= jq_x_coord_to_queue + 1'b1;
+                // if (jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) begin
+                //     jq_x_coord_to_queue <= top_left_x;
+                //     jq_y_coord_to_queue <= jq_y_coord_to_queue + 1'b1;
+                // end else begin
+                //     jq_x_coord_to_queue <= jq_x_coord_to_queue + 1'b1;
+                // end
+                if (qbox_x == top_left_x + pixel_width_x - 2'd2) begin
+                    qbox_x <= top_left_x;
+                    qbox_y <= qbox_y + 1'b1;
+                end
+                else begin
+                    qbox_x <= qbox_x + 1'b1;
                 end
             end
 
@@ -208,7 +218,7 @@ always_ff @ (posedge clk or posedge rst) begin
             end
 
             NEXT_BOX: begin
-                job_queue_push <= 1'b0;
+                // job_queue_push <= 1'b0;
                 if(box_id != 2'b11) begin
                     box_id <= box_id + 1'b1;
                     case(box_id)
@@ -248,10 +258,10 @@ always_comb begin
     next_state            = current_state;
     stack_push            = 1'b0;
     stack_pop             = 1'b0;
-    schedular_done_flag   = 1'b0;
     pixel_generator_reset = 1'b0;
     engine_done           = 1'b0;
-    sched_flush           = 1'b0;
+    job_queue_flush           = 1'b0;
+    job_queue_push        = 1'b0;
     tt_wr_quad_en         = 1'b0;
     tt_wr_quad_tlx        = '0;
     tt_wr_quad_tly        = '0;
@@ -259,7 +269,7 @@ always_comb begin
     tt_wr_quad_colour     = '0;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
-    normal_width = (9'd256 >> (zoom_level)); // divide by 2^(zoom level) as starting at sixteenths. Original width = 
+    normal_width = (9'd256 >> zoom_level); // divide by 2^(zoom level) as starting at sixteenths. Original width = 
 
     // zoom=0: no pixel-width correction applies (root level)
     // zoom=1: only the current box position determines left/top status
@@ -273,6 +283,18 @@ always_comb begin
     end else begin
         all_left_quadrants = popped_all_left && current_is_left;
         all_top_quadrants  = popped_all_top  && current_is_top;
+    end
+
+    // logic dictating which variable is sent to the queue.
+    if (current_state == WAIT || current_state == QUEUE_BOX_INIT) begin
+        jq_x_coord_to_queue = x_coord_to_queue;  // direct from pixel generator
+        jq_y_coord_to_queue = y_coord_to_queue;
+    end else if (current_state == QUEUE_BOX) begin
+        jq_x_coord_to_queue = qbox_x;            // from counter
+        jq_y_coord_to_queue = qbox_y;
+    end else begin
+        jq_x_coord_to_queue = '0;
+        jq_y_coord_to_queue = '0;
     end
 
     // pixel width modifiers (one greater if not a leftmost or topmost box)
@@ -291,7 +313,7 @@ always_comb begin
     case(current_state)
 
         IDLE: begin
-            if(instruction)begin            // TO DO!!!
+            if(start)begin            // TO DO!!!
                 next_state = STARTUP;
             end
             else begin
@@ -300,7 +322,6 @@ always_comb begin
         end
 
         STARTUP: begin
-            stack_rst  = 1'b1;
             next_state = BEGIN_SEARCH_BOX;
         end
 
@@ -340,13 +361,15 @@ always_comb begin
                 next_state = FILL_BOX;
             else begin
                 if(!comparator_flag_so_far) begin
+                    if(!border_pixel_chooser_done)
+                        job_queue_push = 1'b1;
                     // splits again
                     if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
                         next_state = QUEUE_BOX_INIT;
                     end
                     else begin
                         next_state  = DESCEND_LEVEL;
-                        sched_flush = 1'b1;
+                        job_queue_flush = 1'b1;
                     end
                 end
             end
@@ -356,9 +379,14 @@ always_comb begin
 
         QUEUE_BOX_INIT: begin
             next_state = QUEUE_BOX;
+            job_queue_push = 1'b1;
         end
 
         QUEUE_BOX: begin
+            // Keep pushing every cycle until counter reaches end.
+            // Termination is detected here combinationally so the
+            // last pixel is pushed on the same cycle we exit.
+            job_queue_push = 1'b1;
             if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 2'd2)) begin
                 next_state = NEXT_BOX;
             end
@@ -388,7 +416,7 @@ always_comb begin
         // adds to the stack and changes values of top_left etc.
         DESCEND_LEVEL: begin
             if(!stack_full) begin
-                if(box_id != 2'b11) begin
+                if((box_id != 2'b11) && (zoom_level != '0)) begin
                     // skip pushing the stack if box_id = 2'b11, can simply change values
                     stack_push = 1'b1;          // fire the push signal
                 end
