@@ -25,7 +25,7 @@
 
 
 module scheduler #(
-    parameter int N = 10, // bit width of 1/16th width
+    parameter int N = 8, // bit width of 1/16th width
     parameter int Z = 3,  // max zoom level bit width
     parameter int COLOUR_WIDTH = 4   // width of colour        DO WE ACTUALLY NEED COLOUR PASSED IN NOW????
 )(
@@ -57,86 +57,62 @@ module scheduler #(
 typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
 my_states current_state, next_state;
 
-logic [8:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
+logic [N-1:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
 logic [1:0] box_id;
-logic [8:0] pixel_width_x, pixel_width_y;
+logic [N-1:0] pixel_width_x, pixel_width_y;
 logic [3:0] zoom_level;
-logic pixel_generator_reset, popped_all_left, popped_all_top;
+logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 logic border_pixel_chooser_done;
 // Internal counter registers (only used by QUEUE_BOX)
-logic [8:0] qbox_x, qbox_y;
+logic [N-1:0] qbox_x, qbox_y;
 
-
-
-// border pixel coordinate generator
 border_pixel_chooser #(.N(N)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
     .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
-    .top_left_x(top_left_x), .top_left_y(top_left_y),
-    .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
+    .top_left_x({1'b0, top_left_x}),       .top_left_y({1'b0, top_left_y}),
+    .width_pixels_x({1'b0, pixel_width_x}), .width_pixels_y({1'b0, pixel_width_y}),
     .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
     .done_flag(border_pixel_chooser_done));
 
 
 
 // STACK LOGIC
-// typedef struct packed {
-//     logic [N-1:0] x;
-//     logic [N-1:0] y;
-//     logic [Z-1:0] zoom;
-//     logic [1:0]   box;
-//     logic         all_left, all_top; // flag high if all previous quardants in stack are left hand or top ones
-//     // in this case, the pixel width is one less than normal.
-// } stack_packet_s;
-
-// // stack signals
-// stack_packet_s stack_data_in;
-// stack_packet_s stack_data_out;
-
-localparam int STACK_W = 2*N + Z + 2 + 2; // x, y, zoom, box, all_left, all_top
+localparam int STACK_W    = 2*N + Z + 2 + 2;
 
 logic [STACK_W-1:0] stack_data_in;
 logic [STACK_W-1:0] stack_data_out;
 
-// manual pack
+// pack
 assign stack_data_in = {all_top_quadrants, all_left_quadrants,
-                        (box_id + 1'b1), zoom_level,
+                        (box_id + 1'b1), zoom_level[2:0],
                         top_left_y, top_left_x};
 
-// manual unpack
-assign popped_top_left_x = stack_data_out[N-1       : 0      ];
-assign popped_top_left_y = stack_data_out[2*N-1      : N      ];
-assign popped_zoom       = stack_data_out[2*N+Z-1    : 2*N    ];
-assign popped_box_id     = stack_data_out[2*N+Z+1    : 2*N+Z  ];
-// all_left               stack_data_out[2*N+Z+2]
-// all_top                stack_data_out[2*N+Z+3]
+// unpack: split via concatenation to avoid parameterized bit-select bounds
+logic [N-1:0] _stk_tlx, _stk_tly;
+logic [Z-1:0] _stk_zoom;
+logic [1:0]   _stk_box;
+logic         _stk_all_left, _stk_all_top;
+assign {_stk_all_top, _stk_all_left, _stk_box, _stk_zoom, _stk_tly, _stk_tlx} = stack_data_out;
 
-// packing
-// assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: all_left_quadrants, all_top: all_top_quadrants};
-assign stack_data_in = '{top_left_x, top_left_y, zoom_level,
-                         box_id + 1'b1, all_left_quadrants, all_top_quadrants};
+logic [N-1:0]   popped_top_left_x, popped_top_left_y;
+logic [3:0]     popped_zoom;
+logic [1:0]     popped_box_id;
+logic           popped_all_left, popped_all_top;
 
-// logic for unpacking
-logic [8:0]   popped_top_left_x, popped_top_left_y;
-logic [3:0]   popped_zoom;
-logic [1:0]   popped_box_id;
-
-// unpacking (popped_all_left/top are registered in always_ff, not continuous assigns)
-assign popped_top_left_x = stack_data_out.x;
-assign popped_top_left_y = stack_data_out.y;
-assign popped_zoom       = stack_data_out.zoom;
-assign popped_box_id     = stack_data_out.box;
-
+// popped_all_left/top are registered in always_ff, not continuous assigns
+assign popped_top_left_x  = _stk_tlx;
+assign popped_top_left_y  = _stk_tly;
+assign popped_zoom        = {1'b0, _stk_zoom};
+assign popped_box_id      = _stk_box;
 
 // stack itself
 logic stack_push, stack_pop;
 logic stack_empty, stack_full;
 
-localparam int STACK_WIDTH = $bits(stack_packet_s);
 // instantiate stack
-scheduler_stack #(.WIDTH(STACK_WIDTH), .DEPTH(3)) my_stack (
+scheduler_stack #(.WIDTH(STACK_W), .DEPTH(3)) my_stack (
     .clk(clk), .rst(rst),
     .push(stack_push), .pop(stack_pop),
     .data_in(stack_data_in), .data_out(stack_data_out),
@@ -150,6 +126,10 @@ scheduler_stack #(.WIDTH(STACK_WIDTH), .DEPTH(3)) my_stack (
 assign current_is_left = (box_id[0] == 1'b0);
 // a box is a top quadrant if it's 2'b00 or 2'b01 i.e. if box_id[1] == 1'b0
 assign current_is_top = (box_id[1] == 1'b0);
+
+logic stack_out_all_left, stack_out_all_top;
+assign stack_out_all_left = _stk_all_left;
+assign stack_out_all_top  = _stk_all_top;
 
 // pixel width of a notional left-column box at the current zoom/ancestor context.
 // used by the 01→10 x-step in NEXT_BOX, which must subtract w00 (not the right-box width w01).
@@ -178,8 +158,8 @@ always_ff @ (posedge clk or posedge rst) begin
                 zoom_level      <= popped_zoom;
                 box_id          <= popped_box_id;
                 // restore ancestor flags from the stack entry
-                popped_all_left <= stack_data_out.all_left;
-                popped_all_top  <= stack_data_out.all_top;
+                popped_all_left <= stack_out_all_left;
+                popped_all_top  <= stack_out_all_top;
             end
 
             BEGIN_SEARCH_BOX: begin
@@ -269,8 +249,8 @@ always_ff @ (posedge clk or posedge rst) begin
 end
 
 
-// pixel width logic
-logic [9:0] normal_width;
+// pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
+logic [8:0] normal_width;
 
 always_comb begin
 
@@ -289,7 +269,7 @@ always_comb begin
     tt_wr_quad_colour     = '0;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
-    normal_width = (9'd256 >> zoom_level); // divide by 2^(zoom level) as starting at sixteenths. Original width = 
+    normal_width = 9'd256 >> zoom_level;
 
     // zoom=0: no pixel-width correction applies (root level)
     // zoom=1: only the current box position determines left/top status
@@ -318,16 +298,16 @@ always_comb begin
     end
 
     // pixel width modifiers (one greater if not a leftmost or topmost box)
-    pixel_width_x = normal_width[8:0] + ~all_left_quadrants;
-    pixel_width_y = normal_width[8:0] + ~all_top_quadrants;
+    pixel_width_x = normal_width + ~all_left_quadrants;
+    pixel_width_y = normal_width + ~all_top_quadrants;
 
     // width of a left-column box (box 00 / box 10 equivalent).
     // at zoom≤1, a left box always has all_left=1 → no +1 correction.
     // at zoom>1, inherits popped_all_left from the ancestor chain.
     if (zoom_level <= 4'd1)
-        pixel_width_x_left = normal_width[8:0];
+        pixel_width_x_left = normal_width;
     else
-        pixel_width_x_left = normal_width[8:0] + ~popped_all_left;
+        pixel_width_x_left = normal_width + ~popped_all_left;
 
 
     case(current_state)
@@ -417,9 +397,9 @@ always_comb begin
 
         FILL_BOX: begin
             tt_wr_quad_en     = 1'b1;
-            tt_wr_quad_tlx    = top_left_x[7:0];
-            tt_wr_quad_tly    = top_left_y[7:0];
-            tt_wr_quad_size   = normal_width[7:0];
+            tt_wr_quad_tlx    = top_left_x;
+            tt_wr_quad_tly    = top_left_y;
+            tt_wr_quad_size   = normal_width;
             tt_wr_quad_colour = comparator_colour;
             next_state        = NEXT_BOX;
         end
