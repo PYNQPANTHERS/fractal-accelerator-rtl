@@ -82,6 +82,37 @@ border_pixel_chooser #(.N(N)) pixel_generator(
 
 
 // STACK LOGIC
+
+// STACK LOGIC
+// Packed as: [all_top | all_left | box | zoom | y | x]
+//             1         1          2     Z      N   N
+localparam int STACK_W = 2*N + Z + 4; // x(N), y(N), zoom(Z), box(2), all_left(1), all_top(1)
+
+logic [STACK_W-1:0] stack_data_in;
+logic [STACK_W-1:0] stack_data_out;
+
+// packing
+assign stack_data_in = {all_top_quadrants,
+                        all_left_quadrants,
+                        (box_id + 1'b1),
+                        zoom_level,
+                        top_left_y,
+                        top_left_x};
+
+// logic for unpacking
+logic [N-1:0] popped_top_left_x, popped_top_left_y;
+logic [Z-1:0] popped_zoom;
+logic [1:0]   popped_box_id;
+logic         popped_all_left, popped_all_top;
+
+// unpacking (popped_all_left/top are registered in always_ff, not continuous assigns)
+assign popped_top_left_x = stack_data_out[N-1     : 0      ];
+assign popped_top_left_y = stack_data_out[2*N-1   : N      ];
+assign popped_zoom       = stack_data_out[2*N+Z-1 : 2*N    ];
+assign popped_box_id     = stack_data_out[2*N+Z+1 : 2*N+Z  ];
+assign popped_all_left   = stack_data_out[2*N+Z+2          ];
+assign popped_all_top    = stack_data_out[2*N+Z+3          ];
+
 // typedef struct packed {
 //     logic [N-1:0] x;
 //     logic [N-1:0] y;
@@ -95,39 +126,19 @@ border_pixel_chooser #(.N(N)) pixel_generator(
 // stack_packet_s stack_data_in;
 // stack_packet_s stack_data_out;
 
-localparam int STACK_W = 2*N + Z + 2 + 2; // x, y, zoom, box, all_left, all_top
+// // packing
+// // assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: all_left_quadrants, all_top: all_top_quadrants};
 
-logic [STACK_W-1:0] stack_data_in;
-logic [STACK_W-1:0] stack_data_out;
+// // logic for unpacking
+// logic [8:0]   popped_top_left_x, popped_top_left_y;
+// logic [3:0]   popped_zoom;
+// logic [1:0]   popped_box_id;
 
-// manual pack
-assign stack_data_in = {all_top_quadrants, all_left_quadrants,
-                        (box_id + 1'b1), zoom_level,
-                        top_left_y, top_left_x};
-
-// manual unpack
-assign popped_top_left_x = stack_data_out[N-1       : 0      ];
-assign popped_top_left_y = stack_data_out[2*N-1      : N      ];
-assign popped_zoom       = stack_data_out[2*N+Z-1    : 2*N    ];
-assign popped_box_id     = stack_data_out[2*N+Z+1    : 2*N+Z  ];
-// all_left               stack_data_out[2*N+Z+2]
-// all_top                stack_data_out[2*N+Z+3]
-
-// packing
-// assign stack_data_in = '{x: top_left_x, y: top_left_y, zoom: zoom_level, box: box_id + 1'b1, all_left: all_left_quadrants, all_top: all_top_quadrants};
-assign stack_data_in = '{top_left_x, top_left_y, zoom_level,
-                         box_id + 1'b1, all_left_quadrants, all_top_quadrants};
-
-// logic for unpacking
-logic [8:0]   popped_top_left_x, popped_top_left_y;
-logic [3:0]   popped_zoom;
-logic [1:0]   popped_box_id;
-
-// unpacking (popped_all_left/top are registered in always_ff, not continuous assigns)
-assign popped_top_left_x = stack_data_out.x;
-assign popped_top_left_y = stack_data_out.y;
-assign popped_zoom       = stack_data_out.zoom;
-assign popped_box_id     = stack_data_out.box;
+// // unpacking (popped_all_left/top are registered in always_ff, not continuous assigns)
+// assign popped_top_left_x = stack_data_out.x;
+// assign popped_top_left_y = stack_data_out.y;
+// assign popped_zoom       = stack_data_out.zoom;
+// assign popped_box_id     = stack_data_out.box;
 
 
 // stack itself
