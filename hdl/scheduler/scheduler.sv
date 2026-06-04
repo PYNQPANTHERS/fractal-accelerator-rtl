@@ -71,8 +71,8 @@ logic [N-1:0] qbox_x, qbox_y;
 border_pixel_chooser #(.N(N)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
     .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
-    .top_left_x({1'b0, top_left_x}),       .top_left_y({1'b0, top_left_y}),
-    .width_pixels_x({1'b0, pixel_width_x}), .width_pixels_y({1'b0, pixel_width_y}),
+    .top_left_x(top_left_x),       .top_left_y(top_left_y),
+    .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
     .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
     .done_flag(border_pixel_chooser_done));
 
@@ -274,10 +274,10 @@ always_comb begin
     // zoom=0: no pixel-width correction applies (root level)
     // zoom=1: only the current box position determines left/top status
     // zoom>1: must also check all ancestors were left/top (stored in popped_all_left/top)
-    if (zoom_level == 4'd0) begin
-        all_left_quadrants = 1'b0;
-        all_top_quadrants  = 1'b0;
-    end else if (zoom_level == 4'd1) begin
+    if (zoom_level == '0) begin
+        all_left_quadrants = 1'b1;
+        all_top_quadrants  = 1'b1;
+    end else if (zoom_level == 3'd1) begin
         all_left_quadrants = current_is_left;
         all_top_quadrants  = current_is_top;
     end else begin
@@ -304,7 +304,7 @@ always_comb begin
     // width of a left-column box (box 00 / box 10 equivalent).
     // at zoom≤1, a left box always has all_left=1 → no +1 correction.
     // at zoom>1, inherits popped_all_left from the ancestor chain.
-    if (zoom_level <= 4'd1)
+    if (zoom_level <= 3'd1)
         pixel_width_x_left = normal_width;
     else
         pixel_width_x_left = normal_width + ~popped_all_left;
