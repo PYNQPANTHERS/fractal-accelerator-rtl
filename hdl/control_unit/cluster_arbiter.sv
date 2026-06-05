@@ -1,7 +1,6 @@
 // cluster_arbiter
 //   Wraps the cluster-level priority encoder and the one-cycle pipeline 
-//
-//
+
 
 module cluster_arbiter #(
     parameter  int CLUSTER_COUNT = 4,

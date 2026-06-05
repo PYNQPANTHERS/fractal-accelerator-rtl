@@ -12,14 +12,14 @@ module job_datapath #(
     input  logic [Z_WIDE-1:0]      z_real,
     input  logic [Z_WIDE-1:0]      z_imag,
     input  logic                   wide,
-    input  logic [1:0]             word_idx,          // 0..3
+    input  logic [1:0]             word_idx,          // 0123
     input  logic                   opcode_en,         // from FSM OPCODE_BROADCAST
     input  logic                   load_c_en,         // from FSM LOAD_C_NARROW/WIDE
     input  logic [DATA_WIDTH-1:0]  c_real,
     input  logic [DATA_WIDTH-1:0]  c_imag,
     input  logic [OPCODE_W-1:0]    fractal_type,
     input  logic [OPCODE_W-1:0]    iteration_count,
-    output logic [JOB_DATA_W-1:0]  disp_job_data
+    output logic [JOB_DATA_W-1:0]  disp_job_datas
 );
 
     // upper-half width (whatever is left above the low JOB_DATA_W bits)
