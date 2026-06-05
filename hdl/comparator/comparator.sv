@@ -17,7 +17,8 @@ module comparator (
     input  logic [21:0] comp_data,        // { colour[3:0], y[8:0], x[8:0] }
     output logic        comp_pop,
 
-    // Flags to scheduler 
+    // Flags to scheduler
+    output logic [5:0]  ref_colour_o,     // reference colour latched from first border pixel
     output logic        differ,           // latches high if any colour mismatch seen
     output logic        complete          // latches high when seen_count == expected_count
 );
@@ -39,6 +40,8 @@ module comparator (
     logic [3:0]  ref_colour;
     logic        ref_valid;
     logic [10:0] seen_count;
+
+    assign ref_colour_o = {2'b00, ref_colour};
 
     // Pop whenever there is a valid entry
     assign comp_pop = comp_valid;
