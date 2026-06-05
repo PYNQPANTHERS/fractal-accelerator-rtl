@@ -26,8 +26,8 @@ module control_unit #(
     input  logic [3:0]            zoom,
 
     // best to recieve c in complex as could be out of current frame
-    input  logic []                 c_x,
-    input  logic []                 c_y,
+    input  logic [DATA_WIDTH-1:0]   c_x,
+    input  logic [DATA_WIDTH-1:0]   c_y,
 
     // scheduler handshake (pixel coords in)
     input  logic                    job_valid,
@@ -157,7 +157,13 @@ module control_unit #(
     logic [PIXEL_W-1:0]        cluster_result_data       [CLUSTER_COUNT];
 
     assign disp_pixel_addr   = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
-    assign cluster_disp_valid = load_z_en ? chosen_onehot : '0;
+    assign cluster_disp_valid = opcode_broadcast_en ? '1 :
+                               load_z_en           ? chosen_onehot : '0;
+
+    // pulse opcode_reset to cores when the FSM enters OPCODE_BROADCAST,
+    // OR when driven externally
+    logic opcode_reset_i;
+    assign opcode_reset_i = opcode_broadcast_en | opcode_reset;
 
     logic [CLUSTER_COUNT-1:0] res_arb_onehot;
     logic [CLUST_ADDR_W-1:0]  res_arb_idx;
@@ -287,7 +293,7 @@ module control_unit #(
                 .clk               (clk),
                 .rst_n             (rst),
                 .wide              (wide),
-                .opcode_reset      (opcode_reset),
+                .opcode_reset      (opcode_reset_i),
                 .disp_valid        (cluster_disp_valid[g]),
                 .disp_pixel_addr   (disp_pixel_addr),
                 .disp_job_data     (disp_job_data),

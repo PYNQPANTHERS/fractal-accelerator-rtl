@@ -80,7 +80,7 @@ module cluster #(
     logic                    locked_any_free;
 
     always_ff @(posedge clk or negedge rst_n) begin
-        if (rst_n) begin
+        if (!rst_n) begin
             disp_valid_q_d  <= 1'b0;
             locked_onehot   <= '0;
             locked_idx      <= '0;

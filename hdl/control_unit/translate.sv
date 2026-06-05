@@ -37,8 +37,8 @@ module translate #(
     always_comb begin : coordinate_map
         a_prod = DATA_WIDTH'(a) * scale_factor;
         b_prod = DATA_WIDTH'(b) * scale_factor;
-        z_real = $signed(pan_x) + $signed(a_prod[DATA_WIDTH-1:0]);
-        z_imag = $signed(pan_y) - $signed(b_prod[DATA_WIDTH-1:0]);
+        z_real = $signed(pan_x) + $signed(DATA_WIDTH'(a_prod));
+        z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(b_prod));
     end
 
 endmodule

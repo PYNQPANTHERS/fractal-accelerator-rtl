@@ -21,7 +21,7 @@ module priority_encoder #(
         for (int i = 0; i < BUS_WIDTH; i++) begin
             if (core_bus[i] && !any_valid) begin
                 core_select[i] = 1'b1;
-                core_address   = i[ADDRESS_LEN-1:0];
+                core_address   = ADDRESS_LEN'(i);
                 any_valid      = 1'b1;
             end
         end

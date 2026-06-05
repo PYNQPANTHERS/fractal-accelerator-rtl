@@ -41,14 +41,8 @@ module state_bram (
     logic [7:0] rd_byte_out;
     assign rd_byte_out = post_rst ? 8'h00 : rd_byte;
 
-    always_comb begin
-        case (bit_slot)
-            2'b00: a_rstate = rd_byte_out[1:0];
-            2'b01: a_rstate = rd_byte_out[3:2];
-            2'b10: a_rstate = rd_byte_out[5:4];
-            default: a_rstate = rd_byte_out[7:6];
-        endcase
-    end
+    always_comb
+        a_rstate = rd_byte_out[bit_slot*2 +: 2];
 
     // Read-modify-write
     logic [7:0] cur_byte, new_byte;
@@ -56,12 +50,7 @@ module state_bram (
 
     always_comb begin
         new_byte = cur_byte;
-        case (bit_slot)
-            2'b00: new_byte[1:0] = a_wstate;
-            2'b01: new_byte[3:2] = a_wstate;
-            2'b10: new_byte[5:4] = a_wstate;
-            default: new_byte[7:6] = a_wstate;
-        endcase
+        new_byte[bit_slot*2 +: 2] = a_wstate;
     end
 
     initial begin

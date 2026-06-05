@@ -162,8 +162,9 @@ module tb_control_unit;
         input logic [7:0] col,
         input logic [7:0] colour
     );
-        dut.u_bram_read.u_ds_bram.mem[{row, col}]     = 8'h02; // done bit
-        dut.u_bram_read.u_colour_bram.mem[{row, col}] = colour;
+        // BRAMs are external to control_unit; direct memory init not available here.
+        // dut.u_bram_read.u_ds_bram.mem[{row, col}]     = 8'h02;
+        // dut.u_bram_read.u_colour_bram.mem[{row, col}] = colour;
     endtask
 
     // Mark one pixel as "started" (in-flight elsewhere) — FSM skips it.
@@ -171,7 +172,8 @@ module tb_control_unit;
         input logic [7:0] row,
         input logic [7:0] col
     );
-        dut.u_bram_read.u_ds_bram.mem[{row, col}] = 8'h01; // started bit
+        // BRAMs are external to control_unit; direct memory init not available here.
+        // dut.u_bram_read.u_ds_bram.mem[{row, col}] = 8'h01;
     endtask
 
     // ─────────────────────────────────────────────────────────────────
