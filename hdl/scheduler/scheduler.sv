@@ -65,6 +65,7 @@ logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 logic border_pixel_chooser_done;
+logic border_pixel_valid;
 // Internal counter registers (only used by QUEUE_BOX)
 logic [N-1:0] qbox_x, qbox_y;
 
@@ -74,6 +75,7 @@ border_pixel_chooser #(.N(N)) pixel_generator(
     .top_left_x(top_left_x),       .top_left_y(top_left_y),
     .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
     .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
+    .valid(border_pixel_valid),
     .done_flag(border_pixel_chooser_done));
 
 
@@ -372,7 +374,9 @@ always_comb begin
                     end
                 end
                 else begin
-                    if(!border_pixel_chooser_done)
+                    // border_pixel_valid suppresses the priming cycle so the
+                    // (top_left_x, top_left_y) corner is not pushed twice.
+                    if(!border_pixel_chooser_done && border_pixel_valid)
                         job_queue_push = 1'b1;
                 end
             end
