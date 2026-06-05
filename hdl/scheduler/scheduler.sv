@@ -41,7 +41,7 @@ module scheduler #(
     input logic [COLOUR_WIDTH-1:0]  comparator_colour,
     
     // job queue logic
-    output logic [8:0]              jq_x_coord_to_queue, jq_y_coord_to_queue,
+    output logic [7:0]              jq_x_coord_to_queue, jq_y_coord_to_queue,
     output logic                    job_queue_push,
     output logic                    job_queue_flush,
 
@@ -59,7 +59,7 @@ my_states current_state, next_state;
 
 logic [N-1:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
 logic [1:0] box_id;
-logic [9:0] pixel_width_x, pixel_width_y;
+logic [8:0] pixel_width_x, pixel_width_y;
 logic [3:0] zoom_level;
 logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
@@ -112,7 +112,7 @@ logic stack_push, stack_pop;
 logic stack_empty, stack_full;
 
 // instantiate stack
-scheduler_stack #(.WIDTH(STACK_W), .DEPTH(3)) my_stack (
+scheduler_stack #(.WIDTH(STACK_W), .DEPTH(10)) my_stack (
     .clk(clk), .rst(rst),
     .push(stack_push), .pop(stack_pop),
     .data_in(stack_data_in), .data_out(stack_data_out),
@@ -167,8 +167,8 @@ always_ff @ (posedge clk or posedge rst) begin
             end
 
             WAIT: begin
-                jq_x_coord_to_queue <= x_coord_to_queue;
-                jq_y_coord_to_queue <= y_coord_to_queue;
+                // jq_x_coord_to_queue <= x_coord_to_queue;
+                // jq_y_coord_to_queue <= y_coord_to_queue;
 
                 // if(!comparator_flag_so_far) begin
                 //     job_queue_push <= 0;
@@ -204,7 +204,7 @@ always_ff @ (posedge clk or posedge rst) begin
                 // end else begin
                 //     jq_x_coord_to_queue <= jq_x_coord_to_queue + 1'b1;
                 // end
-                if (qbox_x == top_left_x + pixel_width_x - 2'd2) begin
+                if (qbox_x == top_left_x + pixel_width_x - 1'b1) begin
                     qbox_x <= top_left_x;
                     qbox_y <= qbox_y + 1'b1;
                 end
@@ -244,13 +244,11 @@ always_ff @ (posedge clk or posedge rst) begin
             end
         endcase
     end
-
-
 end
 
 
 // pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
-logic [9:0] normal_width;
+logic [8:0] normal_width;
 
 always_comb begin
 
@@ -260,7 +258,7 @@ always_comb begin
     stack_pop             = 1'b0;
     pixel_generator_reset = 1'b0;
     engine_done           = 1'b0;
-    job_queue_flush           = 1'b0;
+    job_queue_flush       = 1'b0;
     job_queue_push        = 1'b0;
     tt_wr_quad_en         = 1'b0;
     tt_wr_quad_tlx        = '0;
@@ -298,16 +296,16 @@ always_comb begin
     end
 
     // pixel width modifiers (one greater if not a leftmost or topmost box)
-    pixel_width_x = normal_width + ~all_left_quadrants;
-    pixel_width_y = normal_width + ~all_top_quadrants;
+    pixel_width_x = all_left_quadrants ? normal_width : normal_width + 1'b1;
+    pixel_width_y = all_top_quadrants  ? normal_width : normal_width + 1'b1;
 
     // width of a left-column box (box 00 / box 10 equivalent).
     // at zoom≤1, a left box always has all_left=1 → no +1 correction.
     // at zoom>1, inherits popped_all_left from the ancestor chain.
-    if (zoom_level <= 3'd1)
+    if (zoom_level <= '0)
         pixel_width_x_left = normal_width;
     else
-        pixel_width_x_left = normal_width + ~popped_all_left;
+        pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;
 
 
     case(current_state)
@@ -380,42 +378,55 @@ always_comb begin
             end
         end
 
-        
+
 
         QUEUE_BOX_INIT: begin
             next_state = QUEUE_BOX;
-            job_queue_push = 1'b1;
+            job_queue_push = 1'b0;
         end
 
         QUEUE_BOX: begin
             // Keep pushing every cycle until counter reaches end.
             // Termination is detected here combinationally so the
             // last pixel is pushed on the same cycle we exit.
-            job_queue_push = 1'b1;
-            if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 2'd2)) begin
-                next_state = NEXT_BOX;
+            // if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 1'b1) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 1'b1)) begin
+             if ((jq_x_coord_to_queue == top_left_x) && (jq_y_coord_to_queue == top_left_y + pixel_width_y)) begin
+                job_queue_push = 1'b0;
+                if(box_id == 2'b11) begin
+                    next_state = INCREASE_LEVEL;
+                end
+                else begin
+                    next_state = NEXT_BOX;
+                end
             end
             else begin
                 next_state = QUEUE_BOX;
+                job_queue_push = 1'b1;
             end
         end
 
         FILL_BOX: begin
             tt_wr_quad_en     = 1'b1;
-            tt_wr_quad_tlx    = top_left_x;
-            tt_wr_quad_tly    = top_left_y;
-            tt_wr_quad_size   = normal_width;
+            tt_wr_quad_tlx    = all_left_quadrants  ? top_left_x : top_left_x + 1'b1;
+            tt_wr_quad_tly    = all_top_quadrants   ? top_left_y : top_left_y + 1'b1;
+            tt_wr_quad_size   = normal_width - 1'b1;
             tt_wr_quad_colour = comparator_colour;
-            next_state        = NEXT_BOX;
+            if(zoom_level == '0) begin
+                next_state = FINISHED;
+            end
+            else begin
+                if(box_id == 2'b11) begin
+                    next_state = INCREASE_LEVEL;
+                end
+                else begin
+                    next_state = NEXT_BOX;
+                end
+            end
         end
 
         NEXT_BOX: begin
-            if(box_id == 2'b11) begin
-                next_state = INCREASE_LEVEL;
-            end
-            else begin
-                next_state = BEGIN_SEARCH_BOX;
-            end
+            next_state = BEGIN_SEARCH_BOX;
+            job_queue_flush = 1;
         end
 
         // adds to the stack and changes values of top_left etc.
@@ -427,6 +438,7 @@ always_comb begin
                 end
                 next_state = BEGIN_SEARCH_BOX;
             end
+            // $display("DESCEND: box_id=%0b zoom=%0d push=%0b", box_id, zoom_level, stack_push);
         end
 
 

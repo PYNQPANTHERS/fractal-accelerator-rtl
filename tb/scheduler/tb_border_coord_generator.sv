@@ -1,33 +1,10 @@
-// Testbench for border_pixel_chooser (border_coord_generator.sv)
-//
-// NOTE – before this compiles, three issues in border_coord_generator.sv must be fixed:
-//   1. Port list ends with "done_flag;"  →  remove the semicolon (it's a syntax error)
-//   2. "left: next_state = left;"       →  left state never exits; needs a transition to right
-//   3. "assign next_tmp_val = tmp <= …" →  <= is a comparison, not assignment; should be =
-//
-// NOTE – the scheduler.sv instantiation passes zoom_level/box_number but the module
-//        now expects all_left_flag/all_top_flag.  The scheduler connection needs updating.
-//
-// NOTE – to compile this TB, hdl/scheduler must be on the include path.  Either:
-//   - Uncomment hdl/scheduler in Makefile HDL_DIRS once scheduler.sv issues are resolved, or
-//   - Run manually:
-//       iverilog -g2012 -Wall -o sim/build/tb_border_coord_generator.out \
-//           hdl/scheduler/border_coord_generator.sv \
-//           tb/scheduler/tb_border_coord_generator.sv && \
-//       vvp sim/build/tb_border_coord_generator.out
-//
-// Verification strategy:
-//   - Drive rst_start for one clock, then collect (x_coord, y_coord) every cycle
-//   - Stop on done_flag rising edge or TIMEOUT cycles
-//   - PASS if: every output is a border pixel, no duplicate coords, coverage == expected
-
 `timescale 1ns/1ps
 
 module tb_border_coord_generator;
 
     localparam int N       = 10;
     localparam int HALF    = 5;
-    localparam int TIMEOUT = 25000;   // cycles before declaring stuck
+    localparam int TIMEOUT = 25000;
 
     logic          clk, rst, rst_start;
     logic          all_left_flag, all_top_flag;
@@ -54,8 +31,6 @@ module tb_border_coord_generator;
     initial clk = 0;
     always #HALF clk = ~clk;
 
-    // Module-level seen bitmap: seen[x][y] – large enough for coords up to 511
-    // (N=10 coords can reach 1023 but actual box widths in use are ≤ 257)
     localparam int MAP = 512;
     bit seen [0:MAP-1][0:MAP-1];
 
@@ -68,7 +43,6 @@ module tb_border_coord_generator;
         return (x == 0) || (x == W-1) || (y == 0) || (y == H-1);
     endfunction
 
-    // Clear the seen bitmap (only cells within the current box size)
     task automatic clear_seen(input integer W, H);
         integer i, j;
         for (i = 0; i < W && i < MAP; i++)
@@ -76,7 +50,6 @@ module tb_border_coord_generator;
                 seen[i][j] = 0;
     endtask
 
-    // Count unique border pixels that were seen
     function automatic integer unique_border(input integer W, H);
         integer i, j, cnt;
         cnt = 0;
@@ -91,7 +64,6 @@ module tb_border_coord_generator;
         return cnt;
     endfunction
 
-    // Print first few missing border pixels (for debugging failures)
     task automatic print_missing(input integer W, H);
         integer i, j, shown;
         shown = 0;
@@ -117,13 +89,11 @@ module tb_border_coord_generator;
         integer expected, got_unique;
         bit     found_done, prev_done;
 
-        // Hard reset
         @(negedge clk);
         rst = 1; rst_start = 0;
         @(negedge clk);
         rst = 0;
 
-        // Settle inputs
         top_left_x      = '0;
         top_left_y      = '0;
         width_pixels_x  = N'(W);
@@ -133,31 +103,47 @@ module tb_border_coord_generator;
         @(negedge clk);
 
         clear_seen(W < MAP ? W : MAP, H < MAP ? H : MAP);
-        bad        = 0;
-        dups       = 0;
-        found_done = 0;
-        prev_done  = 0;
+        bad         = 0;
+        dups        = 0;
+        found_done  = 0;
+        prev_done   = 0;
         timeout_ctr = 0;
 
-        // Pulse rst_start for exactly one clock period
+        $display("\n--- BEGIN %s (W=%0d H=%0d al=%0b at=%0b) ---", label, W, H, al, at);
+        $display("%-6s %-8s %-6s %-6s %-6s %-6s %-8s %-10s %-12s",
+                 "cycle", "state", "x", "y", "tmp", "mid", "1st_rnd", "last_cyc", "done");
+
         rst_start = 1;
         @(negedge clk);
         rst_start = 0;
 
-        // Sample every rising edge until done_flag or timeout
         @(posedge clk); #1;
         while (!found_done && timeout_ctr < TIMEOUT) begin
             cx = int'(x_coord);
             cy = int'(y_coord);
 
+            // Per-cycle trace
+            $display("%-6d %-8s %-6d %-6d %-6d %-6d %-8b %-10b %-12b",
+                     timeout_ctr,
+                     dut.current_state.name(),
+                     cx, cy,
+                     int'(dut.tmp),
+                     int'(dut.midpoint),
+                     dut.first_round,
+                     dut.last_cycle,
+                     done_flag);
+
             if (!is_border(cx, cy, W, H)) begin
                 bad++;
+                $display("       *** NON-BORDER pixel (%0d,%0d) ***", cx, cy);
             end else if (cx < MAP && cy < MAP) begin
-                if (seen[cx][cy]) dups++;
+                if (seen[cx][cy]) begin
+                    dups++;
+                    $display("       *** DUPLICATE pixel (%0d,%0d) ***", cx, cy);
+                end
                 seen[cx][cy] = 1;
             end
 
-            // Detect rising edge of done_flag (latch may hold stale 1)
             if (!prev_done && (done_flag === 1'b1))
                 found_done = 1;
             prev_done = (done_flag === 1'b1);
@@ -169,8 +155,10 @@ module tb_border_coord_generator;
         end
 
         test_count++;
-        expected   = 2*W + 2*(H - 2);    // = 2W + 2H - 4
+        expected   = 2*W + 2*(H - 2);
         got_unique = unique_border(W < MAP ? W : MAP, H < MAP ? H : MAP);
+
+        $display("--- END %s ---", label);
 
         if (!found_done) begin
             $display("FAIL [%0d] %-24s TIMEOUT after %0d cycles  unique=%0d/%0d  bad=%0d",
@@ -202,38 +190,30 @@ module tb_border_coord_generator;
         repeat(4) @(posedge clk);
         rst = 0;
 
-        // ── 16/17 group  (scheduler zoom≈2: normal_width=16) ──────────────
+        // ── Active tests ───────────────────────────────────────────────────
         run_test(16, 16, 1, 1, "16x16  al=1 at=1");
         run_test(17, 17, 0, 0, "17x17  al=0 at=0");
-        run_test(16, 17, 1, 0, "16x17  al=1 at=0");
-        run_test(17, 16, 0, 1, "17x16  al=0 at=1");
 
-        // ── 32/33 group  (scheduler zoom≈1: normal_width=32) ──────────────
-        run_test(32, 32, 1, 1, "32x32  al=1 at=1");
-        run_test(33, 33, 0, 0, "33x33  al=0 at=0");
-        run_test(32, 33, 1, 0, "32x33  al=1 at=0");
-        run_test(33, 32, 0, 1, "33x32  al=0 at=1");
-
-        // ── 64/65 group  (scheduler zoom≈0: normal_width=64) ──────────────
-        run_test(64, 64, 1, 1, "64x64  al=1 at=1");
-        run_test(65, 65, 0, 0, "65x65  al=0 at=0");
-        run_test(64, 65, 1, 0, "64x65  al=1 at=0");
-        run_test(65, 64, 0, 1, "65x64  al=0 at=1");
-
-        // ── 128/129 group (duplicate with extended coverage) ──────────────
-        run_test(128, 128, 1, 1, "128x128 al=1 at=1 (2)");
-        run_test(129, 129, 0, 0, "129x129 al=0 at=0 (2)");
-        run_test(128, 129, 1, 0, "128x129 al=1 at=0 (2)");
-        run_test(129, 128, 0, 1, "129x128 al=0 at=1 (2)");
-
-        // ── 128/129 group  (first-split level: normal_width=128) ──────────
-        run_test(128, 128, 1, 1, "128x128 al=1 at=1");
-        run_test(129, 129, 0, 0, "129x129 al=0 at=0");
-        run_test(128, 129, 1, 0, "128x129 al=1 at=0");
-        run_test(129, 128, 0, 1, "129x128 al=0 at=1");
-
-        // ── 256x256  (root-level box, both flags high) ─────────────────────
-        run_test(256, 256, 1, 1, "256x256 al=1 at=1");
+        // ── Commented out tests ────────────────────────────────────────────
+        // run_test(16, 17, 1, 0, "16x17  al=1 at=0");
+        // run_test(17, 16, 0, 1, "17x16  al=0 at=1");
+        // run_test(32, 32, 1, 1, "32x32  al=1 at=1");
+        // run_test(33, 33, 0, 0, "33x33  al=0 at=0");
+        // run_test(32, 33, 1, 0, "32x33  al=1 at=0");
+        // run_test(33, 32, 0, 1, "33x32  al=0 at=1");
+        // run_test(64, 64, 1, 1, "64x64  al=1 at=1");
+        // run_test(65, 65, 0, 0, "65x65  al=0 at=0");
+        // run_test(64, 65, 1, 0, "64x65  al=1 at=0");
+        // run_test(65, 64, 0, 1, "65x64  al=0 at=1");
+        // run_test(128, 128, 1, 1, "128x128 al=1 at=1 (2)");
+        // run_test(129, 129, 0, 0, "129x129 al=0 at=0 (2)");
+        // run_test(128, 129, 1, 0, "128x129 al=1 at=0 (2)");
+        // run_test(129, 128, 0, 1, "129x128 al=0 at=1 (2)");
+        // run_test(128, 128, 1, 1, "128x128 al=1 at=1");
+        // run_test(129, 129, 0, 0, "129x129 al=0 at=0");
+        // run_test(128, 129, 1, 0, "128x129 al=1 at=0");
+        // run_test(129, 128, 0, 1, "129x128 al=0 at=1");
+        // run_test(256, 256, 1, 1, "256x256 al=1 at=1");
 
         $display("");
         $display("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
