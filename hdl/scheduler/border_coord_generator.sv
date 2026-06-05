@@ -6,6 +6,7 @@ module border_pixel_chooser #(
     input  logic [N-1:0]  top_left_x,    top_left_y,
     input  logic [8:0]  width_pixels_x, width_pixels_y,
     output logic [N-1:0]  x_coord, y_coord,
+    output logic          valid,
     output logic          done_flag
 );
 
@@ -29,7 +30,7 @@ module border_pixel_chooser #(
 
     // True when the calculate state will execute its halving (else) branch
     logic calc_halving;
-    assign calc_halving = ~((next_tmp_val < (top_left_x + width)) && ~first_round);
+    assign calc_halving = ~((next_tmp_val < width) && ~first_round);
 
     // Detects whether the upcoming halving step is the last subdivision level
     // needing a skip, evaluated per-flag combination:
@@ -47,6 +48,7 @@ module border_pixel_chooser #(
             midpoint      <= '0;
             first_round   <= 1'b1;
             last_cycle    <= 1'b0;
+            valid         <= 1'b0;
             x_coord       <= '0;
             y_coord       <= '0;
             current_state <= IDLE;
@@ -60,12 +62,19 @@ module border_pixel_chooser #(
                                     ? width_pixels_x + 1'b1 : width_pixels_x;
                 first_round   <= 1'b1;
                 last_cycle    <= 1'b0;
+                // The preload below re-emits the first top pixel that the `top`
+                // state produces next cycle, so mark this priming cycle invalid
+                // to avoid a duplicate (top_left_x, top_left_y) push.
+                valid         <= 1'b0;
                 x_coord       <= top_left_x;
                 y_coord       <= top_left_y;
                 current_state <= top;
             end
             else begin
                 current_state <= next_state;
+                // Coordinate emitted next cycle is a real border pixel whenever
+                // the generator is running (any non-IDLE state).
+                valid         <= (current_state != IDLE);
 
                 case (current_state)
 
