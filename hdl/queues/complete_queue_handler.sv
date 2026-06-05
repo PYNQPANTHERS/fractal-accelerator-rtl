@@ -8,21 +8,21 @@ module complete_queue_handler (
 
     // Control unit push interface 
     input  logic        done,
-    input  logic [8:0]  iter_x,
-    input  logic [8:0]  iter_y,
+    input  logic [7:0]  iter_x,
+    input  logic [7:0]  iter_y,
     input  logic [3:0]  iter_colour,
 
     // Comparator pop interface
     input  logic        comp_pop,     // comparator consumes one entry
     output logic        comp_valid,   // queue non-empty
-    output logic [21:0] comp_data,    // { colour[3:0], y[8:0], x[8:0] }
+    output logic [19:0] comp_data,    // { colour[3:0], y[7:0], x[7:0] }
 
     // Debug 
     output logic        full_err      // pulses if push attempted when full
 );
 
     logic        q_push;
-    logic [21:0] q_data_in;
+    logic [19:0] q_data_in;
     logic        q_full, q_empty;
 
     complete_queue u_complete_queue (

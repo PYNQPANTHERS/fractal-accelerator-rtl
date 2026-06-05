@@ -1,459 +1,368 @@
+// Basic Mariani-Silver scheduler for one 256x256 sixteenth.
+// Recursively subdivides into power-of-2 quadrants, flood-fills uniform regions,
+// and queues all pixels at the 16x16 leaf level when the border is non-uniform.
 
-//     // Job queue push
-//     output logic [17:0] sched_coord,
-//     output logic        sched_push,
-//     output logic        job_queue_flush,
-//     input  logic        sched_stall,
+module scheduler (
+    input  logic        clk,
+    input  logic        rst,
+    input  logic        start,
+    output logic        engine_done,
 
-//     // Comparator configuration
-//     output logic        sched_reset,
-//     output logic [8:0]  top_left_x,
-//     output logic [8:0]  top_left_y,
+    // Config from sixteenth_controller (interface required; unused in spatial algorithm)
+    input  logic [4:0]  equation_id,
+    input  logic [31:0] centre_x,
+    input  logic [31:0] centre_y,
+    input  logic [31:0] zoom_level,
+    input  logic [11:0] max_iter,
+    input  logic [9:0]  x_offset,
+    input  logic [9:0]  y_offset,
 
-//     output logic [8:0]  quad_size,
-//     output logic [10:0] expected_count,
+    // Job queue push
+    output logic [17:0] sched_coord,
+    output logic        sched_push,
+    input  logic        sched_stall,
+    output logic        flush,
 
-//     // Comparator results
-//     input  logic        differ, called compartor_flag_so_far
-//     input  logic        complete, called comparator_flag_done
-//     input  logic [5:0]  ref_colour_o, called comparator_colour
+    // Comparator configuration
+    output logic        sched_reset,
+    output logic [8:0]  top_left_x,
+    output logic [8:0]  top_left_y,
+    output logic [8:0]  quad_size,
+    output logic [10:0] expected_count,
 
-//     // Tile done (flood fill path)
-//     output logic [255:0] sched_tile_done_set,
+    // Comparator results
+    input  logic        differ,
+    input  logic        complete,
+    input  logic [5:0]  ref_colour_o,
 
+    // tile_table quad write (flood-fill path)
+    output logic        tt_wr_quad_en,
+    output logic [7:0]  tt_wr_quad_tlx,
+    output logic [7:0]  tt_wr_quad_tly,
+    output logic [7:0]  tt_wr_quad_size,
+    output logic [5:0]  tt_wr_quad_colour,
 
-
-
-module scheduler #(
-    parameter int N = 8, // bit width of 1/16th width
-    parameter int Z = 3,  // max zoom level bit width
-    parameter int COLOUR_WIDTH = 4   // width of colour        DO WE ACTUALLY NEED COLOUR PASSED IN NOW????
-)(
-    // general logic
-    input logic                     clk,
-    input logic                     rst,
-    input logic                     start,
-    output logic                    engine_done,
-
-    // comparator communications
-    input logic                     comparator_flag_so_far,
-    input logic                     comparator_flag_done,
-    input logic [COLOUR_WIDTH-1:0]  comparator_colour,
-    
-    // job queue logic
-    output logic [7:0]              jq_x_coord_to_queue, jq_y_coord_to_queue,
-    output logic                    job_queue_push,
-    output logic                    job_queue_flush,
-
-    // fill box logic
-    output logic                    tt_wr_quad_en,
-    output logic [7:0]              tt_wr_quad_tlx,
-    output logic [7:0]              tt_wr_quad_tly,
-    output logic [7:0]              tt_wr_quad_size,
-    output logic [COLOUR_WIDTH-1:0] tt_wr_quad_colour
+    // Tile-done bits — set combinationally in the FILL state
+    output logic [255:0] sched_tile_done_set
 );
 
+    typedef enum logic [3:0] {
+        IDLE, STARTUP, SEARCH, PUSH_BORDER, WAIT_COMP,
+        FILL, SPLIT, QUEUE_FLUSH, QUEUE_ALL,
+        ADVANCE, ADVANCE2, FINISHED
+    } state_t;
+    state_t state;
 
-typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, FILL_BOX, NEXT_BOX, ADD_TO_STACK, DESCEND_LEVEL, FINISHED} my_states;
-my_states current_state, next_state;
+    // Current box
+    logic [7:0] cur_tlx, cur_tly;
+    logic [2:0] cur_depth;
+    logic [8:0] cur_sz;         // 256 >> cur_depth (power-of-2: 256..16)
 
-logic [N-1:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
-logic [1:0] box_id;
-logic [8:0] pixel_width_x, pixel_width_y;
-logic [3:0] zoom_level;
-logic pixel_generator_reset;
-logic all_left_quadrants, all_top_quadrants;
-logic current_is_left, current_is_top;
-logic border_pixel_chooser_done;
-logic border_pixel_valid;
-// Internal counter registers (only used by QUEUE_BOX)
-logic [N-1:0] qbox_x, qbox_y;
+    logic [7:0] half_sz;
+    assign half_sz = cur_sz[8:1];
 
-border_pixel_chooser #(.N(N)) pixel_generator(
-    .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
-    .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
-    .top_left_x(top_left_x),       .top_left_y(top_left_y),
-    .width_pixels_x(pixel_width_x), .width_pixels_y(pixel_width_y),
-    .x_coord(x_coord_to_queue), .y_coord(y_coord_to_queue),
-    .valid(border_pixel_valid),
-    .done_flag(border_pixel_chooser_done));
+    logic [2:0] child_depth;
+    assign child_depth = cur_depth + 3'd1;
 
+    // Border-walk state
+    logic [1:0] b_phase;        // 0=top 1=right 2=bottom 3=left
+    logic [7:0] b_cnt;          // position counter along current edge
 
+    // SPLIT sub-counter: 0→push BR, 1→push BL, 2→push TR, 3→descend TL
+    logic [1:0] split_cnt;
 
-// STACK LOGIC
-localparam int STACK_W    = 2*N + Z + 2 + 2;
+    // QUEUE_ALL counters (16x16 tile)
+    logic [3:0] qa_x, qa_y;
 
-logic [STACK_W-1:0] stack_data_in;
-logic [STACK_W-1:0] stack_data_out;
+    // Stack: {depth[2:0], tly[7:0], tlx[7:0]} = 19 bits
+    localparam STACK_W = 19;
+    logic [STACK_W-1:0] stack_din, stack_dout;
+    logic stack_push, stack_pop, stack_full, stack_empty;
 
-// pack
-assign stack_data_in = {all_top_quadrants, all_left_quadrants,
-                        (box_id + 1'b1), zoom_level[2:0],
-                        top_left_y, top_left_x};
+    scheduler_stack #(.WIDTH(STACK_W), .DEPTH(16)) u_stack (
+        .clk     (clk),
+        .rst     (rst),
+        .push    (stack_push),
+        .pop     (stack_pop),
+        .data_in (stack_din),
+        .data_out(stack_dout),
+        .full    (stack_full),
+        .empty   (stack_empty)
+    );
 
-// unpack: split via concatenation to avoid parameterized bit-select bounds
-logic [N-1:0] _stk_tlx, _stk_tly;
-logic [Z-1:0] _stk_zoom;
-logic [1:0]   _stk_box;
-logic         _stk_all_left, _stk_all_top;
-assign {_stk_all_top, _stk_all_left, _stk_box, _stk_zoom, _stk_tly, _stk_tlx} = stack_data_out;
+    // Extract bit-selects to wires — Iverilog doesn't support part-selects in always_*
+    logic [7:0] cur_sz_lo;
+    logic [4:0] tiles_per_side;
+    logic [3:0] tile_x0, tile_y0;
+    assign cur_sz_lo      = cur_sz[7:0];
+    assign tiles_per_side = cur_sz[8:4];
+    assign tile_x0        = cur_tlx[7:4];
+    assign tile_y0        = cur_tly[7:4];
 
-logic [N-1:0]   popped_top_left_x, popped_top_left_y;
-logic [3:0]     popped_zoom;
-logic [1:0]     popped_box_id;
-logic           popped_all_left, popped_all_top;
+    // Stack output fields
+    logic [2:0] popped_depth;
+    logic [7:0] popped_tly, popped_tlx;
+    assign popped_depth = stack_dout[18:16];
+    assign popped_tly   = stack_dout[15:8];
+    assign popped_tlx   = stack_dout[7:0];
 
-// popped_all_left/top are registered in always_ff, not continuous assigns
-assign popped_top_left_x  = _stk_tlx;
-assign popped_top_left_y  = _stk_tly;
-assign popped_zoom        = {1'b0, _stk_zoom};
-assign popped_box_id      = _stk_box;
-
-// stack itself
-logic stack_push, stack_pop;
-logic stack_empty, stack_full;
-
-// instantiate stack
-scheduler_stack #(.WIDTH(STACK_W), .DEPTH(10)) my_stack (
-    .clk(clk), .rst(rst),
-    .push(stack_push), .pop(stack_pop),
-    .data_in(stack_data_in), .data_out(stack_data_out),
-    .full(stack_full), .empty(stack_empty)
-);
-
-
-
-
-// a box is a left quadrant if it's 2'b00 or 2'b10 i.e. if box_id[0] == 1'b0
-assign current_is_left = (box_id[0] == 1'b0);
-// a box is a top quadrant if it's 2'b00 or 2'b01 i.e. if box_id[1] == 1'b0
-assign current_is_top = (box_id[1] == 1'b0);
-
-logic stack_out_all_left, stack_out_all_top;
-assign stack_out_all_left = _stk_all_left;
-assign stack_out_all_top  = _stk_all_top;
-
-// pixel width of a notional left-column box at the current zoom/ancestor context.
-// used by the 01→10 x-step in NEXT_BOX, which must subtract w00 (not the right-box width w01).
-logic [8:0] pixel_width_x_left;
-
-
-always_ff @ (posedge clk or posedge rst) begin
-    if(rst) begin
-        current_state   <= IDLE;
-        popped_all_left <= 1'b0;
-        popped_all_top  <= 1'b0;
-    end
-    else begin
-        current_state <= next_state;
-        case(current_state)
-            STARTUP: begin
-                box_id     <= '0;
-                zoom_level <= '0;
-                top_left_x <= '0;
-                top_left_y <= '0;   // could be calculated if needed.
+    // ── Border pixel coordinates (combinational) ───────────────────────────
+    logic [8:0] bpx, bpy;
+    always_comb begin
+        case (b_phase)
+            2'b00: begin  // top row, left-to-right
+                bpx = {1'b0, cur_tlx} + {1'b0, b_cnt};
+                bpy = {1'b0, cur_tly};
             end
-
-            INCREASE_LEVEL_SECOND: begin
-                top_left_x      <= popped_top_left_x;
-                top_left_y      <= popped_top_left_y;
-                zoom_level      <= popped_zoom;
-                box_id          <= popped_box_id;
-                // restore ancestor flags from the stack entry
-                popped_all_left <= stack_out_all_left;
-                popped_all_top  <= stack_out_all_top;
+            2'b01: begin  // right col, top-to-bottom (top-right corner excluded)
+                bpx = {1'b0, cur_tlx} + cur_sz - 9'd1;
+                bpy = {1'b0, cur_tly} + {1'b0, b_cnt};
             end
-
-            BEGIN_SEARCH_BOX: begin
-                
+            2'b10: begin  // bottom row, right-to-left (bottom-right corner excluded)
+                bpx = {1'b0, cur_tlx} + cur_sz - 9'd1 - {1'b0, b_cnt};
+                bpy = {1'b0, cur_tly} + cur_sz - 9'd1;
             end
-
-            WAIT: begin
-                // jq_x_coord_to_queue <= x_coord_to_queue;
-                // jq_y_coord_to_queue <= y_coord_to_queue;
-
-                // if(!comparator_flag_so_far) begin
-                //     job_queue_push <= 0;
-                // end
-                // else if(border_pixel_chooser_done) begin
-                //     job_queue_push <= 0;
-                // end
-                // else begin
-                //     job_queue_push <= 1;
-                // end
-            end
-
-            DESCEND_LEVEL: begin
-                box_id          <= 2'b0;
-                zoom_level      <= zoom_level + 1'b1;
-                // save current all_left/top so the child level can use them
-                popped_all_left <= all_left_quadrants;
-                popped_all_top  <= all_top_quadrants;
-            end
-
-            QUEUE_BOX_INIT: begin
-                // jq_x_coord_to_queue <= top_left_x;
-                // jq_y_coord_to_queue <= top_left_y;
-                // job_queue_push      <= 1'b1;
-                qbox_x <= top_left_x;
-                qbox_y <= top_left_y;
-            end
-
-            QUEUE_BOX: begin
-                // if (jq_x_coord_to_queue == top_left_x + pixel_width_x - 2'd2) begin
-                //     jq_x_coord_to_queue <= top_left_x;
-                //     jq_y_coord_to_queue <= jq_y_coord_to_queue + 1'b1;
-                // end else begin
-                //     jq_x_coord_to_queue <= jq_x_coord_to_queue + 1'b1;
-                // end
-                if (qbox_x == top_left_x + pixel_width_x - 1'b1) begin
-                    qbox_x <= top_left_x;
-                    qbox_y <= qbox_y + 1'b1;
-                end
-                else begin
-                    qbox_x <= qbox_x + 1'b1;
-                end
-            end
-
-            FILL_BOX: begin
-                
-            end
-
-            NEXT_BOX: begin
-                // job_queue_push <= 1'b0;
-                if(box_id != 2'b11) begin
-                    box_id <= box_id + 1'b1;
-                    case(box_id)
-                        2'b00: begin
-                            top_left_x <= top_left_x + pixel_width_x - 1'b1;
-                        end
-
-                        2'b01: begin
-                            top_left_x <= top_left_x - pixel_width_x_left + 1'b1;
-                            top_left_y <= top_left_y + pixel_width_y - 1'b1;    // pixel_width_y here reflects box_id 01 (pre-increment),
-                            // which is the correct top-row height
-                        end
-
-                        2'b10: begin
-                            top_left_x <= top_left_x + pixel_width_x - 1'b1;
-                        end
-                    endcase
-                end
-            end
-
-            FINISHED: begin
-
+            default: begin  // left col, bottom-to-top (both corners excluded)
+                bpx = {1'b0, cur_tlx};
+                bpy = {1'b0, cur_tly} + cur_sz - 9'd1 - {1'b0, b_cnt};
             end
         endcase
     end
-end
 
-
-// pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
-logic [8:0] normal_width;
-
-always_comb begin
-
-    // defaults
-    next_state            = current_state;
-    stack_push            = 1'b0;
-    stack_pop             = 1'b0;
-    pixel_generator_reset = 1'b0;
-    engine_done           = 1'b0;
-    job_queue_flush       = 1'b0;
-    job_queue_push        = 1'b0;
-    tt_wr_quad_en         = 1'b0;
-    tt_wr_quad_tlx        = '0;
-    tt_wr_quad_tly        = '0;
-    tt_wr_quad_size       = '0;
-    tt_wr_quad_colour     = '0;
-
-    // calculate standard width based on zoom level (standard for a left or topmost box)
-    normal_width = 9'd256 >> zoom_level;
-
-    // zoom=0: no pixel-width correction applies (root level)
-    // zoom=1: only the current box position determines left/top status
-    // zoom>1: must also check all ancestors were left/top (stored in popped_all_left/top)
-    if (zoom_level == '0) begin
-        all_left_quadrants = 1'b1;
-        all_top_quadrants  = 1'b1;
-    end else if (zoom_level == 3'd1) begin
-        all_left_quadrants = current_is_left;
-        all_top_quadrants  = current_is_top;
-    end else begin
-        all_left_quadrants = popped_all_left && current_is_left;
-        all_top_quadrants  = popped_all_top  && current_is_top;
+    // Phase done: phase 0-2 end at cnt == sz-1; phase 3 ends at cnt == sz-2
+    logic b_phase_done;
+    always_comb begin
+        case (b_phase)
+            2'b00: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
+            2'b01: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
+            2'b10: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
+            default: b_phase_done = (b_cnt == cur_sz_lo - 8'd2);
+        endcase
     end
 
-    // logic dictating which variable is sent to the queue.
-    if (current_state == WAIT || current_state == QUEUE_BOX_INIT) begin
-        jq_x_coord_to_queue = x_coord_to_queue;  // direct from pixel generator
-        jq_y_coord_to_queue = y_coord_to_queue;
-    end else if (current_state == QUEUE_BOX) begin
-        jq_x_coord_to_queue = qbox_x;            // from counter
-        jq_y_coord_to_queue = qbox_y;
-    end else begin
-        jq_x_coord_to_queue = '0;
-        jq_y_coord_to_queue = '0;
+    // All border pixels have been pushed when phase 3 is done
+    logic b_done;
+    assign b_done = (b_phase == 2'b11) && b_phase_done;
+
+    // ── Comparator configuration (combinational, always reflects current box) ──
+    assign top_left_x     = {1'b0, cur_tlx};
+    assign top_left_y     = {1'b0, cur_tly};
+    assign quad_size      = cur_sz;
+    // 4*sz - 4 border pixels total (corners counted once)
+    assign expected_count = (11'(cur_sz) << 2) - 11'd4;
+
+    // ── Tile-done: combinational, active only during FILL ─────────────────────
+    // tiles_per_side = cur_sz/16 (16,8,4,2,1 for depths 0-4)
+    always_comb begin
+        sched_tile_done_set = '0;
+        if (state == FILL) begin
+            for (int ty = 0; ty < 16; ty++) begin
+                for (int tx = 0; tx < 16; tx++) begin
+                    if (ty < int'(tiles_per_side) && tx < int'(tiles_per_side)) begin
+                        sched_tile_done_set[
+                            (int'(tile_y0) + ty) * 16 +
+                            (int'(tile_x0) + tx)
+                        ] = 1'b1;
+                    end
+                end
+            end
+        end
     end
 
-    // pixel width modifiers (one greater if not a leftmost or topmost box)
-    pixel_width_x = all_left_quadrants ? normal_width : normal_width + 1'b1;
-    pixel_width_y = all_top_quadrants  ? normal_width : normal_width + 1'b1;
+    // ── Sequential FSM ────────────────────────────────────────────────────────
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            state     <= IDLE;
+            cur_tlx   <= '0;
+            cur_tly   <= '0;
+            cur_depth <= '0;
+            cur_sz    <= 9'd256;
+            b_phase   <= '0;
+            b_cnt     <= '0;
+            split_cnt <= '0;
+            qa_x      <= '0;
+            qa_y      <= '0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    if (start) state <= STARTUP;
+                end
 
-    // width of a left-column box (box 00 / box 10 equivalent).
-    // at zoom≤1, a left box always has all_left=1 → no +1 correction.
-    // at zoom>1, inherits popped_all_left from the ancestor chain.
-    if (zoom_level <= '0)
-        pixel_width_x_left = normal_width;
-    else
-        pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;
+                STARTUP: begin
+                    cur_tlx   <= '0;
+                    cur_tly   <= '0;
+                    cur_depth <= '0;
+                    cur_sz    <= 9'd256;
+                    state     <= SEARCH;
+                end
 
+                // Resets comparator and border counter; combinational outputs flush + sched_reset
+                SEARCH: begin
+                    b_phase <= '0;
+                    b_cnt   <= '0;
+                    state   <= PUSH_BORDER;
+                end
 
-    case(current_state)
-
-        IDLE: begin
-            if(start)begin            // TO DO!!!
-                next_state = STARTUP;
-            end
-            else begin
-                next_state = IDLE;
-            end
-        end
-
-        STARTUP: begin
-            next_state = BEGIN_SEARCH_BOX;
-        end
-
-        INCREASE_LEVEL: begin
-            // read from the stack, all boxes in subbox done, increment box number taken from the stack by 1.
-            // If this is greater than 2'b11, INCREASE_LEVEL again.
-            if(stack_empty) begin
-                next_state = FINISHED;
-            end
-            else begin
-                stack_pop  = 1'b1;           // Fire the pop signal
-                next_state = INCREASE_LEVEL_SECOND;
-            end
-            // Note: stack_data_out will be valid on the NEXT clock cycle
-            // when you transition to your next state.
-        end
-
-        INCREASE_LEVEL_SECOND: begin
-            next_state = BEGIN_SEARCH_BOX;
-        end
-
-        // Currently adding 1 to what is saved in the stack, assuming then no need to remember place in stack.
-        // Therefore can skip saving to stack for case box_id = 2'b11
-        BEGIN_SEARCH_BOX: begin
-            // adds coordinate jobs to the queue using the border_pixel_chooser module.
-            // resets pixel generator
-            pixel_generator_reset = 1'b1;
-            next_state = WAIT;
-        end
-
-
-        // wait on flags from the comparator, expecting either, completed the queue, or, flag goes low.
-        // If completed the queue, next_state = FILL_BOX.
-        // Otherwise, if the comparator flag goes low, next_state = ADD_TO_STACK.
-        WAIT: begin
-            if(comparator_flag_done) begin
-                next_state = FILL_BOX;
-                job_queue_push = 1'b0;
-            end
-            else begin
-                if(!comparator_flag_so_far) begin
-                    // splits again
-                    job_queue_push = 1'b0;
-                    if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
-                        next_state = QUEUE_BOX_INIT;
-                    end
-                    else begin
-                        next_state  = DESCEND_LEVEL;
-                        job_queue_flush = 1'b1;
+                PUSH_BORDER: begin
+                    if (differ) begin
+                        split_cnt <= '0;
+                        state     <= (cur_depth == 3'd4) ? QUEUE_FLUSH : SPLIT;
+                    end else if (!sched_stall) begin
+                        if (b_done)
+                            state <= WAIT_COMP;
+                        else if (b_phase_done) begin
+                            b_phase <= b_phase + 2'd1;
+                            b_cnt   <= 8'd1;   // skip corner already emitted by previous phase
+                        end else
+                            b_cnt <= b_cnt + 8'd1;
                     end
                 end
-                else begin
-                    // border_pixel_valid suppresses the priming cycle so the
-                    // (top_left_x, top_left_y) corner is not pushed twice.
-                    if(!border_pixel_chooser_done && border_pixel_valid)
-                        job_queue_push = 1'b1;
+
+                WAIT_COMP: begin
+                    if (differ) begin
+                        split_cnt <= '0;
+                        state     <= (cur_depth == 3'd4) ? QUEUE_FLUSH : SPLIT;
+                    end else if (complete)
+                        state <= FILL;
+                end
+
+                FILL: begin
+                    state <= ADVANCE;
+                end
+
+                // Push children BR, BL, TR onto stack then descend into TL (cur registers unchanged)
+                SPLIT: begin
+                    if (split_cnt == 2'd3) begin
+                        split_cnt <= '0;
+                        cur_depth <= child_depth;
+                        cur_sz    <= {1'b0, half_sz};
+                        state     <= SEARCH;
+                    end else begin
+                        split_cnt <= split_cnt + 2'd1;
+                    end
+                end
+
+                QUEUE_FLUSH: begin
+                    qa_x  <= '0;
+                    qa_y  <= '0;
+                    state <= QUEUE_ALL;
+                end
+
+                QUEUE_ALL: begin
+                    if (!sched_stall) begin
+                        if (qa_x == 4'd15) begin
+                            qa_x <= '0;
+                            if (qa_y == 4'd15)
+                                state <= ADVANCE;
+                            else
+                                qa_y <= qa_y + 4'd1;
+                        end else
+                            qa_x <= qa_x + 4'd1;
+                    end
+                end
+
+                ADVANCE: begin
+                    state <= stack_empty ? FINISHED : ADVANCE2;
+                end
+
+                ADVANCE2: begin
+                    cur_depth <= popped_depth;
+                    cur_tly   <= popped_tly;
+                    cur_tlx   <= popped_tlx;
+                    cur_sz    <= 9'd256 >> popped_depth;
+                    state     <= SEARCH;
+                end
+
+                FINISHED: begin
+                    state <= IDLE;
+                end
+
+                default: state <= IDLE;
+            endcase
+        end
+    end
+
+    // ── Combinational outputs ─────────────────────────────────────────────────
+    always_comb begin
+        sched_push        = 1'b0;
+        sched_coord       = '0;
+        flush             = 1'b0;
+        sched_reset       = 1'b0;
+        engine_done       = 1'b0;
+        tt_wr_quad_en     = 1'b0;
+        tt_wr_quad_tlx    = cur_tlx;
+        tt_wr_quad_tly    = cur_tly;
+        tt_wr_quad_size   = cur_sz_lo - 8'd1;  // inclusive last-pixel offset
+        tt_wr_quad_colour = ref_colour_o;
+        stack_push        = 1'b0;
+        stack_pop         = 1'b0;
+        stack_din         = '0;
+
+        case (state)
+            SEARCH: begin
+                flush       = 1'b1;
+                sched_reset = 1'b1;
+            end
+
+            PUSH_BORDER: begin
+                if (!differ && !sched_stall) begin
+                    sched_push  = 1'b1;
+                    sched_coord = {bpy, bpx};
                 end
             end
-        end
 
-
-
-        QUEUE_BOX_INIT: begin
-            next_state = QUEUE_BOX;
-            job_queue_push = 1'b0;
-        end
-
-        QUEUE_BOX: begin
-            // Keep pushing every cycle until counter reaches end.
-            // Termination is detected here combinationally so the
-            // last pixel is pushed on the same cycle we exit.
-            // if ((jq_x_coord_to_queue == top_left_x + pixel_width_x - 1'b1) && (jq_y_coord_to_queue == top_left_y + pixel_width_y - 1'b1)) begin
-             if ((jq_x_coord_to_queue == top_left_x) && (jq_y_coord_to_queue == top_left_y + pixel_width_y)) begin
-                job_queue_push = 1'b0;
-                if(box_id == 2'b11) begin
-                    next_state = INCREASE_LEVEL;
-                end
-                else begin
-                    next_state = NEXT_BOX;
-                end
+            FILL: begin
+                tt_wr_quad_en     = 1'b1;
+                tt_wr_quad_tlx    = cur_tlx;
+                tt_wr_quad_tly    = cur_tly;
+                tt_wr_quad_size   = cur_sz[7:0] - 8'd1;
+                tt_wr_quad_colour = ref_colour_o;
             end
-            else begin
-                next_state = QUEUE_BOX;
-                job_queue_push = 1'b1;
-            end
-        end
 
-        FILL_BOX: begin
-            tt_wr_quad_en     = 1'b1;
-            tt_wr_quad_tlx    = all_left_quadrants  ? top_left_x : top_left_x + 1'b1;
-            tt_wr_quad_tly    = all_top_quadrants   ? top_left_y : top_left_y + 1'b1;
-            tt_wr_quad_size   = normal_width - 1'b1;
-            tt_wr_quad_colour = comparator_colour;
-            if(zoom_level == '0) begin
-                next_state = FINISHED;
+            SPLIT: begin
+                flush = 1'b1;  // hold flush while pushing children to prevent stale pixels
+                case (split_cnt)
+                    2'd0: begin  // push BR child
+                        stack_push = 1'b1;
+                        stack_din  = {child_depth, cur_tly + half_sz, cur_tlx + half_sz};
+                    end
+                    2'd1: begin  // push BL child
+                        stack_push = 1'b1;
+                        stack_din  = {child_depth, cur_tly + half_sz, cur_tlx};
+                    end
+                    2'd2: begin  // push TR child
+                        stack_push = 1'b1;
+                        stack_din  = {child_depth, cur_tly, cur_tlx + half_sz};
+                    end
+                    default: ;  // cnt==3: descend to TL (handled in sequential block)
+                endcase
             end
-            else begin
-                if(box_id == 2'b11) begin
-                    next_state = INCREASE_LEVEL;
-                end
-                else begin
-                    next_state = NEXT_BOX;
+
+            QUEUE_FLUSH: begin
+                flush = 1'b1;
+            end
+
+            QUEUE_ALL: begin
+                if (!sched_stall) begin
+                    sched_push  = 1'b1;
+                    sched_coord = {
+                        {1'b0, cur_tly} + {5'b0, qa_y},
+                        {1'b0, cur_tlx} + {5'b0, qa_x}
+                    };
                 end
             end
-        end
 
-        NEXT_BOX: begin
-            next_state = BEGIN_SEARCH_BOX;
-            job_queue_flush = 1;
-        end
-
-        // adds to the stack and changes values of top_left etc.
-        DESCEND_LEVEL: begin
-            if(!stack_full) begin
-                if((box_id != 2'b11) && (zoom_level != '0)) begin
-                    // skip pushing the stack if box_id = 2'b11, can simply change values
-                    stack_push = 1'b1;          // fire the push signal
-                end
-                next_state = BEGIN_SEARCH_BOX;
+            ADVANCE: begin
+                if (!stack_empty)
+                    stack_pop = 1'b1;
             end
-            // $display("DESCEND: box_id=%0b zoom=%0d push=%0b", box_id, zoom_level, stack_push);
-        end
 
+            FINISHED: begin
+                engine_done = 1'b1;
+            end
 
-        FINISHED: begin
-            engine_done = 1'b1;
-            next_state  = IDLE;
-            // When the highest level box is completed
-            // increment box id by 1 if not already 2'b11
-            // could mean finished all or just finished a sixteenth.
-            // depends on what we want.
-        end
-    endcase
-end
+            default: ;
+        endcase
+    end
+
 endmodule

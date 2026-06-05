@@ -6,7 +6,7 @@ module job_queue_handler (
     input  logic        rst,
 
     // Scheduler push interface 
-    input  logic [17:0] sched_coord,  // { y[8:0], x[8:0] }
+    input  logic [15:0] sched_coord,  // { y[7:0], x[7:0] }
     input  logic        sched_push,
     output logic        sched_stall,  // asserts when queue full
 
@@ -16,11 +16,11 @@ module job_queue_handler (
     // Control unit pop interface
     input  logic        wants_job,
     output logic        grant,
-    output logic [17:0] coord_out     // { y[8:0], x[8:0] }, valid same cycle as grant
+    output logic [15:0] coord_out     // { y[7:0], x[7:0] }, valid same cycle as grant
 );
 
     logic        q_push, q_pop;
-    logic [17:0] q_data_out;
+    logic [15:0] q_data_out;
     logic        q_full, q_empty;
 
     // Job queue instance
