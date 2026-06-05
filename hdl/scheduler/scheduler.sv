@@ -59,7 +59,7 @@ my_states current_state, next_state;
 
 logic [N-1:0] top_left_x, top_left_y, x_coord_to_queue, y_coord_to_queue;
 logic [1:0] box_id;
-logic [N-1:0] pixel_width_x, pixel_width_y;
+logic [9:0] pixel_width_x, pixel_width_y;
 logic [3:0] zoom_level;
 logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
@@ -250,7 +250,7 @@ end
 
 
 // pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
-logic [8:0] normal_width;
+logic [9:0] normal_width;
 
 always_comb begin
 
@@ -357,13 +357,14 @@ always_comb begin
         // If completed the queue, next_state = FILL_BOX.
         // Otherwise, if the comparator flag goes low, next_state = ADD_TO_STACK.
         WAIT: begin
-            if(comparator_flag_done)
+            if(comparator_flag_done) begin
                 next_state = FILL_BOX;
+                job_queue_push = 1'b0;
+            end
             else begin
                 if(!comparator_flag_so_far) begin
-                    if(!border_pixel_chooser_done)
-                        job_queue_push = 1'b1;
                     // splits again
+                    job_queue_push = 1'b0;
                     if(zoom_level == 3'd4) begin        // need to be sure this max zoom level is correct. Starts at sixteenths = 0.
                         next_state = QUEUE_BOX_INIT;
                     end
@@ -371,6 +372,10 @@ always_comb begin
                         next_state  = DESCEND_LEVEL;
                         job_queue_flush = 1'b1;
                     end
+                end
+                else begin
+                    if(!border_pixel_chooser_done)
+                        job_queue_push = 1'b1;
                 end
             end
         end
