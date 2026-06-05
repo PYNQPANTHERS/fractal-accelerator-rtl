@@ -7,7 +7,7 @@
 //   Frame 1: Burning Ship  fractal_type = 5'b01100  (abs_x, abs_y)
 //   Frame 2: Julia         fractal_type = 5'b10000  c = -0.7 + 0.27i
 //
-//   View window: [-1.0, +1.0] x [-1.0, +1.0]
+//   View window: 2*2
 //     zoom=0 (scale=512), pan_x=-1.0, pan_y≈+1.0, 128 pixels each axis.
 //
 //   Output: frame0_mandelbrot.csv, frame1_burningship.csv, frame2_julia.csv
