@@ -4,7 +4,7 @@ module border_pixel_chooser #(
     input  logic          clk, rst, rst_start,
     input  logic          all_left_flag, all_top_flag,
     input  logic [N-1:0]  top_left_x,    top_left_y,
-    input  logic [N-1:0]  width_pixels_x, width_pixels_y,
+    input  logic [9:0]  width_pixels_x, width_pixels_y,
     output logic [N-1:0]  x_coord, y_coord,
     output logic          done_flag
 );
@@ -14,7 +14,7 @@ module border_pixel_chooser #(
     } side_state_t;
     side_state_t current_state, next_state;
 
-    logic [N-1:0] width;
+    logic [9:0] width;
     logic [N-1:0] midpoint;
     logic [N-1:0] tmp, used_tmp, inverse_tmp, next_tmp_val;
     logic         first_round;
