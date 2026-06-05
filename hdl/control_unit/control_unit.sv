@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // control_unit 
+// expects new opcode with opcode reset
 // ─────────────────────────────────────────────────────────────────────────────
 module control_unit #(
     parameter int DATA_WIDTH    = 17,
@@ -17,9 +18,10 @@ module control_unit #(
     input  logic            opcode_reset,
 
     // frame control
+    input  logic [4:0]      fractal_type,
     input  logic            start_flag,
     input  logic            width_flag,
-    input  logic [4:0]      fractal_type,
+    
     input  logic [4:0]      iteration_count,
     input  logic [DATA_WIDTH-1:0] pan_x,
     input  logic [DATA_WIDTH-1:0] pan_y,
@@ -42,6 +44,13 @@ module control_unit #(
     input  logic                    result_ready,
 
     // external BRAM interface — 1-cycle read latency
+    // split state bram
+    // BRAM word (8-bit): { colour[5:0], done, started }
+    //     bit[0]   = started
+    //     bit[1]   = done
+    //     bits[7:2] = colour[5:0]
+    // a is x
+    // b is y 
     output logic                    bram_rd_en,
     output logic [PIXEL_W-1:0]      bram_pixel_a,
     output logic [PIXEL_W-1:0]      bram_pixel_b,
@@ -50,6 +59,8 @@ module control_unit #(
     output logic [PIXEL_W-1:0]      bram_wr_pixel_a,
     output logic [PIXEL_W-1:0]      bram_wr_pixel_b,
     output logic [7:0]              bram_wr_data
+
+
 );
 
     localparam int Z_WIDTH      = DATA_WIDTH + 1;
