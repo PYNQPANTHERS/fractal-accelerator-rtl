@@ -1,2 +1,7 @@
 *.md
+<<<<<<< HEAD
 *.vcd
+=======
+*.vcd
+*.out
+>>>>>>> cb3e77b (AK gitignore update)
