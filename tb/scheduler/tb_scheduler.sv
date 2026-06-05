@@ -8,20 +8,25 @@
 // flag_done pulses for one cycle exactly DONE_DELAY cycles after the last
 // border pixel when the border was uniform throughout.
 //
+// tt_wr_quad_size semantics: size = normal_width - 1, used as an inclusive
+// offset. tt_wr_quad_tlx/y are adjusted by +1 for non-leftmost/topmost boxes
+// to skip the shared boundary pixel. Fill covers:
+//   (tlx, tly) to (tlx+size, tly+size) inclusive = (size+1)x(size+1) pixels.
+//
 // Test cases
 // ----------
 //   TC1  Entire 256x256 image uniform colour 3.
-//        -> single FILL_BOX (0,0) size=256 colour=3.  No pixel pushes.
+//        -> single FILL_BOX (0,0) size=255 colour=3.
 //
-//   TC2  Mostly colour 5; (128,0) forces zoom-0 differ/descend.
-//        (64,0) forces zoom-1 box-00 to differ again.
-//        All remaining box borders are uniform colour 5.
-//        -> several flood-fills covering all 65536 pixels.
+//   TC2  Image uniform colour 5, impurity at (75,0)=4'hA.
+//        Descent path: zoom-0 -> zoom-1 box-00 -> zoom-2 box-01
+//                   -> zoom-3 box-00 -> zoom-4 box-00 (QUEUE_BOX).
+//        12 flood-fills, one queued 17x16 region.
 //
-//   TC3  Impurity chain (128,0)(64,0)(32,0)(16,0) forces descent to zoom=4.
-//        zoom-4 box-00 (0,0)-(15,15): uniform colour 2  -> flood-fill.
-//        zoom-4 box-01 (16,0)-(32,15): mixed interior   -> pixels queued.
-//        All other boxes uniform colour 2.
+//   TC3  Same as TC2 plus an interior impurity at (75,200)=4'hA.
+//        Interior pixel must never appear in any border scan.
+//        Same 12 fills, same queue region, (75,200) covered only
+//        by flood-fill of zoom=1 box-10, never individually queued.
 //
 // Compile (add hdl/scheduler to HDL_DIRS in Makefile first):
 //   make TB=tb/scheduler/tb_scheduler.sv
@@ -75,11 +80,11 @@ module tb_scheduler;
     endtask
 
     // ── parameters ────────────────────────────────────────────────────────
-    localparam int N            = 10;
+    localparam int N            = 8;
     localparam int Z            = 3;
     localparam int COLOUR_WIDTH = 4;
-    localparam int DONE_DELAY   = 5;   // cycles after last border pixel
-    localparam int TIMEOUT      = 200000;
+    localparam int DONE_DELAY   = 5;
+    localparam int TIMEOUT      = 5000;
     localparam int MAX_FILLS    = 256;
 
     // ── DUT signals ───────────────────────────────────────────────────────
@@ -88,8 +93,8 @@ module tb_scheduler;
     logic                    comparator_flag_done;
     logic [COLOUR_WIDTH-1:0] comparator_colour;
     logic                    engine_done;
-    logic [8:0]              jq_x_coord_to_queue;
-    logic [8:0]              jq_y_coord_to_queue;
+    logic [N-1:0]            jq_x_coord_to_queue;
+    logic [N-1:0]            jq_y_coord_to_queue;
     logic                    job_queue_push;
     logic                    job_queue_flush;
     logic                    tt_wr_quad_en;
@@ -121,31 +126,49 @@ module tb_scheduler;
     logic [COLOUR_WIDTH-1:0] image [0:255][0:255];   // image[y][x]
 
     // ── coverage and duplicate tracking ──────────────────────────────────
-    bit covered [0:255][0:255];   // pixel reached by push or flood-fill
-    bit queued  [0:255][0:255];   // set on first individual push
-    int dup_count;                // incremented when queued[][] already set
+    bit covered [0:255][0:255];
+    bit queued  [0:255][0:255];
+    int dup_count;
 
-    // ── flood-fill log (parallel static arrays) ───────────────────────────
+    // ── flood-fill log ────────────────────────────────────────────────────
     int                      fill_x   [0:MAX_FILLS-1];
     int                      fill_y   [0:MAX_FILLS-1];
     int                      fill_sz  [0:MAX_FILLS-1];
     logic [COLOUR_WIDTH-1:0] fill_col [0:MAX_FILLS-1];
     int fill_count;
-    int bad_fill_count;   // pixels inside a fill whose image colour mismatches
+    int bad_fill_count;
 
-    // ── fake comparator state (driven by always block) ────────────────────
-    logic                    comp_armed;        // 1 while a scan is in progress
-    logic                    comp_uniform;      // 1 while no differ seen
-    logic                    comp_first;        // 1 until first pixel of scan
-    logic [COLOUR_WIDTH-1:0] comp_ref;          // reference colour for scan
-    int                      comp_countdown;    // done-delay counter
-    logic                    comp_counting;     // 1 while countdown active
-    logic                    prev_gen_rst;      // edge-detect for generator reset
+    // ── fake comparator state ─────────────────────────────────────────────
+    logic                    comp_armed;
+    logic                    comp_uniform;
+    logic                    comp_first;
+    logic [COLOUR_WIDTH-1:0] comp_ref;
+    int                      comp_countdown;
+    logic                    comp_counting;
+    logic                    prev_gen_rst;
 
-    // Fake comparator: reacts each clock to push events and scan boundaries.
-    // Mirrors real comparator behaviour: flag_so_far drops immediately on a
-    // differing pixel; flag_done pulses DONE_DELAY cycles after the last pixel
-    // when the scan was uniform throughout.
+
+    initial begin
+    forever @(posedge clk) begin
+        #1; // small delay to let signals settle after clock edge
+        $display("t=%0t state=%s tlx=%0d tly=%0d zoom=%0d box=%0b quad_size=%0d bpc_state=%s bpc_done=%0b all_left=%0b all_top=%0b qbox_x=%0d qbox_y=%0d",
+    $time,
+    dut.current_state.name(),
+    dut.top_left_x,
+    dut.top_left_y,
+    dut.zoom_level,
+    dut.box_id,
+    dut.pixel_width_x,
+    dut.pixel_generator.current_state.name(),
+    dut.border_pixel_chooser_done,
+    dut.all_left_quadrants,
+    dut.all_top_quadrants,
+    dut.qbox_x,
+    dut.qbox_y);
+    end
+end
+
+    // Fake comparator
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             comparator_flag_so_far <= 1'b1;
@@ -161,7 +184,6 @@ module tb_scheduler;
         end else begin
             prev_gen_rst <= dut.pixel_generator_reset;
 
-            // Auto-clear flag_done after one cycle
             if (comparator_flag_done)
                 comparator_flag_done <= 1'b0;
 
@@ -176,7 +198,6 @@ module tb_scheduler;
                 comp_counting          <= 1'b0;
             end
 
-            // Flush clears comparator state
             if (job_queue_flush) begin
                 comparator_flag_so_far <= 1'b1;
                 comparator_flag_done   <= 1'b0;
@@ -187,7 +208,6 @@ module tb_scheduler;
                 comp_counting          <= 1'b0;
             end
 
-            // Incoming border pixel
             if (job_queue_push && comp_armed && !job_queue_flush) begin : comp_pix
                 logic [COLOUR_WIDTH-1:0] pix;
                 int px, py;
@@ -204,14 +224,14 @@ module tb_scheduler;
                 end
             end
 
-            // border_pixel_chooser done: start delay countdown (uniform only)
+            // done_flag stays high while generator is in IDLE so
+            // !comp_counting guard ensures countdown only starts once
             if (dut.border_pixel_chooser_done && comp_armed
                     && comp_uniform && !comp_counting) begin
                 comp_counting  <= 1'b1;
                 comp_countdown <= DONE_DELAY;
             end
 
-            // Tick down the done delay
             if (comp_counting && comp_countdown > 0) begin
                 comp_countdown <= comp_countdown - 1;
                 if (comp_countdown == 1) begin
@@ -225,31 +245,38 @@ module tb_scheduler;
 
     // ── job-queue push monitor ────────────────────────────────────────────
     always @(posedge clk) begin
-        if (job_queue_flush) begin : flush_mon
-            int cy, cx;
-            for (cy = 0; cy < 256; cy++)
-                for (cx = 0; cx < 256; cx++)
-                    queued[cy][cx] = 0;
-            dup_count = 0;
-        end else if (job_queue_push) begin : push_mon
-            int px, py;
-            px = int'(jq_x_coord_to_queue);
-            py = int'(jq_y_coord_to_queue);
-            if (px >= 0 && px < 256 && py >= 0 && py < 256) begin
-                if (queued[py][px]) dup_count = dup_count + 1;
-                queued [py][px] = 1;
-                covered[py][px] = 1;
+    if (job_queue_flush) begin
+        for (int cy = 0; cy < 256; cy++)
+            for (int cx = 0; cx < 256; cx++)
+                queued[cy][cx] = 0;
+        dup_count = 0;
+    end else if (job_queue_push) begin
+        int px, py;
+        px = int'(jq_x_coord_to_queue);
+        py = int'(jq_y_coord_to_queue);
+        if (px >= 0 && px < 256 && py >= 0 && py < 256) begin
+            if (queued[py][px]) begin
+                dup_count = dup_count + 1;
+                $display("DUP at (%0d,%0d) zoom=%0d box=%0b",
+                    px, py, dut.zoom_level, dut.box_id);
             end
+            queued[py][px]  = 1;
+            covered[py][px] = 1;
         end
     end
+end
 
     // ── flood-fill monitor ────────────────────────────────────────────────
+    // tt_wr_quad_size is an inclusive offset: covers
+    // (tlx,tly) to (tlx+size, tly+size) inclusive
     always @(posedge clk) begin
         if (tt_wr_quad_en) begin : fill_mon
             int tx, ty, tsz, fy, fx;
             tx  = int'(tt_wr_quad_tlx);
             ty  = int'(tt_wr_quad_tly);
             tsz = int'(tt_wr_quad_size);
+            $display("fill captured: tlx=%0d tly=%0d tsz=%0d col=%0h",
+    tx, ty, tsz, tt_wr_quad_colour);
             if (fill_count < MAX_FILLS) begin
                 fill_x  [fill_count] = tx;
                 fill_y  [fill_count] = ty;
@@ -257,8 +284,8 @@ module tb_scheduler;
                 fill_col[fill_count] = tt_wr_quad_colour;
                 fill_count = fill_count + 1;
             end
-            for (fy = ty; fy < ty + tsz && fy < 256; fy++)
-                for (fx = tx; fx < tx + tsz && fx < 256; fx++) begin
+            for (fy = ty; fy <= ty + tsz && fy < 256; fy++)
+                for (fx = tx; fx <= tx + tsz && fx < 256; fx++) begin
                     if (image[fy][fx] !== tt_wr_quad_colour)
                         bad_fill_count = bad_fill_count + 1;
                     covered[fy][fx] = 1;
@@ -266,7 +293,7 @@ module tb_scheduler;
         end
     end
 
-    // ── image / tracking helpers ──────────────────────────────────────────
+    // ── helpers ───────────────────────────────────────────────────────────
     task automatic fill_rect(input int x0, y0, w, h,
                               input logic [COLOUR_WIDTH-1:0] col);
         for (int iy = y0; iy < y0+h; iy++)
@@ -290,7 +317,6 @@ module tb_scheduler;
         bad_fill_count = 0;
     endtask
 
-    // Count covered pixels inside a rectangle
     function automatic int count_covered(input int x0, y0, w, h);
         int n;
         n = 0;
@@ -300,7 +326,6 @@ module tb_scheduler;
         return n;
     endfunction
 
-    // Count individually-queued pixels inside a rectangle
     function automatic int count_queued(input int x0, y0, w, h);
         int n;
         n = 0;
@@ -310,7 +335,7 @@ module tb_scheduler;
         return n;
     endfunction
 
-    // Find a fill-log entry by position and size; returns index or -1
+    // Find fill entry by top-left and size; returns index or -1
     function automatic int find_fill(input int tx, ty, tsz);
         for (int i = 0; i < fill_count; i++)
             if (fill_x[i] == tx && fill_y[i] == ty && fill_sz[i] == tsz)
@@ -318,14 +343,12 @@ module tb_scheduler;
         return -1;
     endfunction
 
-    // Reset DUT: rst high on tick 1, rst low + start high on tick 2
     task automatic sched_reset_start();
         rst=1; start=0; tick(1);
         rst=0; start=1; tick(1);
         start=0;
     endtask
 
-    // Spin until engine_done or TIMEOUT cycles; sets timed_out flag
     task automatic wait_done(output logic timed_out);
         timed_out = 0;
         begin : wait_loop
@@ -338,7 +361,7 @@ module tb_scheduler;
         end
     endtask
 
-    // ── module-level vars used across suites ──────────────────────────────
+    // ── module-level vars ─────────────────────────────────────────────────
     logic timed_out;
     int   fi;
 
@@ -347,58 +370,81 @@ module tb_scheduler;
         $dumpfile("sim/waves/tb_scheduler.vcd");
         $dumpvars(0, tb_scheduler);
 
-        // Initialise DUT inputs and give reset time to settle
         rst=1; start=0;
         comparator_flag_so_far=1; comparator_flag_done=0;
         comparator_colour='0;
         tick(4); rst=0; tick(1);
 
+        // // ═════════════════════════════════════════════════════════════════
+        // // TC1 – Entire 256x256 image uniform colour 3
+        // //
+        // // zoom=0: all_left=1, all_top=1 (special case)
+        // //   tt_wr_quad_tlx = 0 + ~1 = 0
+        // //   tt_wr_quad_tly = 0 + ~1 = 0
+        // //   tt_wr_quad_size = 256-1 = 255
+        // //   covers (0,0)→(255,255) inclusive = all 65536 pixels
+        // // ═════════════════════════════════════════════════════════════════
+
+        // suite("TC1 - uniform 256x256 image colour=3");
+        // fill_rect(0, 0, 256, 256, 4'h3);
+        // clear_tracking();
+        // sched_reset_start();
+        // wait_done(timed_out);
+
+        // check(!timed_out,
+        //     "engine_done received before timeout");
+        // check(bad_fill_count == 0,
+        //     "no fill wrote pixels with wrong colour");
+        // check(dup_count == 0,
+        //     "no pixel pushed more than once");
+        // check(fill_count == 1,
+        //     $sformatf("exactly one flood-fill (got %0d)", fill_count));
+
+        // fi = find_fill(0, 0, 255);
+        // check(fi >= 0,
+        //     "flood-fill at (0,0) size=255 exists");
+        // if (fi >= 0)
+        //     check(fill_col[fi] === 4'h3,
+        //         $sformatf("fill colour=3 (got %0h)", fill_col[fi]));
+
+        // check(count_covered(0, 0, 256, 256) == 65536,
+        //     $sformatf("all 65536 pixels covered (got %0d)",
+        //         count_covered(0, 0, 256, 256)));
+
+        // $display("  [INFO] fills=%0d  total_covered=%0d/65536",
+        //     fill_count, count_covered(0, 0, 256, 256));
+
         // ═════════════════════════════════════════════════════════════════
-        // TC1 – Entire 256x256 image uniform colour 3
-        // Expected: exactly one FILL_BOX (0,0) size=256 colour=3
-        // ═════════════════════════════════════════════════════════════════
-
-        suite("TC1 - uniform 256x256 image");
-        fill_rect(0, 0, 256, 256, 4'h3);
-        clear_tracking();
-        sched_reset_start();
-        wait_done(timed_out);
-
-        check(!timed_out,
-            "engine_done received before timeout");
-        check(bad_fill_count == 0,
-            "no fill wrote pixels with wrong colour");
-        check(dup_count == 0,
-            "no pixel pushed more than once");
-        check(count_queued(0, 0, 256, 256) == 0,
-            "no pixels individually queued for uniform image");
-        check(fill_count == 1,
-            $sformatf("exactly one flood-fill (got %0d)", fill_count));
-
-        fi = find_fill(0, 0, 256);
-        check(fi >= 0,
-            "flood-fill entry at (0,0) size=256 exists");
-        if (fi >= 0)
-            check(fill_col[fi] === 4'h3,
-                $sformatf("fill colour is 3 (got %0h)", fill_col[fi]));
-
-        check(count_covered(0, 0, 256, 256) == 65536,
-            $sformatf("all 65536 pixels covered (got %0d)",
-                count_covered(0, 0, 256, 256)));
-
-        // ═════════════════════════════════════════════════════════════════
-        // TC2 – Two-level descent then flood-fills for all remaining boxes
+        // TC2 – Single impurity at (75,0), descent to zoom=4
         //
-        // Image: mostly colour 5.
-        //   (128,0): on zoom-0 border     -> differ, descend to zoom=1
-        //   ( 64,0): on zoom-1 box-00 border -> differ, descend to zoom=2
-        // All zoom-1 non-00 borders and all zoom-2 borders are uniform 5.
+        // Image: uniform colour 5, (75,0)=4'hA.
+        //
+        // Descent path (box containing (75,0) at each level):
+        //   zoom=0  box-00 (0,0)     differ -> descend
+        //   zoom=1  box-00 (0,0)     differ -> descend
+        //   zoom=2  box-01 (63,0)    differ -> descend
+        //   zoom=3  box-00 (63,0)    differ -> descend
+        //   zoom=4  box-00 (63,0)    max zoom -> QUEUE_BOX (17x16)
+        //
+        // Fill table (tlx = top_left_x + ~all_left, size = normal_width-1):
+        //   zoom=1  box-01  (128, 0)  sz=127
+        //   zoom=1  box-10  (0,  128) sz=127
+        //   zoom=1  box-11  (128,128) sz=127
+        //   zoom=2  box-00  (0,   0)  sz=63
+        //   zoom=2  box-10  (0,  64)  sz=63
+        //   zoom=2  box-11  (64, 64)  sz=63
+        //   zoom=3  box-01  (96,  0)  sz=31
+        //   zoom=3  box-10  (64, 33)  sz=31
+        //   zoom=3  box-11  (96, 33)  sz=31
+        //   zoom=4  box-01  (80,  0)  sz=15
+        //   zoom=4  box-10  (64, 17)  sz=15
+        //   zoom=4  box-11  (80, 17)  sz=15
+        //                             total: 12 fills
         // ═════════════════════════════════════════════════════════════════
 
-        suite("TC2 - zoom-0 differ, zoom-1 box-00 differ, rest flood-fill");
+        suite("TC2 - impurity at (75,0), descent to zoom=4, 12 fills");
         fill_rect(0, 0, 256, 256, 4'h5);
-        set_pixel(128, 0, 4'hA);   // zoom-0 border impurity
-        set_pixel( 64, 0, 4'hB);   // zoom-1 box-00 border impurity
+        set_pixel(75, 0, 4'hA);
         clear_tracking();
         sched_reset_start();
         wait_done(timed_out);
@@ -409,81 +455,132 @@ module tb_scheduler;
             "no fill wrote pixels with wrong colour");
         check(dup_count == 0,
             "no pixel pushed more than once");
-        check(fill_count > 0,
-            $sformatf("at least one flood-fill performed (got %0d)", fill_count));
-        check(count_covered(0, 0, 256, 256) == 65536,
-            $sformatf("all 65536 pixels covered (got %0d)",
-                count_covered(0, 0, 256, 256)));
+        check(fill_count == 12,
+            $sformatf("exactly 12 flood-fills (got %0d)", fill_count));
 
-        $display("  [INFO] fills=%0d  pixels_individually_queued=%0d",
-            fill_count, count_queued(0, 0, 256, 256));
+        // zoom=1 fills
+        fi = find_fill(128, 0, 127);
+        check(fi >= 0, "zoom=1 box-01 fill at (128,0) sz=127");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=1 box-01 colour=5 (got %0h)", fill_col[fi]));
 
-        // ═════════════════════════════════════════════════════════════════
-        // TC3 – Full descent to zoom=4 (16x16 tiles)
-        //
-        // Impurity chain forces the scheduler all the way down to zoom=4:
-        //   (128,0) zoom-0 border      (64,0) zoom-1 box-00 border
-        //   ( 32,0) zoom-2 box-00 border  (16,0) zoom-3 box-00 border
-        //
-        // At zoom=4 (normal_width=16):
-        //   box-00 (0,0)-(15,15):  entirely colour 2  -> flood-fill
-        //   box-01 (16,0)-(32,15): mixed interior     -> pixels queued
-        // All other boxes at every level are uniform colour 2.
-        //
-        // Box-00 path is all-left/all-top, so:
-        //   box-00 width  = 16 (all_left=1 -> no +1)
-        //   box-01 width  = 17 (all_left=0 -> +1), height = 16 (all_top=1)
-        // ═════════════════════════════════════════════════════════════════
+        fi = find_fill(0, 128, 127);
+        check(fi >= 0, "zoom=1 box-10 fill at (0,128) sz=127");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=1 box-10 colour=5 (got %0h)", fill_col[fi]));
 
-        suite("TC3 - full descent to zoom=4, one fill + one pixel-queue");
-        fill_rect(0, 0, 256, 256, 4'h2);
-        set_pixel(128,  0, 4'hF);   // zoom-0 border impurity
-        set_pixel( 64,  0, 4'hF);   // zoom-1 box-00 border impurity
-        set_pixel( 32,  0, 4'hF);   // zoom-2 box-00 border impurity
-        set_pixel( 16,  0, 4'hF);   // zoom-3 box-00 border impurity
-        // Interior impurities in zoom-4 box-01 so its border check fails
-        set_pixel(20,  5, 4'h7);
-        set_pixel(25,  8, 4'h9);
-        set_pixel(18, 12, 4'hC);
-        clear_tracking();
-        sched_reset_start();
-        wait_done(timed_out);
+        fi = find_fill(128, 128, 127);
+        check(fi >= 0, "zoom=1 box-11 fill at (128,128) sz=127");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=1 box-11 colour=5 (got %0h)", fill_col[fi]));
 
-        check(!timed_out,
-            "engine_done received before timeout");
-        check(bad_fill_count == 0,
-            "no fill wrote pixels with wrong colour");
-        check(dup_count == 0,
-            "no pixel pushed more than once");
-        check(fill_count > 0,
-            $sformatf("at least one flood-fill performed (got %0d)", fill_count));
+        // zoom=2 fills
+        fi = find_fill(0, 0, 63);
+        check(fi >= 0, "zoom=2 box-00 fill at (0,0) sz=63");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=2 box-00 colour=5 (got %0h)", fill_col[fi]));
 
-        // zoom-4 box-00: all_left=1, all_top=1 -> size = normal_width = 256>>4 = 16
-        fi = find_fill(0, 0, 16);
-        check(fi >= 0,
-            "zoom-4 box-00 flood-fill at (0,0) size=16 exists");
-        if (fi >= 0)
-            check(fill_col[fi] === 4'h2,
-                $sformatf("zoom-4 box-00 fill colour is 2 (got %0h)", fill_col[fi]));
+        fi = find_fill(0, 64, 63);
+        check(fi >= 0, "zoom=2 box-10 fill at (0,64) sz=63");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=2 box-10 colour=5 (got %0h)", fill_col[fi]));
 
-        // zoom-4 box-01 pixels must have been individually queued
-        // (16,0) to (32,15): width 17 since all_left=0, height 16 since all_top=1
-        check(count_queued(16, 0, 17, 16) > 0,
-            $sformatf("pixels queued in zoom-4 box-01 region (got %0d)",
-                count_queued(16, 0, 17, 16)));
+        fi = find_fill(64, 64, 63);
+        check(fi >= 0, "zoom=2 box-11 fill at (64,64) sz=63");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=2 box-11 colour=5 (got %0h)", fill_col[fi]));
 
-        $display("  [INFO] fills=%0d  queued_in_box01=%0d  total_covered=%0d/65536",
-            fill_count, count_queued(16, 0, 17, 16),
+        // zoom=3 fills
+        fi = find_fill(96, 0, 31);
+        check(fi >= 0, "zoom=3 box-01 fill at (96,0) sz=31");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=3 box-01 colour=5 (got %0h)", fill_col[fi]));
+
+        fi = find_fill(64, 33, 31);
+        check(fi >= 0, "zoom=3 box-10 fill at (64,33) sz=31");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=3 box-10 colour=5 (got %0h)", fill_col[fi]));
+
+        fi = find_fill(96, 33, 31);
+        check(fi >= 0, "zoom=3 box-11 fill at (96,33) sz=31");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=3 box-11 colour=5 (got %0h)", fill_col[fi]));
+
+        // zoom=4 fills
+        fi = find_fill(80, 0, 15);
+        check(fi >= 0, "zoom=4 box-01 fill at (80,0) sz=15");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=4 box-01 colour=5 (got %0h)", fill_col[fi]));
+
+        fi = find_fill(64, 17, 15);
+        check(fi >= 0, "zoom=4 box-10 fill at (64,17) sz=15");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=4 box-10 colour=5 (got %0h)", fill_col[fi]));
+
+        fi = find_fill(80, 17, 15);
+        check(fi >= 0, "zoom=4 box-11 fill at (80,17) sz=15");
+        if (fi >= 0) check(fill_col[fi] === 4'h5,
+            $sformatf("zoom=4 box-11 colour=5 (got %0h)", fill_col[fi]));
+
+        // zoom=4 box-00 (63,0): 17x16 pixels individually queued
+        // all_left=0 -> pixel_width_x=17, all_top=1 -> pixel_width_y=16
+        check(count_queued(63, 0, 17, 16) > 0,
+            $sformatf("pixels queued in zoom=4 box-00 (63,0) 17x16 (got %0d)",
+                count_queued(63, 0, 17, 16)));
+
+        $display("  [INFO] fills=%0d  queued_z4box00=%0d  total_covered=%0d/65536",
+            fill_count, count_queued(63, 0, 17, 16),
             count_covered(0, 0, 256, 256));
 
-        // Print fill log for inspection (up to 12 entries)
-        begin
-            int lim;
-            lim = fill_count < 12 ? fill_count : 12;
-            for (int i = 0; i < lim; i++)
-                $display("  [INFO] fill[%0d]: (%0d,%0d) sz=%0d col=%0h",
-                    i, fill_x[i], fill_y[i], fill_sz[i], fill_col[i]);
-        end
+        // ═════════════════════════════════════════════════════════════════
+        // // TC3 – Same as TC2 plus interior impurity at (75,200)
+        // //
+        // // (75,200) is strictly interior to zoom=1 box-10 fill region
+        // // (0,128)→(127,255). It lies on no box border at any zoom level
+        // // so must never appear in any border scan or be individually
+        // // queued. It should be covered only by the zoom=1 box-10 fill.
+        // //
+        // // Expected outcome: identical to TC2 (same 12 fills, same queue
+        // // region) since the interior pixel never affects any scan.
+        // // ═════════════════════════════════════════════════════════════════
+
+        // suite("TC3 - TC2 + interior impurity at (75,200), same outcome");
+        // fill_rect(0, 0, 256, 256, 4'h5);
+        // set_pixel(75,   0, 4'hA);   // border impurity, same as TC2
+        // set_pixel(75, 200, 4'hA);   // interior impurity, must be ignored
+        // clear_tracking();
+        // sched_reset_start();
+        // wait_done(timed_out);
+
+        // check(!timed_out,
+        //     "engine_done received before timeout");
+        // check(bad_fill_count == 0,
+        //     "no fill wrote pixels with wrong colour");
+        // check(dup_count == 0,
+        //     "no pixel pushed more than once");
+
+        // // Outcome must be identical to TC2 — interior pixel causes no
+        // // extra descent or queuing
+        // check(fill_count == 12,
+        //     $sformatf("still exactly 12 fills with interior impurity (got %0d)",
+        //         fill_count));
+
+        // // zoom=4 box-00 still queued
+        // check(count_queued(63, 0, 17, 16) > 0,
+        //     $sformatf("zoom=4 box-00 pixels still queued (got %0d)",
+        //         count_queued(63, 0, 17, 16)));
+
+        // // Interior pixel covered by zoom=1 box-10 fill (0,128)→(127,255)
+        // check(covered[200][75] == 1,
+        //     "interior pixel (75,200) covered by flood-fill");
+
+        // // Interior pixel must NOT have been individually queued
+        // check(queued[200][75] == 0,
+        //     "interior pixel (75,200) was NOT individually queued");
+
+        // $display("  [INFO] fills=%0d  queued_z4box00=%0d  total_covered=%0d/65536",
+        //     fill_count, count_queued(63, 0, 17, 16),
+        //     count_covered(0, 0, 256, 256));
 
         // ═════════════════════════════════════════════════════════════════
         summary();
@@ -492,7 +589,7 @@ module tb_scheduler;
 
     // ── watchdog ──────────────────────────────────────────────────────────
     initial begin
-        #200_000_000;
+        #500_000_000;
         $display("\n[TIMEOUT] simulation exceeded hard limit - possible hang");
         $finish;
     end

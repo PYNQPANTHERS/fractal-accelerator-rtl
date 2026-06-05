@@ -1,6 +1,6 @@
 module scheduler_stack #(
     parameter WIDTH = 32,      // Number of bits to save per level
-    parameter DEPTH = 3       // Max zoom depth (determines pointer width)
+    parameter DEPTH = 10       // Max zoom depth (determines pointer width)
 )(
     input  logic              clk,
     input  logic              rst,
