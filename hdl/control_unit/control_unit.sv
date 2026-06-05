@@ -276,6 +276,9 @@ module control_unit #(
         .wide            (wide),
         .word_idx        (word_idx[1:0]),
         .opcode_en       (opcode_broadcast_en),
+        .load_c_en       (load_c_en),
+        .c_real          (c_x),
+        .c_imag          (c_y),
         .fractal_type    (fractal_type),
         .iteration_count (iteration_count),
         .disp_job_data   (disp_job_data)
@@ -291,7 +294,7 @@ module control_unit #(
                 .LOWEST_MAX_ITER_POW (LOWEST_MAX_ITER_POW)
             ) u_cluster (
                 .clk               (clk),
-                .rst_n             (rst),
+                .rst_n             (~rst),
                 .wide              (wide),
                 .opcode_reset      (opcode_reset_i),
                 .disp_valid        (cluster_disp_valid[g]),

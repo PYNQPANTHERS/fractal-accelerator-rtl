@@ -92,7 +92,7 @@ always_ff @(posedge clk) begin
             case (core_state)
             
             LOADING_OPCODES : begin 
-                                width_mode <= data_in[10];
+                                width_mode <= width'(data_in[10]);
                                 julia_type <= data_in[9];
                                 magnitude_negation_encoding <= data_in[8:5];
                                 max_iteration <= data_in[4:0];

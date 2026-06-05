@@ -154,7 +154,7 @@ module cluster #(
                 .LOWEST_MAX_ITERATION_POWER (LOWEST_MAX_ITER_POW)
             ) u_core (
                 .clk            (clk),
-                .rst            (rst_n),   // core_top expects active-high rst
+                .rst            (~rst_n),  // core_top active-high; rst_n active-low
                 .opcode_reset   (opcode_reset),
                 .live_data      (core_start[g]),
                 .data_in        (disp_job_data_q),
