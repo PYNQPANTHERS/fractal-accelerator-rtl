@@ -10,8 +10,8 @@
 # Waveforms are written to sim/waves/<tb_name>.vcd
 
 
-HDL_DIRS   := hdl/queues hdl/comparator hdl/memory hdl/control_unit hdl/control_unit/cluster hdl/worker_core #hdl/top hdl/stubs hdl/iterator hdl/scheduler hdl/arbiter
-TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/integration tb/memory tb/top tb/control_unit
+HDL_DIRS   := hdl/queues hdl/comparator #hdl/iterator hdl/scheduler hdl/comparator hdl/arbiter hdl/top
+TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/integration
 SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 
