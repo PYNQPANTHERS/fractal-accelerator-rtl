@@ -110,6 +110,7 @@ module tb_cu_render;
         .zoom_level       (zoom_level),
         .c_x              (c_x),
         .c_y              (c_y),
+        .sixteenth        ('0),
         .wants_job        (wants_job),
         .grant            (grant),
         .coord_out        (coord_out),
@@ -188,6 +189,53 @@ module tb_cu_render;
         end
     end
 
+    // ── tile tracking ─────────────────────────────────────────────────────────
+    // tile_done_addr: {col[7:4], row[7:4]} — stable while cu_tile_done_set high
+    localparam int TILE_SZ    = 16;
+    localparam int TILE_COLS  = IMAGE_SIZE / TILE_SZ;   // 16
+    localparam int TILE_COUNT = TILE_COLS * TILE_COLS;  // 256
+
+    wire [7:0] tile_done_addr = {cu_wr_x[7:4], cu_wr_y[7:4]};
+
+    int tile_done_count;
+    int tile_fired   [256];
+
+    always_ff @(posedge clk) begin
+        if (cu_tile_done_set) begin
+            tile_fired[tile_done_addr] <= tile_fired[tile_done_addr] + 1;
+            tile_done_count            <= tile_done_count + 1;
+        end
+    end
+
+    task automatic reset_tile_tracking();
+        tile_done_count = 0;
+        for (int i = 0; i < 256; i++) tile_fired[i] = 0;
+    endtask
+
+    task automatic verify_tiles(input int fid, input string name);
+        int fails;
+        fails = 0;
+        for (int tc = 0; tc < TILE_COLS; tc++) begin
+            for (int tr = 0; tr < TILE_COLS; tr++) begin
+                automatic int ta = (tc << 4) | tr;
+                if (tile_fired[ta] != 1) begin
+                    $display("  FAIL frame%0d tile %02h (col=%0d row=%0d): fired %0d times",
+                             fid, ta, tc, tr, tile_fired[ta]);
+                    fails++;
+                end
+            end
+        end
+        if (tile_done_count != TILE_COUNT) begin
+            $display("  FAIL frame%0d tile_done_count=%0d (expected %0d)",
+                     fid, tile_done_count, TILE_COUNT);
+            fails++;
+        end
+        if (fails == 0)
+            $display("  tile check PASS: %0d/%0d tiles done for %s", TILE_COUNT, TILE_COUNT, name);
+        else
+            $display("  tile check FAIL: %0d error(s) for %s", fails, name);
+    endtask
+
     // ── scheduler model ───────────────────────────────────────────────────────
     // Holds pixel coords {y[7:0], x[7:0]}.
     // Responds on the RISING EDGE of wants_job: grant fires 1 cycle later.
@@ -258,6 +306,7 @@ module tb_cu_render;
         $display("\n══ Frame %0d: %s  %0dx%0d ══", fid, name, IMAGE_SIZE, IMAGE_SIZE);
         collected[fid] = 0;
         active_frame   = fid;
+        reset_tile_tracking();
 
         do_reset();
 
@@ -287,6 +336,7 @@ module tb_cu_render;
         frame_cycles[fid] = (t_end - t_start) / CLK_PERIOD;
         $display("  collected  %0d / %0d  (%0d cycles)",
                  collected[fid], IMAGE_SIZE * IMAGE_SIZE, frame_cycles[fid]);
+        verify_tiles(fid, name);
     endtask
 
     task automatic dump_csv(input string fname, input int fid);
@@ -314,6 +364,8 @@ module tb_cu_render;
         frame_cycles[0] = 0;
         frame_cycles[1] = 0;
         frame_cycles[2] = 0;
+        tile_done_count = 0;
+        for (int i = 0; i < 256; i++) tile_fired[i] = 0;
 
         render_frame(0, 5'b00000, '0,       '0,       "Mandelbrot");
         render_frame(1, 5'b01100, '0,       '0,       "Burning Ship");

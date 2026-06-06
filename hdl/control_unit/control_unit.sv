@@ -108,17 +108,18 @@ module control_unit #(
         .DATA_WIDTH (Z_WIDE),
         .RESOLUTION (PIXEL_W)
     ) cheezy_translator (
-        .pan_x  ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
-        .pan_y  ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
-        .a      (coord_a_q),
-        .b      (coord_b_q),
-        .zoom         (zoom_level),
-        .z_real (z_real),
-        .z_imag (z_imag)
+        .pan_x     ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
+        .pan_y     ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
+        .a         (coord_a_q),
+        .b         (coord_b_q),
+        .zoom      (zoom_level),
+        .sixteenth (sixteenth[3:0]),
+        .z_real    (z_real),
+        .z_imag    (z_imag)
     );
 
     logic bram_miss, bram_started, bram_done;
-    logic [5:0] bram_colour;
+    logic [7:0] bram_colour;
 
     logic                    bram_res_pending;
     logic [PIXEL_ADDR_W-1:0] bram_res_pixel_addr;
@@ -126,7 +127,7 @@ module control_unit #(
 
     assign bram_res_pending    = bram_done;
     assign bram_res_pixel_addr = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
-    assign bram_res_data       = {{(PIXEL_W-6){1'b0}}, bram_colour};
+    assign bram_res_data       = bram_colour;
 
     assign cu_rd_x = coord_a_q[PIXEL_W-1:0];
     assign cu_rd_y = coord_b_q[PIXEL_W-1:0];
@@ -162,7 +163,7 @@ module control_unit #(
         .res_valid    (!res_fifo_empty),
         .res_a        (res_fifo_rd_data[RES_FIFO_DW-1 -: PIXEL_W]),
         .res_b        (res_fifo_rd_data[RES_FIFO_DW-1-PIXEL_W -: PIXEL_W]),
-        .res_colour   (res_fifo_rd_data[5:0]),
+        .res_colour   (res_fifo_rd_data[7:0]),
         .res_rd_en    (res_fifo_rd_en),
         .miss         (bram_miss),
         .started      (bram_started),
@@ -338,23 +339,23 @@ module control_unit #(
 
 
 
-// tile tabling: count pixels per tile; fire cu_tile_done_set when tile reaches 256
-logic [7:0] tile_addr;
+// tile tabling — 8-bit counter per 16×16-pixel tile
+// tile_addr encodes {col[7:4], row[7:4]} from the BRAM write coordinates.
+// cu_tile_done_set pulses when the 256th pixel of a tile is written
+// (counter wraps 0xFF → 0x00). Cleared by rst or opcode_reset (rst_i)
+// so each new frame starts with fresh counters.
+logic [7:0] tile_table_addr;
 logic [7:0] tile_table [0:255];
 
-// tile_addr uses x in upper nibble (iter_x[7:4]) and y in lower nibble (iter_y[7:4])
-// matches colour_bram tile addressing: tile_index = {y[7:4], x[7:4]}
-assign tile_addr = {iter_y[7:4], iter_x[7:4]};
-
-assign cu_tile_done_set = res_fifo_rd_en && (tile_table[tile_addr] == 8'hFF);
-assign cu_tile_done_addr = tile_addr;
+assign tile_table_addr  = {cu_wr_x[7:4], cu_wr_y[7:4]};
+assign cu_tile_done_set = cu_wr_en && (tile_table[tile_table_addr] == 8'hFF);
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (rst_i) begin
         for (int i = 0; i < 256; i++)
             tile_table[i] <= 8'h00;
-    end else if (res_fifo_rd_en) begin
-        tile_table[tile_addr] <= tile_table[tile_addr] + 8'h01;
+    end else if (cu_wr_en) begin
+        tile_table[tile_table_addr] <= tile_table[tile_table_addr] + 8'h01;
     end
 end
 endmodule

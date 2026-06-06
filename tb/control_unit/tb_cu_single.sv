@@ -52,7 +52,7 @@ module tb_cu_single;
         .start_flag(start_flag), .width_flag(width_flag),
         .fractal_type(fractal_type), .max_iter(max_iter),
         .pan_x(pan_x), .pan_y(pan_y), .zoom_level(zoom_level),
-        .c_x(c_x), .c_y(c_y),
+        .c_x(c_x), .c_y(c_y), .sixteenth('0),
         .wants_job(wants_job), .grant(grant), .coord_out(coord_out),
         .done(done), .iter_x(iter_x), .iter_y(iter_y), .iter_colour(iter_colour),
         .cu_rd_x(cu_rd_x), .cu_rd_y(cu_rd_y), .cu_rd_en(cu_rd_en), .cu_rd_data(cu_rd_data),
