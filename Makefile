@@ -109,6 +109,14 @@ cu-debug:
 	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
 	vvp $(OUT) 2>&1 | head -300
 
+.PHONY: cu-single
+cu-single:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR)
+	$(eval TB_NAME := tb_cu_single)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
+	vvp $(OUT)
+
 .PHONY: cu-render
 cu-render:
 	mkdir -p $(SIM_DIR) $(BUILD_DIR)
