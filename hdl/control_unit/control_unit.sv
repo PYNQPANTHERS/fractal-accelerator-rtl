@@ -24,7 +24,7 @@ module control_unit #(
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
     input  logic                    width_flag,
-    input  logic [4:0]              sixteenth,
+    input  logic [3:0]              sixteenth,
 
     // julia c in full precision
     input  logic [DATA_WIDTH-1:0]   c_x,
@@ -34,7 +34,7 @@ module control_unit #(
     // scheduler handshake (pixel coords in)
     output logic                    wants_job,
     input  logic                    grant,
-    input  logic [PIXEL_ADDR_W-1:0]      coord_out,
+    input  logic [PIXEL_ADDR_W-1:0] coord_out,
 
 
     // result output handshake (independent of dispatch-side FSM)
@@ -65,7 +65,7 @@ module control_unit #(
     input  logic [1:0]              sb_rstate,
 
     // tile table complete
-    output logic                    cu_tile_done_set
+    output logic [255:0]            cu_tile_done_set
 
 );
 
@@ -112,7 +112,7 @@ module control_unit #(
         .a         (coord_a_q),
         .b         (coord_b_q),
         .zoom      (zoom_level),
-        .sixteenth (sixteenth[3:0]),
+        .sixteenth (sixteenth),
         .z_real    (z_real),
         .z_imag    (z_imag)
     );
@@ -336,18 +336,17 @@ module control_unit #(
     endgenerate
 
 
-
-
-// tile tabling — 8-bit counter per 16×16-pixel tile
-// tile_addr encodes {col[7:4], row[7:4]} from the BRAM write coordinates.
-// cu_tile_done_set pulses when the 256th pixel of a tile is written
-// (counter wraps 0xFF → 0x00). Cleared by rst or opcode_reset (rst_i)
-// so each new frame starts with fresh counters.
 logic [7:0] tile_table_addr;
 logic [7:0] tile_table [0:255];
 
-assign tile_table_addr  = {cu_wr_x[7:4], cu_wr_y[7:4]};
-assign cu_tile_done_set = cu_wr_en && (tile_table[tile_table_addr] == 8'hFF);
+assign tile_table_addr = {cu_wr_x[7:4], cu_wr_y[7:4]};
+
+genvar i;
+generate
+    for (i = 0; i < 256; i++) begin : tile_done_gen
+        assign cu_tile_done_set[i] = &tile_table[i]; 
+    end
+endgenerate
 
 always_ff @(posedge clk) begin
     if (rst_i) begin
