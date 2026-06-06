@@ -14,7 +14,7 @@ module cluster #(
     localparam int LOCAL_IDX_W         = $clog2(CLUSTER_SIZE)
 ) (
     input  logic                     clk,
-    input  logic                     rst_n,   
+    input  logic                     rst,
 
     input  logic                     opcode_reset,
     input  logic                     wide,
@@ -36,8 +36,8 @@ module cluster #(
     logic [PIXEL_ADDR_W-1:0] disp_pixel_addr_q;
     logic [JOB_DATA_W-1:0]   disp_job_data_q;
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             disp_valid_q      <= 1'b0;
             disp_pixel_addr_q <= '0;
             disp_job_data_q   <= '0;
@@ -68,9 +68,9 @@ module cluster #(
     );
 
     // fixes dispatch and ready signal disparity
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) cluster_wants_job <= 1'b0;
-        else        cluster_wants_job <= local_any_free && !disp_valid_q;
+    always_ff @(posedge clk) begin
+        if (rst) cluster_wants_job <= 1'b0;
+        else     cluster_wants_job <= local_any_free && !disp_valid_q;
     end
 
     // lock the winning core for the entire multi-word dispatch
@@ -79,8 +79,8 @@ module cluster #(
     logic [LOCAL_IDX_W-1:0]  locked_idx;
     logic                    locked_any_free;
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             disp_valid_q_d  <= 1'b0;
             locked_onehot   <= '0;
             locked_idx      <= '0;
@@ -154,7 +154,7 @@ module cluster #(
                 .LOWEST_MAX_ITERATION_POWER (LOWEST_MAX_ITER_POW)
             ) u_core (
                 .clk            (clk),
-                .rst            (~rst_n),  // core_top active-high; rst_n active-low
+                .rst            (rst),
                 .opcode_reset   (opcode_reset),
                 .live_data      (core_start[g]),
                 .data_in        (disp_job_data_q),
@@ -185,7 +185,7 @@ module cluster #(
 
     sync_fifo #(.DW(FIFO_DW), .DEPTH(FIFO_DEPTH)) u_result_fifo (
         .clk    (clk),
-        .rst_n  (rst_n),
+        .rst    (rst),
         .wr_en  (fifo_wr_en),
         .wr_data(fifo_wr_data),
         .full   (fifo_full),

@@ -5,14 +5,17 @@
 //
 //   Frame 0: Mandelbrot    fractal_type = 5'b00000
 //   Frame 1: Burning Ship  fractal_type = 5'b01100  (abs_x, abs_y)
-//   Frame 2: Julia         fractal_type = 5'b10000  c = -0.7 + 0.27i
+//   Frame 2: Julia         fractal_type = 5'b11100  c = -0.7 + 0.27i
 //
-//   View window: 2*2
-//     zoom=0 (scale=512), pan_x=-1.0, pan_y≈+1.0, 128 pixels each axis.
+//   View window: 2x2
+//     zoom=0 (scale=512), pan_x=-1.0, pan_y≈+1.0, 256 pixels each axis.
 //
 //   Output: frame0_mandelbrot.csv, frame1_burningship.csv, frame2_julia.csv
 //     format: col,row,iters  (matches render_frames.py)
 //   Run: python3 hdl/worker_core/render_frames.py --max-iter 128
+//
+//   Results collected via cu_wr_en/cu_wr_x/cu_wr_y/cu_wr_data (colour BRAM
+//   write path), which fires exactly once per computed pixel.
 // ─────────────────────────────────────────────────────────────────────────────
 `timescale 1ns/1ps
 
@@ -23,8 +26,7 @@ module tb_cu_render;
     localparam int CLUSTER_COUNT = 2;
     localparam int CLUSTER_SIZE  = 4;
     localparam int DATA_WIDTH    = 17;
-    localparam int PIXEL_WIDTH   = 9;
-    localparam int PIXEL_ADDR_W  = 16;   // 2 × PIXEL_W
+    localparam int PIXEL_ADDR_W  = 16;
     localparam int JOB_DATA_W    = 18;
     localparam int PIXEL_W       = 8;
     localparam int OPCODE_W      = 5;
@@ -32,18 +34,17 @@ module tb_cu_render;
     localparam time CLK_PERIOD = 10ns;
 
     // ── view ──────────────────────────────────────────────────────────────────
-    // zoom=0 → scale=512 per pixel.  128 pixels × 512 = 65536 ≈ 1.0 span.
-    // pan_x = -1.0 = -65536,  pan_y ≈ +1.0 = 65024
-    // → z_real/imag in [-1.0, +1.0] for pixel indices 0..127
+    // zoom=0 → scale=512/pixel. 256 pixels × 512 = 131072 ≈ 2.0 span.
+    // pan_x = -1.0 = -65536, pan_y ≈ +1.0 = 65024
     localparam logic signed [DATA_WIDTH-1:0] PAN_X = 17'($signed(-65536));
     localparam logic signed [DATA_WIDTH-1:0] PAN_Y = 17'(65024);
     localparam logic [3:0] ZOOM = 4'd0;
 
-    // iteration_count field 5'd1 → 2^(6+1) = 128 iterations (fits in PIXEL_W=8 bits)
-    localparam logic [OPCODE_W-1:0] MAX_ITER_FIELD = 5'd1;
-    localparam int                   MAX_ITER       = 128;
+    // max_iter field 5'd1 → 2^(6+1) = 128 iterations
+    localparam logic [4:0] MAX_ITER_FIELD = 5'd1;
+    localparam int          MAX_ITER       = 128;
 
-    // Julia c = -0.7 + 0.27i in Q2.16
+    // Julia c = -0.7 + 0.27i
     localparam logic signed [DATA_WIDTH-1:0] JULIA_CX = 17'($signed(-45875));
     localparam logic signed [DATA_WIDTH-1:0] JULIA_CY = 17'(17695);
 
@@ -52,25 +53,44 @@ module tb_cu_render;
     logic                    opcode_reset;
     logic                    start_flag;
     logic                    width_flag;
-    logic [OPCODE_W-1:0]     fractal_type;
-    logic [OPCODE_W-1:0]     iteration_count;
+    logic [4:0]              fractal_type;
+    logic [4:0]              max_iter;
     logic [DATA_WIDTH-1:0]   pan_x, pan_y;
-    logic [3:0]              zoom;
+    logic [3:0]              zoom_level;
     logic [DATA_WIDTH-1:0]   c_x, c_y;
 
-    logic                    job_valid;
-    logic [PIXEL_WIDTH-1:0]  job_a, job_b;
-    logic                    job_ready;
+    // scheduler handshake — coord_out packs {y[7:0], x[7:0]}
+    logic                    wants_job;
+    logic                    grant;
+    logic [PIXEL_ADDR_W-1:0] coord_out;
 
-    logic                    result_valid;
-    logic [PIXEL_ADDR_W-1:0] result_pixel_addr;
-    logic [PIXEL_W-1:0]      result_data;
-    logic                    result_ready;
+    // result path
+    logic                    done;
+    logic [PIXEL_W:0]        iter_x;
+    logic [PIXEL_W:0]        iter_y;
+    logic [7:0]              iter_colour;
+
+    // colour BRAM read (driven by control_unit)
+    logic [PIXEL_W-1:0]      cu_rd_x, cu_rd_y;
+    logic                    cu_rd_en;
+    logic [7:0]              cu_rd_data;
+
+    // colour BRAM write (driven by control_unit — one pulse per computed pixel)
+    logic                    cu_wr_en;
+    logic [PIXEL_W-1:0]      cu_wr_x, cu_wr_y;
+    logic [7:0]              cu_wr_data;
+
+    // state BRAM (driven by control_unit)
+    logic [PIXEL_W-1:0]      sb_x, sb_y;
+    logic                    sb_rd, sb_we;
+    logic [1:0]              sb_wstate;
+    logic [1:0]              sb_rstate;
+
+    logic                    cu_tile_done_set;
 
     // ── DUT ──────────────────────────────────────────────────────────────────
     control_unit #(
         .DATA_WIDTH    (DATA_WIDTH),
-        .PIXEL_WIDTH   (PIXEL_WIDTH),
         .CLUSTER_COUNT (CLUSTER_COUNT),
         .CLUSTER_SIZE  (CLUSTER_SIZE),
         .PIXEL_ADDR_W  (PIXEL_ADDR_W),
@@ -78,35 +98,73 @@ module tb_cu_render;
         .PIXEL_W       (PIXEL_W),
         .OPCODE_W      (OPCODE_W)
     ) dut (
-        .clk               (clk),
-        .rst               (rst),
-        .opcode_reset      (opcode_reset),
-        .start_flag        (start_flag),
-        .width_flag        (width_flag),
-        .fractal_type      (fractal_type),
-        .iteration_count   (iteration_count),
-        .pan_x             (pan_x),
-        .pan_y             (pan_y),
-        .zoom              (zoom),
-        .c_x               (c_x),
-        .c_y               (c_y),
-        .job_valid         (job_valid),
-        .job_a             (job_a),
-        .job_b             (job_b),
-        .job_ready         (job_ready),
-        .result_valid      (result_valid),
-        .result_pixel_addr (result_pixel_addr),
-        .result_data       (result_data),
-        .result_ready      (result_ready),
-        .bram_rd_data      (8'h00)
+        .clk              (clk),
+        .rst              (rst),
+        .opcode_reset     (opcode_reset),
+        .start_flag       (start_flag),
+        .width_flag       (width_flag),
+        .fractal_type     (fractal_type),
+        .max_iter         (max_iter),
+        .pan_x            (pan_x),
+        .pan_y            (pan_y),
+        .zoom_level       (zoom_level),
+        .c_x              (c_x),
+        .c_y              (c_y),
+        .wants_job        (wants_job),
+        .grant            (grant),
+        .coord_out        (coord_out),
+        .done             (done),
+        .iter_x           (iter_x),
+        .iter_y           (iter_y),
+        .iter_colour      (iter_colour),
+        .cu_rd_x          (cu_rd_x),
+        .cu_rd_y          (cu_rd_y),
+        .cu_rd_en         (cu_rd_en),
+        .cu_rd_data       (cu_rd_data),
+        .cu_wr_en         (cu_wr_en),
+        .cu_wr_x          (cu_wr_x),
+        .cu_wr_y          (cu_wr_y),
+        .cu_wr_data       (cu_wr_data),
+        .sb_x             (sb_x),
+        .sb_y             (sb_y),
+        .sb_rd            (sb_rd),
+        .sb_we            (sb_we),
+        .sb_wstate        (sb_wstate),
+        .sb_rstate        (sb_rstate),
+        .cu_tile_done_set (cu_tile_done_set)
     );
 
     // ── clock ─────────────────────────────────────────────────────────────────
     initial clk = 0;
     always #(CLK_PERIOD/2) clk = ~clk;
 
+    // ── colour BRAM model ─────────────────────────────────────────────────────
+    logic [7:0] cbram [0:IMAGE_SIZE-1][0:IMAGE_SIZE-1];
+    logic [7:0] cbram_rd_q;
+
+    always_ff @(posedge clk) begin
+        if (cu_rd_en)
+            cbram_rd_q <= cbram[cu_rd_x][cu_rd_y];
+        if (cu_wr_en)
+            cbram[cu_wr_x][cu_wr_y] <= cu_wr_data;
+    end
+    assign cu_rd_data = cbram_rd_q;
+
+    // ── state BRAM model (1-cycle read latency) ───────────────────────────────
+    logic [1:0] sbram [0:IMAGE_SIZE-1][0:IMAGE_SIZE-1];
+    logic [1:0] sbram_rd_q;
+
+    always_ff @(posedge clk) begin
+        if (sb_rd)
+            sbram_rd_q <= sbram[sb_x][sb_y];
+        if (sb_we)
+            sbram[sb_x][sb_y] <= sb_wstate;
+    end
+    assign sb_rstate = sbram_rd_q;
+
     // ── frame buffers ─────────────────────────────────────────────────────────
-    // frame_buf[frame_id][row * IMAGE_SIZE + col]
+    // Results collected via colour BRAM writes (cu_wr_en), which fire exactly
+    // once per computed pixel and carry the full pixel address.
     logic [PIXEL_W-1:0] frame_buf [0:2][0:IMAGE_SIZE*IMAGE_SIZE-1];
     int                 collected [3];
     int                 active_frame;
@@ -120,105 +178,69 @@ module tb_cu_render;
         end
     end
 
-    // always accept results, store by pixel address
-    assign result_ready = 1'b1;
-
     initial begin : collector
-        int row, col;
         forever begin
             @(posedge clk);
-            if (result_valid) begin
-                col = result_pixel_addr[PIXEL_ADDR_W-1:PIXEL_W];
-                row = result_pixel_addr[PIXEL_W-1:0];
-                frame_buf[active_frame][row * IMAGE_SIZE + col] = result_data;
+            if (cu_wr_en) begin
+                frame_buf[active_frame][cu_wr_y * IMAGE_SIZE + cu_wr_x] = cu_wr_data;
                 collected[active_frame]++;
             end
         end
     end
 
+    // ── scheduler model ───────────────────────────────────────────────────────
+    // Holds pixel coords {y[7:0], x[7:0]}.
+    // Responds on the RISING EDGE of wants_job: grant fires 1 cycle later.
+    // Level-based pop would double-consume on the accept cycle because
+    // frame_fsm.job_ready (= wants_job) is still high from the registered
+    // current_state on the same edge that accept fires.
+    logic [PIXEL_ADDR_W-1:0] sched_queue [$];
+    logic wants_job_q;
+
+    always_ff @(posedge clk) begin
+        wants_job_q <= wants_job;
+        grant       <= 0;
+        coord_out   <= '0;
+        if (wants_job && !wants_job_q && sched_queue.size() > 0) begin
+            coord_out <= sched_queue.pop_front();
+            grant     <= 1;
+        end
+    end
+
     // ── helpers ───────────────────────────────────────────────────────────────
     task automatic do_reset();
-        rst             = 1;
-        start_flag      = 0;
-        opcode_reset    = 0;
-        job_valid       = 0;
-        job_a           = '0;
-        job_b           = '0;
-        width_flag      = 0;
-        fractal_type    = '0;
-        iteration_count = '0;
-        pan_x           = PAN_X;
-        pan_y           = PAN_Y;
-        zoom            = ZOOM;
-        c_x             = '0;
-        c_y             = '0;
+        rst          = 1;
+        start_flag   = 0;
+        opcode_reset = 0;
+        width_flag   = 0;
+        fractal_type = '0;
+        max_iter     = '0;
+        pan_x        = PAN_X;
+        pan_y        = PAN_Y;
+        zoom_level   = ZOOM;
+        c_x          = '0;
+        c_y          = '0;
+        sched_queue.delete();
+        for (int i = 0; i < IMAGE_SIZE; i++)
+            for (int j = 0; j < IMAGE_SIZE; j++) begin
+                cbram[i][j] = 8'h00;
+                sbram[i][j] = 2'b00;
+            end
         repeat (4) @(posedge clk);
         rst = 0;
         @(posedge clk);
-    endtask
-
-    task automatic start_frame(
-        input logic [OPCODE_W-1:0]   ftype,
-        input logic [OPCODE_W-1:0]   icount,
-        input logic [DATA_WIDTH-1:0] cx,
-        input logic [DATA_WIDTH-1:0] cy
-    );
-        int c;
-        fractal_type    = ftype;
-        iteration_count = icount;
-        c_x             = cx;
-        c_y             = cy;
-        opcode_reset    = 1;
-        @(posedge clk);
-        opcode_reset    = 0;
-        start_flag      = 1;
-        @(posedge clk);
-        start_flag      = 0;
-        c = 0;
-        do begin
-            @(negedge clk);
-            if (c++ >= 10_000) begin
-                $error("[%0t] start_frame timed out", $time);
-                return;
-            end
-        end while (!job_ready);
-    endtask
-
-    task automatic send_job(
-        input logic [PIXEL_WIDTH-1:0] a,
-        input logic [PIXEL_WIDTH-1:0] b
-    );
-        int c;
-        c         = 0;
-        job_a     = a;
-        job_b     = b;
-        job_valid = 1;
-        do begin
-            @(negedge clk);
-            if (c++ >= 100_000) begin
-                $error("[%0t] send_job TIMEOUT (a=%0d b=%0d)", $time, a, b);
-                job_valid = 0;
-                return;
-            end
-        end while (!job_ready);
-        @(posedge clk);
-        @(negedge clk);
-        job_valid = 0;
-        job_a     = '0;
-        job_b     = '0;
     endtask
 
     task automatic drain(input int fid);
         int timeout, quiet;
         timeout = 0;
         quiet   = 0;
-        // exit when all results are collected AND result pipe is quiet for 10 cycles
-        while ((collected[fid] < IMAGE_SIZE * IMAGE_SIZE || quiet < 10)
+        while ((collected[fid] < IMAGE_SIZE * IMAGE_SIZE || quiet < 20)
                && timeout < 10_000_000) begin
             @(posedge clk);
             timeout++;
-            if (result_valid) quiet = 0;
-            else              quiet = quiet + 1;
+            if (cu_wr_en) quiet = 0;
+            else          quiet = quiet + 1;
         end
         if (collected[fid] < IMAGE_SIZE * IMAGE_SIZE)
             $error("[%0t] drain timeout: got %0d / %0d",
@@ -227,7 +249,7 @@ module tb_cu_render;
 
     task automatic render_frame(
         input int                    fid,
-        input logic [OPCODE_W-1:0]   ftype,
+        input logic [4:0]            ftype,
         input logic [DATA_WIDTH-1:0] cx,
         input logic [DATA_WIDTH-1:0] cy,
         input string                 name
@@ -238,14 +260,27 @@ module tb_cu_render;
         active_frame   = fid;
 
         do_reset();
-        start_frame(ftype, MAX_ITER_FIELD, cx, cy);
 
-        t_start = $time;
+        fractal_type = ftype;
+        max_iter     = MAX_ITER_FIELD;
+        c_x          = cx;
+        c_y          = cy;
+
+        opcode_reset = 1;
+        @(posedge clk);
+        opcode_reset = 0;
+
+        // queue all pixel coords packed as {y[7:0], x[7:0]}
         for (int row = 0; row < IMAGE_SIZE; row++)
             for (int col = 0; col < IMAGE_SIZE; col++)
-                send_job(PIXEL_WIDTH'(col), PIXEL_WIDTH'(row));
+                sched_queue.push_back({PIXEL_W'(row), PIXEL_W'(col)});
 
-        $display("  dispatched %0d pixels, draining...", IMAGE_SIZE * IMAGE_SIZE);
+        t_start    = $time;
+        start_flag = 1;
+        @(posedge clk);
+        start_flag = 0;
+
+        $display("  queued %0d pixels, draining...", IMAGE_SIZE * IMAGE_SIZE);
         drain(fid);
         t_end = $time;
 

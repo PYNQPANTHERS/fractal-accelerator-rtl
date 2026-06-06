@@ -15,6 +15,13 @@ TB_DIRS    := tb/queues tb/iterator tb/scheduler tb/comparator tb/arbiter tb/int
 SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 
+# Sources for control_unit testbenches (isolated — CU has declaration quirks)
+_CU_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv), \
+                               $(wildcard hdl/worker_core/*.sv))
+CU_HDL_SRCS  := $(wildcard hdl/control_unit/*.sv) \
+                $(wildcard hdl/control_unit/cluster/*.sv) \
+                $(_CU_WC_SRCS)
+
 # Collect all HDL sources automatically
 _TB_IN_HDL := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/tb_*.sv))
 HDL_SRCS   := $(filter-out $(_TB_IN_HDL),$(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/*.sv)))
@@ -92,6 +99,32 @@ $(SIM_DIR):
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+# Render three fractal frames through control_unit → CSVs
+.PHONY: cu-debug
+cu-debug:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR)
+	$(eval TB_NAME := tb_cu_debug)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
+	vvp $(OUT) 2>&1 | head -300
+
+.PHONY: cu-render
+cu-render:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR)
+	$(eval TB_NAME := tb_cu_render)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Compiling: tb/control_unit/$(TB_NAME).sv"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Running:   $(TB_NAME)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	vvp $(OUT)
+	@echo ""
 
 # Clean
 .PHONY: clean

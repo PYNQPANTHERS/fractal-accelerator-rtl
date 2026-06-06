@@ -1,13 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
+
 // bram_read_write
 //   Arbitrates BRAM access between the FSM read path and the result write
-//   path using a round-robin scheme so dont get stuck draining or allocating.
-//
-//   BRAM word (8-bit): { colour[5:0], done, started }
-//     bit[0]   = started
-//     bit[1]   = done
-//     bits[7:2] = colour[5:0]
-// ─────────────────────────────────────────────────────────────────────────────
+
 module bram_read_write #(
     parameter int PIXEL_W = 8
 ) (
@@ -19,13 +13,21 @@ module bram_read_write #(
     input  logic [PIXEL_W-1:0]  a,
     input  logic [PIXEL_W-1:0]  b,
 
-    // BRAM interface — 8-bit data: {colour[5:0], done, started}
+    // colour BRAM interface — 8-bit data
     output logic                bram_rd_en,
     input  logic [7:0]          bram_rd_data,
     output logic                bram_wr_en,
     output logic [PIXEL_W-1:0]  bram_wr_a,
     output logic [PIXEL_W-1:0]  bram_wr_b,
     output logic [7:0]          bram_wr_data,
+
+    // state BRAM interface — 2-bit: {done, start}
+    output logic                sb_rd,
+    output logic                sb_we,
+    output logic [PIXEL_W-1:0]  sb_x,        // muxed read/write address
+    output logic [PIXEL_W-1:0]  sb_y,
+    output logic [1:0]          sb_wstate,
+    input  logic [1:0]          sb_rstate,
 
     // result write from cluster result FIFO (show-ahead)
     input  logic                res_valid,
@@ -49,8 +51,8 @@ module bram_read_write #(
 
     state_t current_state, next_state;
 
-    // 0 = last action was read  →  prefer write next
-    // 1 = last action was write →  prefer read  next
+    // 0 = last action was read  
+    // 1 = last action was write 
     logic prev_load;
 
     logic              started_write_pending;
@@ -116,13 +118,14 @@ module bram_read_write #(
             end
 
             // latch decoded outputs in READ — hold until next READ
+            // state bits come from state_bram (sb_rstate), colour from colour BRAM
             if (current_state == READ) begin
-                started <= bram_rd_data[0] & ~bram_rd_data[1];
-                done    <= bram_rd_data[1];
-                miss    <= ~bram_rd_data[0] & ~bram_rd_data[1];
+                started <= sb_rstate[0] & ~sb_rstate[1];
+                done    <= sb_rstate[1];
+                miss    <= ~sb_rstate[0] & ~sb_rstate[1];
                 colour  <= bram_rd_data[7:2];
 
-                if (~bram_rd_data[0] & ~bram_rd_data[1])
+                if (~sb_rstate[0] & ~sb_rstate[1])
                     started_write_pending <= 1'b1;
             end
 
@@ -131,17 +134,23 @@ module bram_read_write #(
         end
     end
 
-    // BRAM read 
+    // colour BRAM read
     assign bram_rd_en = (current_state == IDLE) && go_read;
 
-    // BRAM write 
-    // started write: {6'b0,    done=0, started=1} = 8'h01
-    // result  write: {colour,  done=1, started=1}
-    assign bram_wr_en   = (current_state == WRITE);
-    assign bram_wr_a    = serve_started ? a_latch              : res_a;
-    assign bram_wr_b    = serve_started ? b_latch              : res_b;
-    assign bram_wr_data = serve_started ? 8'h01                : {res_colour, 2'b11};
+    // colour BRAM write (result only — colour not known at started time)
+    assign bram_wr_en   = (current_state == WRITE) && serve_result;
+    assign bram_wr_a    = res_a;
+    assign bram_wr_b    = res_b;
+    assign bram_wr_data = {2'b0, res_colour};
 
     assign res_rd_en = (current_state == WRITE) && serve_result;
+
+    // state BRAM read — same cycle as colour BRAM read
+    assign sb_rd = (current_state == IDLE) && go_read;
+    // state BRAM write — muxed address; started=2'b01, done=2'b11
+    assign sb_we     = (current_state == WRITE);
+    assign sb_x      = sb_rd ? a : (serve_started ? a_latch : res_a);
+    assign sb_y      = sb_rd ? b : (serve_started ? b_latch : res_b);
+    assign sb_wstate = serve_started ? 2'b01 : 2'b11;
 
 endmodule
