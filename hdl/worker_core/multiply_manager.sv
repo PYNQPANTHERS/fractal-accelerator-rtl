@@ -4,10 +4,10 @@
  * Inputs:
  *   clk, rst
  *
- *   start_left, start_right, start_wide — one-cycle pulses to begin computation.
+ *   start_left, start_right, start_wide - one-cycle pulses to begin computation.
  *   start_wide means both cores are used together for a wide-width computation.
  *
- *   width_mode — passed in so the core knows whether to assert side_done on completion.
+ *   width_mode - passed in so the core knows whether to assert side_done on completion.
  *   In wide mode, both halves finish as one result so side_done is not meaningful.
  *
     received - when we get the received signal we then eithe rchange to the other cores result, or deassert the done flag a neither are done and waiting to be 'taken'
@@ -15,19 +15,19 @@
 
 
 
- *   julia_type                  — 0: Mandelbrot, 1: Julia
- *   magnitude_negation_encoding — {|x|, |y|, -x, -y}
- *   n_exponent                  — 00=2, 01=3, 10=4, 11=5
- *   max_iteration               — iteration limit
- *   julia_c_x, julia_c_y        — Julia set constant, only used when julia_type=1
+ *   julia_type                  - 0: Mandelbrot, 1: Julia
+ *   magnitude_negation_encoding - {|x|, |y|, -x, -y}
+ *   n_exponent                  - 00=2, 01=3, 10=4, 11=5
+ *   max_iteration               - iteration limit
+ *   julia_c_x, julia_c_y        - Julia set constant, only used when julia_type=1
  *
- *   starting_x_reg_1, starting_y_reg_1 — left core input coordinates
- *   starting_x_reg_2, starting_y_reg_2 — right core input coordinates
+ *   starting_x_reg_1, starting_y_reg_1 - left core input coordinates
+ *   starting_x_reg_2, starting_y_reg_2 - right core input coordinates
  *
  * Outputs:
- *   done      — stays high when a result is ready
- *   side_done — 0: left result, 1: right result. Undefined in wide mode.
- *   iteration_count — the output result, valid when done is high
+ *   done      - stays high when a result is ready
+ *   side_done - 0: left result, 1: right result. Undefined in wide mode.
+ *   iteration_count - the output result, valid when done is high
  *
  * Behaviour:
  *   After receiving a start_* pulse, the core computes and then asserts done
@@ -177,6 +177,7 @@ end
 
 multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
 (
+    .clk(clk),
     .mode(left_multiply_mode),
 
     .x(spare_x_reg_1),
@@ -187,6 +188,7 @@ multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply
 
 multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
 (
+    .clk(clk),
     .mode(right_multiply_mode),
 
     .x(spare_x_reg_2),
@@ -262,51 +264,83 @@ always_ff @(posedge clk) begin
         else if(left_thread == RUNNING && grouping_status == SPLIT) begin
             case(left_cycle)
                 ALTER_SUM : begin
-                    if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) left_cycle <= DONE;
+                    //$display("[L] iter=%0d  sum_x=%0d  sum_y=%0d  mag=%0d",
+                    //iteration_reg_1, $signed(sum_x_reg_1), $signed(sum_y_reg_1), $signed(magnitude_reg_1));
+                    if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) begin
+                        left_cycle <= DONE;
+                        //$display("[L] iter=%0d  OVERFLOW escape  sum_x=%0d sum_y=%0d", iteration_reg_1, sum_x_reg_1, sum_y_reg_1);
+                    end
                     else begin
                         sum_x_reg_1 <= encoded_x_reg_1;
                         spare_x_reg_1 <= encoded_x_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
                         sum_y_reg_1 <= encoded_y_reg_1;
-                        if(left_max_iteration_flag) left_cycle <= DONE;
+                        if(left_max_iteration_flag) begin
+                            left_cycle <= DONE;
+                            //$display("[L] iter=%0d  MAX ITER escape", iteration_reg_1);
+                        end
                         else left_cycle <= X_SQUARED;
                     end
                     
                 end
                 X_SQUARED : begin
-                    sum_x_reg_1 <= left_multiply_result;
-                    magnitude_reg_1 <= left_multiply_result;
+
                     left_cycle <= Y_SQUARED;
                 end
 
                 Y_SQUARED : begin
-                    sum_x_reg_1 <= sum_x_reg_1 - left_multiply_result;
-                    magnitude_reg_1 <= magnitude_reg_1 + left_multiply_result;
-                    if(left_magnitude_flag) left_cycle <= DONE;
-                    else left_cycle <= TWO_I_XY; 
+                    //pipeline register reads from x^2
+                    sum_x_reg_1 <= left_multiply_result;
+                    magnitude_reg_1 <= left_multiply_result;
+                    //$display("    left_multiply_result=%0d", $signed(left_multiply_result));
+                
+                
+
+
+                    left_cycle <= TWO_I_XY; 
                 end
 
                 TWO_I_XY : begin
+                //pipeline register reads from y^2
+                    //$display("    x^2 put in sum_x iter=%0d  sum_x=%0d  sum_y=%0d  mag=%0d",
+                    //iteration_reg_1, $signed(sum_x_reg_1), $signed(sum_y_reg_1), $signed(magnitude_reg_1));
+
+                    sum_x_reg_1 <= sum_x_reg_1 - left_multiply_result;
+                    magnitude_reg_1 <= magnitude_reg_1 + left_multiply_result;
+                
+                
                     //here we have a flag if the magnitude is greater from the comparitor
-                    if(left_magnitude_flag) left_cycle <= DONE;
+                    if(left_magnitude_flag) begin
+                        left_cycle <= DONE;
+                        //$display("[L] iter=%0d  MAGNITUDE escape  mag=%0d", iteration_reg_1, magnitude_reg_1);
+                    end
                     else begin
-                        sum_y_reg_1 <= left_multiply_result;
                         if(julia_type) left_cycle <= ADD_JULIA;
                         else left_cycle <= ADD_COORD;
                     end
                 end
 
                 ADD_JULIA : begin
+
+
                     sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= sum_y_reg_1 + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
-                    left_cycle <= ALTER_SUM;
+                    sum_y_reg_1 <= left_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                     iteration_reg_1 <= iteration_reg_1 + 1;
+                    
+                    if(left_magnitude_flag) begin
+                        left_cycle <= DONE;
+                        //$display("[L] iter=%0d  MAGNITUDE escape  mag=%0d", iteration_reg_1, magnitude_reg_1);
+                    end
+                    else left_cycle <= ALTER_SUM;
                 end
 
                 ADD_COORD : begin
+
                     sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= sum_y_reg_1 + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                    left_cycle <= ALTER_SUM;
+                    sum_y_reg_1 <= left_multiply_result + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
                     iteration_reg_1 <= iteration_reg_1 + 1;
+                    
+                    if(left_magnitude_flag) left_cycle <= DONE;
+                    else left_cycle <= ALTER_SUM;
                 end
 
                 DONE : begin
@@ -346,34 +380,45 @@ always_ff @(posedge clk) begin
         else if(right_thread == RUNNING && grouping_status == SPLIT) begin
             case(right_cycle)
                 ALTER_SUM : begin
-                    if(sum_x_reg_2_overflow_flag || sum_y_reg_2_overflow_flag) right_cycle <= DONE;
+                    if(sum_x_reg_2_overflow_flag || sum_y_reg_2_overflow_flag) begin
+                        right_cycle <= DONE;
+                    end
                     else begin
                         sum_x_reg_2 <= encoded_x_reg_2;
                         spare_x_reg_2 <= encoded_x_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
                         sum_y_reg_2 <= encoded_y_reg_2;
-                        if(right_max_iteration_flag) right_cycle <= DONE;
+                        if(right_max_iteration_flag) begin
+                            right_cycle <= DONE;
+                        end
                         else right_cycle <= X_SQUARED;
                     end
                     
                 end
                 X_SQUARED : begin
-                    sum_x_reg_2 <= right_multiply_result;
-                    magnitude_reg_2 <= right_multiply_result;
+
                     right_cycle <= Y_SQUARED;
                 end
 
                 Y_SQUARED : begin
-                    sum_x_reg_2 <= sum_x_reg_2 - right_multiply_result;
-                    magnitude_reg_2 <= magnitude_reg_2 + right_multiply_result;
-                    if(right_magnitude_flag) right_cycle <= DONE;
-                    else right_cycle <= TWO_I_XY; 
+                    //pipeline register reads from x^2
+                    sum_x_reg_2 <= right_multiply_result;
+                    magnitude_reg_2 <= right_multiply_result;
+                
+                
+
+
+                    right_cycle <= TWO_I_XY; 
                 end
 
                 TWO_I_XY : begin
+                //pipeline register reads from y^2
+                    sum_x_reg_2 <= sum_x_reg_2 - right_multiply_result;
+                    magnitude_reg_2 <= magnitude_reg_2 + right_multiply_result;
+                
+                
                     //here we have a flag if the magnitude is greater from the comparitor
                     if(right_magnitude_flag) right_cycle <= DONE;
                     else begin
-                        sum_y_reg_2 <= right_multiply_result;
                         if(julia_type) right_cycle <= ADD_JULIA;
                         else right_cycle <= ADD_COORD;
                     end
@@ -381,16 +426,20 @@ always_ff @(posedge clk) begin
 
                 ADD_JULIA : begin
                     sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_2 <= sum_y_reg_2 + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
-                    right_cycle <= ALTER_SUM;
+                    sum_y_reg_2 <= right_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                     iteration_reg_2 <= iteration_reg_2 + 1;
+                    
+                    if(right_magnitude_flag) right_cycle <= DONE;
+                    else right_cycle <= ALTER_SUM;
                 end
 
                 ADD_COORD : begin
                     sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_2 <= sum_y_reg_2 + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                    right_cycle <= ALTER_SUM;
+                    sum_y_reg_2 <= right_multiply_result + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
                     iteration_reg_2 <= iteration_reg_2 + 1;
+                    
+                    if(right_magnitude_flag) right_cycle <= DONE;
+                    else right_cycle <= ALTER_SUM;
                 end
 
                 DONE : begin
