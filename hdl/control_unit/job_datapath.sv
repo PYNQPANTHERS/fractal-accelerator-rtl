@@ -12,13 +12,13 @@ module job_datapath #(
     input  logic [Z_WIDE-1:0]      z_real,
     input  logic [Z_WIDE-1:0]      z_imag,
     input  logic                   wide,
-    input  logic [1:0]             word_idx,          // 0..3
+    input  logic [1:0]             word_idx,          // 0123
     input  logic                   opcode_en,         // from FSM OPCODE_BROADCAST
     input  logic                   load_c_en,         // from FSM LOAD_C_NARROW/WIDE
     input  logic [DATA_WIDTH-1:0]  c_real,
     input  logic [DATA_WIDTH-1:0]  c_imag,
     input  logic [OPCODE_W-1:0]    fractal_type,
-    input  logic [OPCODE_W-1:0]    iteration_count,
+    input  logic [OPCODE_W-1:0]    max_iter,
     output logic [JOB_DATA_W-1:0]  disp_job_data
 );
 
@@ -44,7 +44,7 @@ module job_datapath #(
             disp_job_data = {{(JOB_DATA_W - 2*OPCODE_W){1'b0}},
                             wide,
                             fractal_type,
-                            iteration_count};
+                            max_iter};
         end else if (load_c_en) begin
             // Julia c broadcast — word 0 = c_real, word 1 = c_imag (narrow, sign-extended)
             case (word_idx)

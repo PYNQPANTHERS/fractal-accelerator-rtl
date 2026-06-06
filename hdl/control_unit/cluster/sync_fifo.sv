@@ -10,7 +10,7 @@ module sync_fifo #(
     localparam int AW    = $clog2(DEPTH)
 ) (
     input  logic            clk,
-    input  logic            rst_n,
+    input  logic            rst,
     // write side
     input  logic            wr_en,
     input  logic [DW-1:0]   wr_data,
@@ -31,8 +31,8 @@ module sync_fifo #(
 
     assign rd_data = mem[rd_ptr[AW-1:0]];
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             wr_ptr <= '0;
             rd_ptr <= '0;
         end else begin
