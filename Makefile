@@ -169,6 +169,28 @@ engine-full:
 	@echo "           $(RENDER_DIR)/engine_full_image.csv"
 	@echo ""
 
+# BRAM→DRAM CSV render validation: loads fractal CSV, drives bram_to_dram, checks pixel fidelity
+.PHONY: b2d-csv
+b2d-csv:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval TB_NAME := tb_bram_to_dram_csv)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Compiling: tb/memory/$(TB_NAME).sv"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	iverilog $(IVFLAGS) -o $(OUT) $(HDL_SRCS) tb/memory/$(TB_NAME).sv
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Running:   $(TB_NAME)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	vvp $(OUT)
+	@echo ""
+	@echo "  Outputs: $(RENDER_DIR)/b2d_bram_source.csv"
+	@echo "           $(RENDER_DIR)/b2d_partial_dram.csv"
+	@echo "           $(RENDER_DIR)/b2d_full_dram.csv"
+	@echo ""
+
 # Clean
 .PHONY: clean
 clean:
