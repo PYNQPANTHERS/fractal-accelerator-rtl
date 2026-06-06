@@ -1,12 +1,6 @@
-// translate
-//
-//   Maps pixel coordinates (a, b) to complex-plane Q2.16 fixed-point values
-//   in z_real[17:0] and z_imag[17:0].  Upper bits are sign-extended to DATA_WIDTH.
-//
-
 module translate #(
     parameter int DATA_WIDTH = 35,
-    parameter int RESOLUTION = 9
+    parameter int RESOLUTION = 8
 ) (
     input  logic [DATA_WIDTH-1:0] pan_x,
     input  logic [DATA_WIDTH-1:0] pan_y,
@@ -17,29 +11,36 @@ module translate #(
     output logic [DATA_WIDTH-1:0] z_real,
     output logic [DATA_WIDTH-1:0] z_imag
 );
-    // Scale factor in Q2.16: step size per pixel for each zoom level.
-    // Assumes 2^RESOLUTION pixels span the full window.
+
     logic [DATA_WIDTH-1:0] scale_factor;
 
     always_comb begin : zoom_lut
         case (zoom)
-            4'd0:    scale_factor = DATA_WIDTH'(32'd512);   // window 4.0
-            4'd1:    scale_factor = DATA_WIDTH'(32'd256);   // window 2.0
-            4'd2:    scale_factor = DATA_WIDTH'(32'd128);   // window 1.0
-            4'd3:    scale_factor = DATA_WIDTH'(32'd64);    // window 0.5
+            4'd0:    scale_factor = DATA_WIDTH'(32'd512);
+            4'd1:    scale_factor = DATA_WIDTH'(32'd256);
+            4'd2:    scale_factor = DATA_WIDTH'(32'd128);
+            4'd3:    scale_factor = DATA_WIDTH'(32'd64);
             default: scale_factor = DATA_WIDTH'(32'd512);
         endcase
     end
 
-    // Multiply pixel coord (unsigned) by scale and add/subtract pan.
-    // Use a wider intermediate to avoid overflow before truncation.
-    logic [2*DATA_WIDTH-1:0] a_prod, b_prod;
+    // Tile select within a 4x4 grid, book-reading order.
+    logic [1:0] tile_col, tile_row;
+    assign tile_col = sixteenth[1:0];   // X column
+    assign tile_row = sixteenth[3:2];   // Y row = floor(sixteenth/4)
+
+    // Global pixel coord = tile offset (256 px per tile) + within-tile pixel.
+    logic [DATA_WIDTH-1:0]   px, py;
+    logic [2*DATA_WIDTH-1:0] x_prod, y_prod;
 
     always_comb begin : coordinate_map
-        a_prod = DATA_WIDTH'(a) * scale_factor;
-        b_prod = DATA_WIDTH'(b) * scale_factor;
-        z_real = $signed(pan_x) + $signed(DATA_WIDTH'(a_prod));
-        z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(b_prod));
-    end
+        px = (DATA_WIDTH'(tile_col) << RESOLUTION) + DATA_WIDTH'(a);   // 0..1023
+        py = (DATA_WIDTH'(tile_row) << RESOLUTION) + DATA_WIDTH'(b);
 
+        x_prod = px * scale_factor;     // uniform step everywhere
+        y_prod = py * scale_factor;
+
+        z_real = $signed(pan_x) + $signed(DATA_WIDTH'(x_prod));
+        z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(y_prod));
+    end
 endmodule
