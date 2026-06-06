@@ -10,9 +10,9 @@ module per_sixteenth_engine (
     output logic sixteenth_complete,
 
     // Config from sixteenth_controller
-    input  logic [4:0]  equation_id,
-    input  logic [31:0] centre_x,
-    input  logic [31:0] centre_y,
+    input  logic [4:0]  fractal_type,
+    input  logic [31:0] pan_x,
+    input  logic [31:0] pan_y,
     input  logic [31:0] zoom_level,
     input  logic [11:0] max_iter,
     input  logic [9:0]  x_offset,
@@ -104,9 +104,9 @@ module per_sixteenth_engine (
         .rst                (rst),
         .start              (start),
 
-        .equation_id        (equation_id),
-        .centre_x           (centre_x),
-        .centre_y           (centre_y),
+        .fractal_type        (fractal_type),
+        .pan_x           (pan_x),
+        .pan_y           (pan_y),
         .zoom_level         (zoom_level),
         .max_iter           (max_iter),
         .x_offset           (x_offset),
@@ -149,9 +149,9 @@ module per_sixteenth_engine (
         .clk                (clk),
         .rst                (rst),
 
-        .equation_id        (equation_id),
-        .centre_x           (centre_x),
-        .centre_y           (centre_y),
+        .fractal_type        (fractal_type),
+        .pan_x           (pan_x),
+        .pan_y           (pan_y),
         .zoom_level         (zoom_level),
         .max_iter           (max_iter),
         .x_offset           (x_offset),

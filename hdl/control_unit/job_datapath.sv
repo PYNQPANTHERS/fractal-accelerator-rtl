@@ -18,8 +18,8 @@ module job_datapath #(
     input  logic [DATA_WIDTH-1:0]  c_real,
     input  logic [DATA_WIDTH-1:0]  c_imag,
     input  logic [OPCODE_W-1:0]    fractal_type,
-    input  logic [OPCODE_W-1:0]    iteration_count,
-    output logic [JOB_DATA_W-1:0]  disp_job_datas
+    input  logic [OPCODE_W-1:0]    max_iter,
+    output logic [JOB_DATA_W-1:0]  disp_job_data
 );
 
     // upper-half width (whatever is left above the low JOB_DATA_W bits)
@@ -44,7 +44,7 @@ module job_datapath #(
             disp_job_data = {{(JOB_DATA_W - 2*OPCODE_W){1'b0}},
                             wide,
                             fractal_type,
-                            iteration_count};
+                            max_iter};
         end else if (load_c_en) begin
             // Julia c broadcast — word 0 = c_real, word 1 = c_imag (narrow, sign-extended)
             case (word_idx)
