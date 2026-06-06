@@ -24,6 +24,7 @@ module control_unit #(
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
     input  logic                    width_flag,
+    input  logic [4:0]              sixteenth,
 
     // julia c in full precision
     input  logic [DATA_WIDTH-1:0]   c_x,
@@ -191,8 +192,7 @@ module control_unit #(
     logic [PIXEL_W-1:0]        cluster_iter_colour       [CLUSTER_COUNT];
 
     assign disp_pixel_addr   = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
-    assign cluster_disp_valid = opcode_broadcast_en ? '1 :
-                               load_z_en           ? chosen_onehot : '0;
+    assign cluster_disp_valid = load_z_en ? chosen_onehot : '0;
 
     
                                

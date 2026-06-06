@@ -13,6 +13,7 @@ module translate #(
     input  logic [RESOLUTION-1:0] a,
     input  logic [RESOLUTION-1:0] b,
     input  logic [3:0]            zoom,
+    input  logic [3:0]            sixteenth,
     output logic [DATA_WIDTH-1:0] z_real,
     output logic [DATA_WIDTH-1:0] z_imag
 );

@@ -32,11 +32,16 @@ module frame_fsm (
     output logic capture_winner
 );
 
-    typedef enum logic [2:0] {
+    // SETTLE_1 and SETTLE_2 give cores 2 cycles to exit LOADING_OPCODES and
+    // for cluster_wants_job to propagate back to any_cluster_free before
+    // JOB_WAIT opens for scheduler grants.
+    typedef enum logic [3:0] {
         IDLE,
         OPCODE_BROADCAST,
         LOAD_C_NARROW,
         LOAD_C_WIDE,
+        SETTLE_1,
+        SETTLE_2,
         JOB_WAIT,
         CHECK_BRAM,
         LOAD_Z_NARROW,
@@ -66,13 +71,15 @@ module frame_fsm (
                     if (wide) next_state = LOAD_C_WIDE;
                     else      next_state = LOAD_C_NARROW;
                 end else begin
-                    next_state = JOB_WAIT;
+                    next_state = SETTLE_1;
                 end
             end
             LOAD_C_NARROW,
             LOAD_C_WIDE: begin
-                if (load_last) next_state = JOB_WAIT;
+                if (load_last) next_state = SETTLE_1;
             end
+            SETTLE_1: next_state = SETTLE_2;
+            SETTLE_2: next_state = JOB_WAIT;
             JOB_WAIT: begin
                 if (accept) next_state = CHECK_BRAM;
             end
