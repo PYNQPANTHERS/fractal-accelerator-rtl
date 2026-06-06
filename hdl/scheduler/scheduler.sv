@@ -2,32 +2,25 @@
 // Recursively subdivides into power-of-2 quadrants, flood-fills uniform regions,
 // and queues all pixels at the 16x16 leaf level when the border is non-uniform.
 
-module scheduler (
+module scheduler #(
+    parameter int COORD_W = 8   // coordinate bit width; max coord = 2**COORD_W - 1
+) (
     input  logic        clk,
     input  logic        rst,
     input  logic        start,
     output logic        engine_done,
 
-    // Config from sixteenth_controller (interface required; unused in spatial algorithm)
-    input  logic [4:0]  equation_id,
-    input  logic [31:0] centre_x,
-    input  logic [31:0] centre_y,
-    input  logic [31:0] zoom_level,
-    input  logic [11:0] max_iter,
-    input  logic [9:0]  x_offset,
-    input  logic [9:0]  y_offset,
-
     // Job queue push
-    output logic [17:0] sched_coord,
+    output logic [COORD_W*2-1:0] sched_coord,
     output logic        sched_push,
     input  logic        sched_stall,
     output logic        flush,
 
     // Comparator configuration
     output logic        sched_reset,
-    output logic [8:0]  top_left_x,
-    output logic [8:0]  top_left_y,
-    output logic [8:0]  quad_size,
+    output logic [COORD_W-1:0] top_left_x,
+    output logic [COORD_W-1:0] top_left_y,
+    output logic [COORD_W-1:0] quad_size,
     output logic [10:0] expected_count,
 
     // Comparator results
@@ -54,19 +47,19 @@ module scheduler (
     state_t state;
 
     // Current box
-    logic [7:0] cur_tlx, cur_tly;
+    logic [COORD_W-1:0] cur_tlx, cur_tly;
     logic [2:0] cur_depth;
-    logic [8:0] cur_sz;         // 256 >> cur_depth (power-of-2: 256..16)
+    logic [COORD_W:0] cur_sz;   // COORD_W+1 bits: holds values 2**COORD_W down to 16
 
-    logic [7:0] half_sz;
-    assign half_sz = cur_sz[8:1];
+    logic [COORD_W-1:0] half_sz;
+    assign half_sz = cur_sz[COORD_W:1];
 
     logic [2:0] child_depth;
     assign child_depth = cur_depth + 3'd1;
 
     // Border-walk state
     logic [1:0] b_phase;        // 0=top 1=right 2=bottom 3=left
-    logic [7:0] b_cnt;          // position counter along current edge
+    logic [COORD_W-1:0] b_cnt;  // position counter along current edge
 
     // SPLIT sub-counter: 0→push BR, 1→push BL, 2→push TR, 3→descend TL
     logic [1:0] split_cnt;
@@ -74,8 +67,8 @@ module scheduler (
     // QUEUE_ALL counters (16x16 tile)
     logic [3:0] qa_x, qa_y;
 
-    // Stack: {depth[2:0], tly[7:0], tlx[7:0]} = 19 bits
-    localparam STACK_W = 19;
+    // Stack: {depth[2:0], tly[COORD_W-1:0], tlx[COORD_W-1:0]}
+    localparam int STACK_W = 3 + COORD_W * 2;
     logic [STACK_W-1:0] stack_din, stack_dout;
     logic stack_push, stack_pop, stack_full, stack_empty;
 
@@ -91,23 +84,24 @@ module scheduler (
     );
 
     // Extract bit-selects to wires — Iverilog doesn't support part-selects in always_*
-    logic [7:0] cur_sz_lo;
+    logic [COORD_W-1:0] cur_sz_lo;
     logic [4:0] tiles_per_side;
     logic [3:0] tile_x0, tile_y0;
-    assign cur_sz_lo      = cur_sz[7:0];
-    assign tiles_per_side = cur_sz[8:4];
-    assign tile_x0        = cur_tlx[7:4];
-    assign tile_y0        = cur_tly[7:4];
+    assign cur_sz_lo      = cur_sz[COORD_W-1:0];
+    assign tiles_per_side = cur_sz[COORD_W:4];
+    assign tile_x0        = cur_tlx[COORD_W-1:4];
+    assign tile_y0        = cur_tly[COORD_W-1:4];
 
     // Stack output fields
-    logic [2:0] popped_depth;
-    logic [7:0] popped_tly, popped_tlx;
-    assign popped_depth = stack_dout[18:16];
-    assign popped_tly   = stack_dout[15:8];
-    assign popped_tlx   = stack_dout[7:0];
+    logic [2:0]         popped_depth;
+    logic [COORD_W-1:0] popped_tly, popped_tlx;
+    assign popped_depth = stack_dout[STACK_W-1:STACK_W-3];
+    assign popped_tly   = stack_dout[COORD_W*2-1:COORD_W];
+    assign popped_tlx   = stack_dout[COORD_W-1:0];
 
     // ── Border pixel coordinates (combinational) ───────────────────────────
-    logic [8:0] bpx, bpy;
+    // Use COORD_W+1 bits for intermediate arithmetic to handle cur_sz == 2**COORD_W
+    logic [COORD_W:0] bpx, bpy;
     always_comb begin
         case (b_phase)
             2'b00: begin  // top row, left-to-right
@@ -115,16 +109,16 @@ module scheduler (
                 bpy = {1'b0, cur_tly};
             end
             2'b01: begin  // right col, top-to-bottom (top-right corner excluded)
-                bpx = {1'b0, cur_tlx} + cur_sz - 9'd1;
+                bpx = {1'b0, cur_tlx} + cur_sz - {{COORD_W{1'b0}}, 1'b1};
                 bpy = {1'b0, cur_tly} + {1'b0, b_cnt};
             end
             2'b10: begin  // bottom row, right-to-left (bottom-right corner excluded)
-                bpx = {1'b0, cur_tlx} + cur_sz - 9'd1 - {1'b0, b_cnt};
-                bpy = {1'b0, cur_tly} + cur_sz - 9'd1;
+                bpx = {1'b0, cur_tlx} + cur_sz - {{COORD_W{1'b0}}, 1'b1} - {1'b0, b_cnt};
+                bpy = {1'b0, cur_tly} + cur_sz - {{COORD_W{1'b0}}, 1'b1};
             end
             default: begin  // left col, bottom-to-top (both corners excluded)
                 bpx = {1'b0, cur_tlx};
-                bpy = {1'b0, cur_tly} + cur_sz - 9'd1 - {1'b0, b_cnt};
+                bpy = {1'b0, cur_tly} + cur_sz - {{COORD_W{1'b0}}, 1'b1} - {1'b0, b_cnt};
             end
         endcase
     end
@@ -133,10 +127,10 @@ module scheduler (
     logic b_phase_done;
     always_comb begin
         case (b_phase)
-            2'b00: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
-            2'b01: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
-            2'b10: b_phase_done = (b_cnt == cur_sz_lo - 8'd1);
-            default: b_phase_done = (b_cnt == cur_sz_lo - 8'd2);
+            2'b00: b_phase_done = (b_cnt == cur_sz_lo - {{(COORD_W-1){1'b0}}, 1'b1});
+            2'b01: b_phase_done = (b_cnt == cur_sz_lo - {{(COORD_W-1){1'b0}}, 1'b1});
+            2'b10: b_phase_done = (b_cnt == cur_sz_lo - {{(COORD_W-1){1'b0}}, 1'b1});
+            default: b_phase_done = (b_cnt == cur_sz_lo - {{(COORD_W-2){1'b0}}, 2'b10});
         endcase
     end
 
@@ -145,9 +139,9 @@ module scheduler (
     assign b_done = (b_phase == 2'b11) && b_phase_done;
 
     // ── Comparator configuration (combinational, always reflects current box) ──
-    assign top_left_x     = {1'b0, cur_tlx};
-    assign top_left_y     = {1'b0, cur_tly};
-    assign quad_size      = cur_sz;
+    assign top_left_x     = cur_tlx;
+    assign top_left_y     = cur_tly;
+    assign quad_size      = cur_sz[COORD_W-1:0];
     // 4*sz - 4 border pixels total (corners counted once)
     assign expected_count = (11'(cur_sz) << 2) - 11'd4;
 
@@ -176,7 +170,7 @@ module scheduler (
             cur_tlx   <= '0;
             cur_tly   <= '0;
             cur_depth <= '0;
-            cur_sz    <= 9'd256;
+            cur_sz    <= (COORD_W+1)'(1) << COORD_W;
             b_phase   <= '0;
             b_cnt     <= '0;
             split_cnt <= '0;
@@ -192,7 +186,7 @@ module scheduler (
                     cur_tlx   <= '0;
                     cur_tly   <= '0;
                     cur_depth <= '0;
-                    cur_sz    <= 9'd256;
+                    cur_sz    <= (COORD_W+1)'(1) << COORD_W;
                     state     <= SEARCH;
                 end
 
@@ -212,9 +206,9 @@ module scheduler (
                             state <= WAIT_COMP;
                         else if (b_phase_done) begin
                             b_phase <= b_phase + 2'd1;
-                            b_cnt   <= 8'd1;   // skip corner already emitted by previous phase
+                            b_cnt   <= {{(COORD_W-1){1'b0}}, 1'b1}; // skip corner already emitted by previous phase
                         end else
-                            b_cnt <= b_cnt + 8'd1;
+                            b_cnt <= b_cnt + {{(COORD_W-1){1'b0}}, 1'b1};
                     end
                 end
 
@@ -235,7 +229,7 @@ module scheduler (
                     if (split_cnt == 2'd3) begin
                         split_cnt <= '0;
                         cur_depth <= child_depth;
-                        cur_sz    <= {1'b0, half_sz};
+                        cur_sz    <= {1'b0, half_sz};  // half_sz is COORD_W bits, cur_sz is COORD_W+1
                         state     <= SEARCH;
                     end else begin
                         split_cnt <= split_cnt + 2'd1;
@@ -269,7 +263,7 @@ module scheduler (
                     cur_depth <= popped_depth;
                     cur_tly   <= popped_tly;
                     cur_tlx   <= popped_tlx;
-                    cur_sz    <= 9'd256 >> popped_depth;
+                    cur_sz    <= ((COORD_W+1)'(1) << COORD_W) >> popped_depth;
                     state     <= SEARCH;
                 end
 
@@ -292,7 +286,7 @@ module scheduler (
         tt_wr_quad_en     = 1'b0;
         tt_wr_quad_tlx    = cur_tlx;
         tt_wr_quad_tly    = cur_tly;
-        tt_wr_quad_size   = cur_sz_lo - 8'd1;  // inclusive last-pixel offset
+        tt_wr_quad_size   = cur_sz_lo - {{(COORD_W-1){1'b0}}, 1'b1};  // inclusive last-pixel offset
         tt_wr_quad_colour = ref_colour_o;
         stack_push        = 1'b0;
         stack_pop         = 1'b0;
@@ -307,7 +301,7 @@ module scheduler (
             PUSH_BORDER: begin
                 if (!differ && !sched_stall) begin
                     sched_push  = 1'b1;
-                    sched_coord = {bpy, bpx};
+                    sched_coord = {bpy[COORD_W-1:0], bpx[COORD_W-1:0]};
                 end
             end
 
@@ -315,7 +309,7 @@ module scheduler (
                 tt_wr_quad_en     = 1'b1;
                 tt_wr_quad_tlx    = cur_tlx;
                 tt_wr_quad_tly    = cur_tly;
-                tt_wr_quad_size   = cur_sz[7:0] - 8'd1;
+                tt_wr_quad_size   = cur_sz[COORD_W-1:0] - {{(COORD_W-1){1'b0}}, 1'b1};
                 tt_wr_quad_colour = ref_colour_o;
             end
 
@@ -346,8 +340,8 @@ module scheduler (
                 if (!sched_stall) begin
                     sched_push  = 1'b1;
                     sched_coord = {
-                        {1'b0, cur_tly} + {5'b0, qa_y},
-                        {1'b0, cur_tlx} + {5'b0, qa_x}
+                        cur_tly + {{(COORD_W-4){1'b0}}, qa_y},
+                        cur_tlx + {{(COORD_W-4){1'b0}}, qa_x}
                     };
                 end
             end

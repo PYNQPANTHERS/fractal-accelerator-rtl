@@ -4,13 +4,13 @@
 module colour_bram (
     input  logic        clk,
 
-    input  logic [8:0]  ctrl_rd_x,
-    input  logic [8:0]  ctrl_rd_y,
+    input  logic [7:0]  ctrl_rd_x,
+    input  logic [7:0]  ctrl_rd_y,
     input  logic        ctrl_rd_en,
     output logic [7:0]  ctrl_rd_data,
 
-    input  logic [8:0]  ctrl_wr_x,
-    input  logic [8:0]  ctrl_wr_y,
+    input  logic [7:0]  ctrl_wr_x,
+    input  logic [7:0]  ctrl_wr_y,
     input  logic        ctrl_wr_en,
     input  logic [7:0]  ctrl_wr_data,
 

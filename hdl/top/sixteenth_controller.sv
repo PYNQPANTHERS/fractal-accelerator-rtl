@@ -10,8 +10,8 @@ module sixteenth_controller (
 
     // Config inputs from PS AXI registers
     input  logic [4:0]  cfg_equation_id,
-    input  logic [31:0] cfg_centre_x,
-    input  logic [31:0] cfg_centre_y,
+    input  logic [31:0] cfg_pan_x,
+    input  logic [31:0] cfg_pan_y,
     input  logic [31:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
@@ -24,12 +24,13 @@ module sixteenth_controller (
 
     // Registered config outputs to per_sixteenth_engine
     output logic [4:0]  equation_id,
-    output logic [31:0] centre_x,
-    output logic [31:0] centre_y,
+    output logic [31:0] pan_x,
+    output logic [31:0] pan_y,
     output logic [31:0] zoom_level,
     output logic [11:0] max_iter,
     output logic [9:0]  x_offset,
     output logic [9:0]  y_offset,
+    output logic [3:0]  sixteenth_id,
     output logic [31:0] sixteenth_base_addr,
 
     // Engine done signal
@@ -62,12 +63,13 @@ module sixteenth_controller (
             start               <= 1'b0;
             engine_rst          <= 1'b1;
             equation_id         <= '0;
-            centre_x            <= '0;
-            centre_y            <= '0;
+            pan_x               <= '0;
+            pan_y               <= '0;
             zoom_level          <= '0;
             max_iter            <= '0;
             x_offset            <= '0;
             y_offset            <= '0;
+            sixteenth_id        <= '0;
             sixteenth_base_addr <= '0;
         end else begin
             all_done <= 1'b0;
@@ -81,8 +83,8 @@ module sixteenth_controller (
                     if (ps_start) begin
                         // TODO: connect to AXI Lite slave wrapper
                         equation_id <= cfg_equation_id;
-                        centre_x    <= cfg_centre_x;
-                        centre_y    <= cfg_centre_y;
+                        pan_x       <= cfg_pan_x;
+                        pan_y       <= cfg_pan_y;
                         zoom_level  <= cfg_zoom_level;
                         max_iter    <= cfg_max_iter;
                         state       <= LOAD;
@@ -93,6 +95,7 @@ module sixteenth_controller (
                     engine_rst          <= 1'b1;
                     x_offset            <= {sixteenth_col, 8'b0};
                     y_offset            <= {sixteenth_row, 8'b0};
+                    sixteenth_id        <= sixteenth_index;
                     sixteenth_base_addr <= cfg_image_base_addr +
                                           32'(sixteenth_index) * 32'd66048;
                     // TODO: cache load - DMA cached tiles into colour_bram

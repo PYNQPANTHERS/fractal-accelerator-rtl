@@ -64,7 +64,8 @@ module control_unit #(
     input  logic [1:0]              sb_rstate,
 
     // tile table complete
-    output logic                    cu_tile_done_set
+    output logic                    cu_tile_done_set,
+    output logic [7:0]              cu_tile_done_addr
 
 );
 
@@ -337,19 +338,22 @@ module control_unit #(
 
 
 
-//tile tabling 
+// tile tabling: count pixels per tile; fire cu_tile_done_set when tile reaches 256
 logic [7:0] tile_addr;
-logic [7:0] tile_table [0:255];  // 256 entries, each 8-bit counter
+logic [7:0] tile_table [0:255];
 
-assign tile_addr = {iter_x[7:4], iter_y[7:4]};
+// tile_addr uses x in upper nibble (iter_x[7:4]) and y in lower nibble (iter_y[7:4])
+// matches colour_bram tile addressing: tile_index = {y[7:4], x[7:4]}
+assign tile_addr = {iter_y[7:4], iter_x[7:4]};
+
+assign cu_tile_done_set = res_fifo_rd_en && (tile_table[tile_addr] == 8'hFF);
+assign cu_tile_done_addr = tile_addr;
 
 always_ff @(posedge clk) begin
     if (rst) begin
-        // Reset all LUT RAM entries to 0
-        for (int i = 0; i < 256; i++) begin
+        for (int i = 0; i < 256; i++)
             tile_table[i] <= 8'h00;
-        end
-    end else begin
+    end else if (res_fifo_rd_en) begin
         tile_table[tile_addr] <= tile_table[tile_addr] + 8'h01;
     end
 end

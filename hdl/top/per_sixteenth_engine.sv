@@ -1,6 +1,8 @@
 // Integrates all compute modules for one 256x256 sixteenth
 
-module per_sixteenth_engine (
+module per_sixteenth_engine #(
+    parameter int COORD_W = 8   // coordinate bit width; matches scheduler and comparator
+) (
     input  logic clk,
     input  logic rst,
 
@@ -17,6 +19,7 @@ module per_sixteenth_engine (
     input  logic [11:0] max_iter,
     input  logic [9:0]  x_offset,
     input  logic [9:0]  y_offset,
+    input  logic [3:0]  sixteenth_id,
     input  logic [31:0] sixteenth_base_addr,
 
     // AXI HP write (bram_to_dram → top level)
@@ -26,57 +29,55 @@ module per_sixteenth_engine (
     input  logic        axi_wr_ready
 );
     // Job queue handler wire
-    logic [17:0] jqh_sched_coord;
+    logic [COORD_W*2-1:0] jqh_sched_coord;
     logic        jqh_sched_push;
     logic        jqh_sched_stall;
     logic        jqh_flush;
     logic        jqh_wants_job;
     logic        jqh_grant;
-    logic [17:0] jqh_coord_out;
+    logic [15:0] jqh_coord_out;    // PIXEL_ADDR_W=16
     // Complete queue handler wire
     logic        cqh_done;
-    logic [8:0]  cqh_iter_x;
-    logic [8:0]  cqh_iter_y;
+    logic [COORD_W-1:0] cqh_iter_x;
+    logic [COORD_W-1:0] cqh_iter_y;
+    logic [7:0]  cu_iter_colour_raw;
     logic [3:0]  cqh_iter_colour;
+    assign cqh_iter_colour = cu_iter_colour_raw[7:4]; // upper nibble → comparator 4-bit colour
     logic        cqh_comp_pop;
     logic        cqh_comp_valid;
-    logic [21:0] cqh_comp_data;
+    logic [19:0] cqh_comp_data;    // { colour[3:0], y[7:0], x[7:0] }
     // Comparator wires (driven by scheduler, read by comparator
     logic        comp_sched_reset;
-    logic [8:0]  comp_top_left_x;
-    logic [8:0]  comp_top_left_y;
-    logic [8:0]  comp_quad_size;
+    logic [COORD_W-1:0] comp_top_left_x;
+    logic [COORD_W-1:0] comp_top_left_y;
+    logic [COORD_W-1:0] comp_quad_size;
     logic [10:0] comp_expected_count;
     logic [5:0]  comp_ref_colour_o;
     logic        comp_differ;
     logic        comp_complete;
-    // colour_bram wire (ctrl read driven by control_unit; ctrl write also by control_unit)
-    logic [8:0]  cbram_ctrl_rd_x;
-    logic [8:0]  cbram_ctrl_rd_y;
+    // colour_bram wire (ctrl read/write driven by control_unit — 8-bit coords from CU)
+    logic [7:0]  cbram_ctrl_rd_x;
+    logic [7:0]  cbram_ctrl_rd_y;
     logic        cbram_ctrl_rd_en;
     logic [7:0]  cbram_ctrl_rd_data;
-    logic [8:0]  cbram_ctrl_wr_x;
-    logic [8:0]  cbram_ctrl_wr_y;
+    logic [7:0]  cbram_ctrl_wr_x;
+    logic [7:0]  cbram_ctrl_wr_y;
     logic        cbram_ctrl_wr_en;
     logic [7:0]  cbram_ctrl_wr_data;
     logic [12:0] cbram_b2d_word_addr;
     logic        cbram_b2d_rd_en;
     logic        cbram_b2d_rd_grant;
     logic [63:0] cbram_b2d_rd_data;
-    // state_bram wires (driven by control_unit)
-    logic [8:0]  sbram_x;
-    logic [8:0]  sbram_y;
+    // state_bram wires (driven by control_unit — 8-bit coords from CU)
+    logic [7:0]  sbram_x;
+    logic [7:0]  sbram_y;
     logic        sbram_rd;
     logic        sbram_we;
     logic [1:0]  sbram_wstate;
     logic [1:0]  sbram_rstate;
     logic        sbram_rd_valid;
     logic        sbram_wr_done;
-    // tile_table wire
-    logic        tt_wr_single_en;
-    logic [7:0]  tt_wr_single_index;
-    logic        tt_wr_single_filled;
-    logic [5:0]  tt_wr_single_colour;
+    // tile_table wire (single write driven directly from cu_tile_done_set/addr)
     logic        tt_wr_quad_en;
     logic [7:0]  tt_wr_quad_tlx;
     logic [7:0]  tt_wr_quad_tly;
@@ -87,30 +88,30 @@ module per_sixteenth_engine (
     logic [5:0]  tt_fill_colour;
     // tile_done: sticky OR of flood-fill (scheduler) and tiled (control_unit) path
     logic [255:0] sched_tile_done_set;
-    logic [255:0] cu_tile_done_set;
+    logic         cu_tile_done_set;
+    logic [7:0]   cu_tile_done_addr;
+    logic [255:0] cu_tile_done_vec;
     logic [255:0] tile_done;
+
+    always_comb begin
+        cu_tile_done_vec = '0;
+        if (cu_tile_done_set)
+            cu_tile_done_vec[cu_tile_done_addr] = 1'b1;
+    end
 
     always_ff @(posedge clk) begin
         if (rst)
             tile_done <= '0;
         else
-            tile_done <= tile_done | sched_tile_done_set | cu_tile_done_set;
+            tile_done <= tile_done | sched_tile_done_set | cu_tile_done_vec;
     end
     // scheduler
     // Quad-tree FSM (Mariani-Silver). Pushes border pixels to job queue,
     // receives comparator flags, flood fills or splits
-    scheduler u_scheduler (
+    scheduler #(.COORD_W(COORD_W)) u_scheduler (
         .clk                (clk),
         .rst                (rst),
         .start              (start),
-
-        .fractal_type        (fractal_type),
-        .pan_x           (pan_x),
-        .pan_y           (pan_y),
-        .zoom_level         (zoom_level),
-        .max_iter           (max_iter),
-        .x_offset           (x_offset),
-        .y_offset           (y_offset),
 
         // Job queue push
         .sched_coord        (jqh_sched_coord),
@@ -148,14 +149,18 @@ module per_sixteenth_engine (
     control_unit u_control_unit (
         .clk                (clk),
         .rst                (rst),
+        .opcode_reset       (1'b0),
 
-        .fractal_type        (fractal_type),
-        .pan_x           (pan_x),
-        .pan_y           (pan_y),
-        .zoom_level         (zoom_level),
-        .max_iter           (max_iter),
-        .x_offset           (x_offset),
-        .y_offset           (y_offset),
+        // frame control
+        .fractal_type       (fractal_type),
+        .pan_x              (pan_x[16:0]),
+        .pan_y              (pan_y[16:0]),
+        .zoom_level         (zoom_level[3:0]),
+        .max_iter           (max_iter[4:0]),
+        .start_flag         (start),
+        .width_flag         (1'b0),
+        .c_x                ('0),
+        .c_y                ('0),
 
         // Job queue pop
         .wants_job          (jqh_wants_job),
@@ -166,18 +171,18 @@ module per_sixteenth_engine (
         .done               (cqh_done),
         .iter_x             (cqh_iter_x),
         .iter_y             (cqh_iter_y),
-        .iter_colour        (cqh_iter_colour),
+        .iter_colour        (cu_iter_colour_raw),
 
-        // colour_bram read (check cached colour for already-computed pixels)
+        // colour_bram read
         .cu_rd_x            (cbram_ctrl_rd_x),
         .cu_rd_y            (cbram_ctrl_rd_y),
         .cu_rd_en           (cbram_ctrl_rd_en),
         .cu_rd_data         (cbram_ctrl_rd_data),
 
         // colour_bram write
+        .cu_wr_en           (cbram_ctrl_wr_en),
         .cu_wr_x            (cbram_ctrl_wr_x),
         .cu_wr_y            (cbram_ctrl_wr_y),
-        .cu_wr_en           (cbram_ctrl_wr_en),
         .cu_wr_data         (cbram_ctrl_wr_data),
 
         // state_bram
@@ -188,19 +193,14 @@ module per_sixteenth_engine (
         .sb_wstate          (sbram_wstate),
         .sb_rstate          (sbram_rstate),
 
-        // tile_table single write (tiled path)
-        .tt_wr_single_en    (tt_wr_single_en),
-        .tt_wr_single_index (tt_wr_single_index),
-        .tt_wr_single_filled(tt_wr_single_filled),
-        .tt_wr_single_colour(tt_wr_single_colour),
-
-        // Tile done (tiled path)
-        .cu_tile_done_set   (cu_tile_done_set)
+        // tile done (tiled path)
+        .cu_tile_done_set  (cu_tile_done_set),
+        .cu_tile_done_addr (cu_tile_done_addr)
     );
 
     // comparator
     // Drains complete_queue_handler. Checks border colour uniformity
-    comparator u_comparator (
+    comparator #(.COORD_W(COORD_W)) u_comparator (
         .clk            (clk),
         .rst            (rst),
         .sched_reset    (comp_sched_reset),
@@ -286,10 +286,10 @@ module per_sixteenth_engine (
     tile_table u_tile_table (
         .clk             (clk),
         .rst             (rst),
-        .wr_single_en    (tt_wr_single_en),
-        .wr_single_index (tt_wr_single_index),
-        .wr_single_filled(tt_wr_single_filled),
-        .wr_single_colour(tt_wr_single_colour),
+        .wr_single_en    (cu_tile_done_set),
+        .wr_single_index (cu_tile_done_addr),
+        .wr_single_filled(1'b0),           // tiled path: not flood-filled; bram_to_dram reads colour_bram
+        .wr_single_colour(6'b0),
         .wr_quad_en      (tt_wr_quad_en),
         .wr_quad_tlx     (tt_wr_quad_tlx),
         .wr_quad_tly     (tt_wr_quad_tly),

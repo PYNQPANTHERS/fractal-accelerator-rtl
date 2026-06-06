@@ -5,8 +5,8 @@ module state_bram (
     input  logic        clk,
     input  logic        rst,
 
-    input  logic [8:0]  x,
-    input  logic [8:0]  y,
+    input  logic [7:0]  x,
+    input  logic [7:0]  y,
     input  logic        rd,
     input  logic        we,
     input  logic [1:0]  wstate,
@@ -24,7 +24,7 @@ module state_bram (
     logic        rst_d;
 
     logic [15:0] pixel_addr;
-    assign pixel_addr = {y[7:0], x[7:0]};
+    assign pixel_addr = {y, x};
 
     always_ff @(posedge clk) rst_d <= rst;
 
