@@ -33,14 +33,14 @@ module bram_read_write #(
     input  logic                res_valid,
     input  logic [PIXEL_W-1:0]  res_a,
     input  logic [PIXEL_W-1:0]  res_b,
-    input  logic [5:0]          res_colour,
+    input  logic [7:0]          res_colour,
     output logic                res_rd_en,
 
     // decoded outputs — registered, hold until next READ
     output logic                miss,
     output logic                started,
     output logic                done,
-    output logic [5:0]          colour
+    output logic [7:0]          colour
 );
 
     typedef enum logic [1:0] {
@@ -108,7 +108,7 @@ module bram_read_write #(
             miss                  <= 1'b0;
             started               <= 1'b0;
             done                  <= 1'b0;
-            colour                <= 6'b0;
+            colour                <= 8'b0;
         end else begin
             if (bram_action) prev_load <= ~prev_load;
 
@@ -123,7 +123,7 @@ module bram_read_write #(
                 started <= sb_rstate[0] & ~sb_rstate[1];
                 done    <= sb_rstate[1];
                 miss    <= ~sb_rstate[0] & ~sb_rstate[1];
-                colour  <= bram_rd_data[7:2];
+                colour  <= bram_rd_data;
 
                 if (~sb_rstate[0] & ~sb_rstate[1])
                     started_write_pending <= 1'b1;
@@ -141,7 +141,7 @@ module bram_read_write #(
     assign bram_wr_en   = (current_state == WRITE) && serve_result;
     assign bram_wr_a    = res_a;
     assign bram_wr_b    = res_b;
-    assign bram_wr_data = {2'b0, res_colour};
+    assign bram_wr_data = res_colour;
 
     assign res_rd_en = (current_state == WRITE) && serve_result;
 
