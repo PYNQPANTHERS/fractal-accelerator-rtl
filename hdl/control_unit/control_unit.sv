@@ -1,7 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// control_unit 
-// expects new opcode with opcode reset
-// ─────────────────────────────────────────────────────────────────────────────
 module control_unit #(
     parameter int DATA_WIDTH          = 17,
     parameter int CLUSTER_COUNT       = 4,
@@ -24,7 +20,7 @@ module control_unit #(
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
     input  logic                    width_flag,
-    input  logic [4:0]              sixteenth,
+    input  logic [3:0]              sixteenth,
 
     // julia c in full precision
     input  logic [DATA_WIDTH-1:0]   c_x,
@@ -34,13 +30,13 @@ module control_unit #(
     // scheduler handshake (pixel coords in)
     output logic                    wants_job,
     input  logic                    grant,
-    input  logic [PIXEL_ADDR_W-1:0]      coord_out,
+    input  logic [PIXEL_ADDR_W-1:0] coord_out,
 
 
     // result output handshake (independent of dispatch-side FSM)
     output logic                    done,
-    output logic [PIXEL_W:0]        iter_x,
-    output logic [PIXEL_W:0]        iter_y,
+    output logic [PIXEL_W-1:0]      iter_x,
+    output logic [PIXEL_W-1:0]      iter_y,
     output logic [7:0]              iter_colour,
 
     // color bram read
@@ -65,8 +61,7 @@ module control_unit #(
     input  logic [1:0]              sb_rstate,
 
     // tile table complete
-    output logic                    cu_tile_done_set,
-    output logic [7:0]              cu_tile_done_addr
+    output logic [255:0]            cu_tile_done_set
 
 );
 
@@ -113,7 +108,7 @@ module control_unit #(
         .a         (coord_a_q),
         .b         (coord_b_q),
         .zoom      (zoom_level),
-        .sixteenth (sixteenth[3:0]),
+        .sixteenth (sixteenth),
         .z_real    (z_real),
         .z_imag    (z_imag)
     );
@@ -337,25 +332,29 @@ module control_unit #(
     endgenerate
 
 
-
-
-// tile tabling — 8-bit counter per 16×16-pixel tile
-// tile_addr encodes {col[7:4], row[7:4]} from the BRAM write coordinates.
-// cu_tile_done_set pulses when the 256th pixel of a tile is written
-// (counter wraps 0xFF → 0x00). Cleared by rst or opcode_reset (rst_i)
-// so each new frame starts with fresh counters.
 logic [7:0] tile_table_addr;
-logic [7:0] tile_table [0:255];
+// 9-bit saturating counter: bit[8] is the "full" latch.
+// Counts to 256 (0x100) and holds there — no wrap, no pulse needed.
+logic [8:0] tile_pixel_cnt [0:255];
 
-assign tile_table_addr  = {cu_wr_x[7:4], cu_wr_y[7:4]};
-assign cu_tile_done_set = cu_wr_en && (tile_table[tile_table_addr] == 8'hFF);
+// {row[7:4], col[7:4]} matches tile_done indexing used everywhere else
+assign tile_table_addr = {cu_wr_y[7:4], cu_wr_x[7:4]};
+
+// cu_tile_done_set[i] is level-high once tile i has received all 256 pixels
+genvar i;
+generate
+    for (i = 0; i < 256; i++) begin : tile_done_gen
+        assign cu_tile_done_set[i] = tile_pixel_cnt[i][8];
+    end
+endgenerate
 
 always_ff @(posedge clk) begin
     if (rst_i) begin
-        for (int i = 0; i < 256; i++)
-            tile_table[i] <= 8'h00;
-    end else if (cu_wr_en) begin
-        tile_table[tile_table_addr] <= tile_table[tile_table_addr] + 8'h01;
+        for (int j = 0; j < 256; j++)
+            tile_pixel_cnt[j] <= 9'h000;
+    end else if (cu_wr_en && !tile_pixel_cnt[tile_table_addr][8]) begin
+        // only increment until saturated at 256 (bit[8] set)
+        tile_pixel_cnt[tile_table_addr] <= tile_pixel_cnt[tile_table_addr] + 9'h001;
     end
 end
 endmodule

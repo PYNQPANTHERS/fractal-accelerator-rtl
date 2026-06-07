@@ -16,11 +16,11 @@ module translate #(
 
     always_comb begin : zoom_lut
         case (zoom)
-            4'd0:    scale_factor = DATA_WIDTH'(32'd512);
-            4'd1:    scale_factor = DATA_WIDTH'(32'd256);
-            4'd2:    scale_factor = DATA_WIDTH'(32'd128);
-            4'd3:    scale_factor = DATA_WIDTH'(32'd64);
-            default: scale_factor = DATA_WIDTH'(32'd512);
+            4'd0:    scale_factor = DATA_WIDTH'(32'd256);
+            4'd1:    scale_factor = DATA_WIDTH'(32'd128);
+            4'd2:    scale_factor = DATA_WIDTH'(32'd64);
+            4'd3:    scale_factor = DATA_WIDTH'(32'd32);
+            default: scale_factor = DATA_WIDTH'(32'd256);
         endcase
     end
 

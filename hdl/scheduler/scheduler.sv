@@ -20,7 +20,7 @@ module scheduler #(
     output logic        sched_reset,
     output logic [COORD_W-1:0] top_left_x,
     output logic [COORD_W-1:0] top_left_y,
-    output logic [COORD_W-1:0] quad_size,
+    output logic [COORD_W:0]   quad_size,  // 9 bits: holds root size 256
     output logic [10:0] expected_count,
 
     // Comparator results
@@ -32,7 +32,7 @@ module scheduler #(
     output logic        tt_wr_quad_en,
     output logic [7:0]  tt_wr_quad_tlx,
     output logic [7:0]  tt_wr_quad_tly,
-    output logic [7:0]  tt_wr_quad_size,
+    output logic [8:0]  tt_wr_quad_size,  // 9-bit to hold root size 256
     output logic [5:0]  tt_wr_quad_colour,
 
     // Tile-done bits — set combinationally in the FILL state
@@ -66,6 +66,7 @@ module scheduler #(
 
     // QUEUE_ALL counters (16x16 tile)
     logic [3:0] qa_x, qa_y;
+
 
     // Stack: {depth[2:0], tly[COORD_W-1:0], tlx[COORD_W-1:0]}
     localparam int STACK_W = 3 + COORD_W * 2;
@@ -141,7 +142,7 @@ module scheduler #(
     // ── Comparator configuration (combinational, always reflects current box) ──
     assign top_left_x     = cur_tlx;
     assign top_left_y     = cur_tly;
-    assign quad_size      = cur_sz[COORD_W-1:0];
+    assign quad_size      = cur_sz;
     // 4*sz - 4 border pixels total (corners counted once)
     assign expected_count = (11'(cur_sz) << 2) - 11'd4;
 
@@ -166,10 +167,10 @@ module scheduler #(
     // ── Sequential FSM ────────────────────────────────────────────────────────
     always_ff @(posedge clk) begin
         if (rst) begin
-            state     <= IDLE;
-            cur_tlx   <= '0;
-            cur_tly   <= '0;
-            cur_depth <= '0;
+            state        <= IDLE;
+            cur_tlx      <= '0;
+            cur_tly      <= '0;
+            cur_depth    <= '0;
             cur_sz    <= (COORD_W+1)'(1) << COORD_W;
             b_phase   <= '0;
             b_cnt     <= '0;
@@ -192,9 +193,9 @@ module scheduler #(
 
                 // Resets comparator and border counter; combinational outputs flush + sched_reset
                 SEARCH: begin
-                    b_phase <= '0;
-                    b_cnt   <= '0;
-                    state   <= PUSH_BORDER;
+                    b_phase       <= '0;
+                    b_cnt  <= '0;
+                    state  <= PUSH_BORDER;
                 end
 
                 PUSH_BORDER: begin
@@ -246,9 +247,9 @@ module scheduler #(
                     if (!sched_stall) begin
                         if (qa_x == 4'd15) begin
                             qa_x <= '0;
-                            if (qa_y == 4'd15)
+                            if (qa_y == 4'd15) begin
                                 state <= ADVANCE;
-                            else
+                            end else
                                 qa_y <= qa_y + 4'd1;
                         end else
                             qa_x <= qa_x + 4'd1;
@@ -286,7 +287,7 @@ module scheduler #(
         tt_wr_quad_en     = 1'b0;
         tt_wr_quad_tlx    = cur_tlx;
         tt_wr_quad_tly    = cur_tly;
-        tt_wr_quad_size   = cur_sz_lo - {{(COORD_W-1){1'b0}}, 1'b1};  // inclusive last-pixel offset
+        tt_wr_quad_size   = cur_sz;  // pixel count (9-bit); tile_table shifts right by 4 to get tile count
         tt_wr_quad_colour = ref_colour_o;
         stack_push        = 1'b0;
         stack_pop         = 1'b0;
@@ -294,7 +295,9 @@ module scheduler #(
 
         case (state)
             SEARCH: begin
-                flush       = 1'b1;
+                // sched_reset clears the comparator for the new quad.
+                // No job-queue flush: border pixels from parent quads still in the queue are
+                // valid work for the CU; the comparator discards their results via in_bounds.
                 sched_reset = 1'b1;
             end
 
@@ -309,12 +312,12 @@ module scheduler #(
                 tt_wr_quad_en     = 1'b1;
                 tt_wr_quad_tlx    = cur_tlx;
                 tt_wr_quad_tly    = cur_tly;
-                tt_wr_quad_size   = cur_sz[COORD_W-1:0] - {{(COORD_W-1){1'b0}}, 1'b1};
+                tt_wr_quad_size   = cur_sz;
                 tt_wr_quad_colour = ref_colour_o;
             end
 
             SPLIT: begin
-                flush = 1'b1;  // hold flush while pushing children to prevent stale pixels
+                // No job-queue flush: parent border pixels drain normally; comparator in_bounds filters them.
                 case (split_cnt)
                     2'd0: begin  // push BR child
                         stack_push = 1'b1;

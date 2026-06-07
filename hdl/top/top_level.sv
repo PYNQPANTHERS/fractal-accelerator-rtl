@@ -19,7 +19,7 @@ module top_level (
     // AXI Lite config registers (written by PS)
     // TODO: connect to AXI Lite slave wrapper
     logic        ps_start           = 1'b0;
-    logic [4:0]  cfg_equation_id    = 5'd0;
+    logic [4:0]  cfg_fractal_type   = 5'd0;
     logic [31:0] cfg_pan_x          = 32'd0;
     logic [31:0] cfg_pan_y          = 32'd0;
     logic [31:0] cfg_zoom_level     = 32'd0;
@@ -29,7 +29,7 @@ module top_level (
     // Controller <-> engine wires
     logic        ctrl_engine_rst;
     logic        ctrl_start;
-    logic [4:0]  ctrl_equation_id;
+    logic [4:0]  ctrl_fractal_type;
     logic [31:0] ctrl_pan_x;
     logic [31:0] ctrl_pan_y;
     logic [31:0] ctrl_zoom_level;
@@ -38,7 +38,7 @@ module top_level (
     logic [9:0]  ctrl_x_offset;
     logic [9:0]  ctrl_y_offset;
     logic [31:0] ctrl_sixteenth_base_addr;
-    logic        ctrl_quarter_complete;
+    logic        ctrl_sixteenth_complete;
     logic        ctrl_all_done;
 
     // engine_rst combines global reset with between-sixteenth reset from controller
@@ -49,7 +49,7 @@ module top_level (
         .clk                (clk),
         .rst                (rst),
         .ps_start           (ps_start),
-        .cfg_equation_id    (cfg_equation_id),
+        .cfg_fractal_type   (cfg_fractal_type),
         .cfg_pan_x          (cfg_pan_x),
         .cfg_pan_y          (cfg_pan_y),
         .cfg_zoom_level     (cfg_zoom_level),
@@ -57,7 +57,7 @@ module top_level (
         .cfg_image_base_addr(cfg_image_base_addr),
         .engine_rst         (ctrl_engine_rst),
         .start              (ctrl_start),
-        .equation_id        (ctrl_equation_id),
+        .fractal_type       (ctrl_fractal_type),
         .pan_x              (ctrl_pan_x),
         .pan_y              (ctrl_pan_y),
         .zoom_level         (ctrl_zoom_level),
@@ -66,7 +66,7 @@ module top_level (
         .y_offset           (ctrl_y_offset),
         .sixteenth_id       (ctrl_sixteenth_id),
         .sixteenth_base_addr(ctrl_sixteenth_base_addr),
-        .quarter_complete   (ctrl_quarter_complete),
+        .sixteenth_complete (ctrl_sixteenth_complete),
         .all_done           (ctrl_all_done)
     );
 
@@ -76,8 +76,8 @@ module top_level (
         .rst                (engine_combined_rst),
         .start              (ctrl_start),
         .engine_done        (),
-        .quarter_complete   (ctrl_quarter_complete),
-        .equation_id        (ctrl_equation_id),
+        .sixteenth_complete (ctrl_sixteenth_complete),
+        .fractal_type       (ctrl_fractal_type),
         .pan_x              (ctrl_pan_x),
         .pan_y              (ctrl_pan_y),
         .zoom_level         (ctrl_zoom_level),

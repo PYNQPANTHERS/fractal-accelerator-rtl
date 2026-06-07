@@ -11,7 +11,7 @@ module comparator #(
     input  logic        sched_reset,      // pulse to reset and load new quad config
     input  logic [COORD_W-1:0] top_left_x,
     input  logic [COORD_W-1:0] top_left_y,
-    input  logic [COORD_W-1:0] quad_size, // in pixels, border is quad_size wide
+    input  logic [COORD_W:0]   quad_size, // in pixels — 9 bits to hold root quad size 256
     input  logic [10:0] expected_count,   // total border pixels expected (max 2046)
 
     // Complete queue handler interface
@@ -77,7 +77,7 @@ module comparator #(
             seen_count <= seen_count + 1'b1;
 
             // Latch complete when we have seen all expected border pixels
-            if (seen_count + 1'b1 == expected_count)
+            if (seen_count + 1'b1 >= expected_count)
                 complete <= 1'b1;
         end
         // Out-of-bounds entries: comp_pop still fires (entry consumed) but no state changes 

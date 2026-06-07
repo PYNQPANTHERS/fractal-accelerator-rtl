@@ -9,7 +9,7 @@ module sixteenth_controller (
     input  logic ps_start,
 
     // Config inputs from PS AXI registers
-    input  logic [4:0]  cfg_equation_id,
+    input  logic [4:0]  cfg_fractal_type,
     input  logic [31:0] cfg_pan_x,
     input  logic [31:0] cfg_pan_y,
     input  logic [31:0] cfg_zoom_level,
@@ -23,7 +23,7 @@ module sixteenth_controller (
     output logic start,
 
     // Registered config outputs to per_sixteenth_engine
-    output logic [4:0]  equation_id,
+    output logic [4:0]  fractal_type,
     output logic [31:0] pan_x,
     output logic [31:0] pan_y,
     output logic [31:0] zoom_level,
@@ -62,7 +62,7 @@ module sixteenth_controller (
             all_done            <= 1'b0;
             start               <= 1'b0;
             engine_rst          <= 1'b1;
-            equation_id         <= '0;
+            fractal_type        <= '0;
             pan_x               <= '0;
             pan_y               <= '0;
             zoom_level          <= '0;
@@ -82,7 +82,7 @@ module sixteenth_controller (
                     sixteenth_index <= 4'd0;
                     if (ps_start) begin
                         // TODO: connect to AXI Lite slave wrapper
-                        equation_id <= cfg_equation_id;
+                        fractal_type <= cfg_fractal_type;
                         pan_x       <= cfg_pan_x;
                         pan_y       <= cfg_pan_y;
                         zoom_level  <= cfg_zoom_level;
