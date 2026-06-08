@@ -60,10 +60,12 @@ module per_sixteenth_engine #(
     logic [7:0]  cbram_ctrl_rd_y;
     logic        cbram_ctrl_rd_en;
     logic [7:0]  cbram_ctrl_rd_data;
-    logic [7:0]  cbram_ctrl_wr_x;
-    logic [7:0]  cbram_ctrl_wr_y;
     logic        cbram_ctrl_wr_en;
-    logic [7:0]  cbram_ctrl_wr_data;
+    logic [12:0] cbram_ctrl_wr_waddr;
+    logic [63:0] cbram_ctrl_wr_word;
+    logic [12:0] cbram_ctrl_rmw_rd_addr;
+    logic        cbram_ctrl_rmw_rd_en;
+    logic [63:0] cbram_ctrl_rmw_rd_data;
     logic [12:0] cbram_b2d_word_addr;
     logic        cbram_b2d_rd_en;
     logic        cbram_b2d_rd_grant;
@@ -182,11 +184,13 @@ module per_sixteenth_engine #(
         .cu_rd_en           (cbram_ctrl_rd_en),
         .cu_rd_data         (cbram_ctrl_rd_data),
 
-        // colour_bram write
+        // colour_bram write (full-word RMW)
         .cu_wr_en           (cbram_ctrl_wr_en),
-        .cu_wr_x            (cbram_ctrl_wr_x),
-        .cu_wr_y            (cbram_ctrl_wr_y),
-        .cu_wr_data         (cbram_ctrl_wr_data),
+        .cu_wr_waddr        (cbram_ctrl_wr_waddr),
+        .cu_wr_word         (cbram_ctrl_wr_word),
+        .cu_rmw_rd_en       (cbram_ctrl_rmw_rd_en),
+        .cu_rmw_rd_addr     (cbram_ctrl_rmw_rd_addr),
+        .cu_rmw_rd_data     (cbram_ctrl_rmw_rd_data),
 
         // state_bram
         .sb_x               (sbram_x),
@@ -256,10 +260,12 @@ module per_sixteenth_engine #(
         .ctrl_rd_y    (cbram_ctrl_rd_y),
         .ctrl_rd_en   (cbram_ctrl_rd_en),
         .ctrl_rd_data (cbram_ctrl_rd_data),
-        .ctrl_wr_x    (cbram_ctrl_wr_x),
-        .ctrl_wr_y    (cbram_ctrl_wr_y),
-        .ctrl_wr_en   (cbram_ctrl_wr_en),
-        .ctrl_wr_data (cbram_ctrl_wr_data),
+        .ctrl_wr_en       (cbram_ctrl_wr_en),
+        .ctrl_wr_waddr    (cbram_ctrl_wr_waddr),
+        .ctrl_wr_word     (cbram_ctrl_wr_word),
+        .ctrl_rmw_rd_en   (cbram_ctrl_rmw_rd_en),
+        .ctrl_rmw_rd_addr (cbram_ctrl_rmw_rd_addr),
+        .ctrl_rmw_rd_data (cbram_ctrl_rmw_rd_data),
         .b2d_word_addr(cbram_b2d_word_addr),
         .b2d_rd_en    (cbram_b2d_rd_en),
         .b2d_rd_grant (cbram_b2d_rd_grant),

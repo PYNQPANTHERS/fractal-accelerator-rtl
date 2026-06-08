@@ -45,11 +45,14 @@ module control_unit #(
     output logic                    cu_rd_en,
     input  logic [7:0]              cu_rd_data,
 
-    // color bram write
+    // color bram write (full-word RMW, managed internally by bram_read_write)
     output logic                    cu_wr_en,
-    output logic [PIXEL_W-1:0]      cu_wr_x,
-    output logic [PIXEL_W-1:0]      cu_wr_y,
-    output logic [7:0]              cu_wr_data,
+    output logic [12:0]             cu_wr_waddr,
+    output logic [63:0]             cu_wr_word,
+    // color bram RMW pre-read
+    output logic [12:0]             cu_rmw_rd_addr,
+    output logic                    cu_rmw_rd_en,
+    input  logic [63:0]             cu_rmw_rd_data,
 
 
     // state_bram
@@ -115,14 +118,39 @@ module control_unit #(
 
     logic bram_miss, bram_started, bram_done;
     logic [7:0] bram_colour;
+    logic bram_read_done_pulse;
 
     logic                    bram_res_pending;
     logic [PIXEL_ADDR_W-1:0] bram_res_pixel_addr;
     logic [PIXEL_W-1:0]      bram_res_data;
 
-    assign bram_res_pending    = bram_done;
-    assign bram_res_pixel_addr = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
-    assign bram_res_data       = bram_colour;
+    // Retrying injector: latch "done" detection (fires once per READ via read_done_pulse)
+    // and retry each cycle until res_fifo has space. The latch also preserves addr/colour
+    // across accept_pulse, which updates coord_a_q/b_q before the injection can fire.
+    // The !inject_pending guard prevents a second simultaneous "done" from overwriting
+    // a pending injection; stall_inject feeds back to frame_fsm so it holds JOB_WAIT
+    // until the latch clears before accepting the next pixel.
+    logic inject_pending;
+    logic [PIXEL_ADDR_W-1:0] inject_addr;
+    logic [PIXEL_W-1:0]      inject_colour;
+
+    always_ff @(posedge clk) begin
+        if (rst_i) begin
+            inject_pending <= 1'b0;
+            inject_addr    <= '0;
+            inject_colour  <= '0;
+        end else if (bram_read_done_pulse && bram_done && check_bram && !inject_pending) begin
+            inject_pending <= 1'b1;
+            inject_addr    <= {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
+            inject_colour  <= bram_colour;
+        end else if (inject_pending && !res_fifo_full) begin
+            inject_pending <= 1'b0;
+        end
+    end
+
+    assign bram_res_pending    = inject_pending;
+    assign bram_res_pixel_addr = inject_addr;
+    assign bram_res_data       = inject_colour;
 
     assign cu_rd_x = coord_a_q[PIXEL_W-1:0];
     assign cu_rd_y = coord_b_q[PIXEL_W-1:0];
@@ -138,32 +166,35 @@ module control_unit #(
     bram_read_write #(
         .PIXEL_W (PIXEL_W)
     ) u_bram_rw (
-        .clk          (clk),
-        .rst          (rst_i),
-        .check_bram   (check_bram),
-        .a            (cu_rd_x),
-        .b            (cu_rd_y),
-        .bram_rd_en   (cu_rd_en),
-        .bram_rd_data (cu_rd_data),
-        .bram_wr_en   (cu_wr_en),
-        .bram_wr_a    (cu_wr_x),
-        .bram_wr_b    (cu_wr_y),
-        .bram_wr_data (cu_wr_data),
-        .sb_rd        (sb_rd),
-        .sb_we        (sb_we),
-        .sb_x         (sb_x),
-        .sb_y         (sb_y),
-        .sb_wstate    (sb_wstate),
-        .sb_rstate    (sb_rstate),
-        .res_valid    (!res_fifo_empty),
-        .res_a        (res_fifo_rd_data[RES_FIFO_DW-1 -: PIXEL_W]),
-        .res_b        (res_fifo_rd_data[RES_FIFO_DW-1-PIXEL_W -: PIXEL_W]),
-        .res_colour   (res_fifo_rd_data[7:0]),
-        .res_rd_en    (res_fifo_rd_en),
-        .miss         (bram_miss),
-        .started      (bram_started),
-        .done         (bram_done),
-        .colour       (bram_colour)
+        .clk             (clk),
+        .rst             (rst_i),
+        .check_bram      (check_bram),
+        .a               (cu_rd_x),
+        .b               (cu_rd_y),
+        .bram_rd_en      (cu_rd_en),
+        .bram_rd_data    (cu_rd_data),
+        .bram_wr_en      (cu_wr_en),
+        .bram_wr_waddr   (cu_wr_waddr),
+        .bram_wr_word    (cu_wr_word),
+        .bram_rmw_rd_en  (cu_rmw_rd_en),
+        .bram_rmw_rd_addr(cu_rmw_rd_addr),
+        .bram_rmw_rd_data(cu_rmw_rd_data),
+        .sb_rd           (sb_rd),
+        .sb_we           (sb_we),
+        .sb_x            (sb_x),
+        .sb_y            (sb_y),
+        .sb_wstate       (sb_wstate),
+        .sb_rstate       (sb_rstate),
+        .res_valid       (!res_fifo_empty),
+        .res_a           (res_fifo_rd_data[RES_FIFO_DW-1 -: PIXEL_W]),
+        .res_b           (res_fifo_rd_data[RES_FIFO_DW-1-PIXEL_W -: PIXEL_W]),
+        .res_colour      (res_fifo_rd_data[7:0]),
+        .res_rd_en       (res_fifo_rd_en),
+        .miss            (bram_miss),
+        .started         (bram_started),
+        .done            (bram_done),
+        .colour          (bram_colour),
+        .read_done_pulse (bram_read_done_pulse)
     );
 
     logic [CLUSTER_COUNT-1:0] chosen_onehot;
@@ -236,8 +267,8 @@ module control_unit #(
         .empty  (res_fifo_empty)
     );
 
-    assign done                          = !res_fifo_empty;
-    assign {iter_x, iter_y, iter_colour} = res_fifo_rd_data;
+    assign done                          = res_fifo_wr_en;
+    assign {iter_x, iter_y, iter_colour} = res_fifo_wr_data;
 
 
     frame_fsm u_fsm (
@@ -250,10 +281,13 @@ module control_unit #(
         .job_ready           (wants_job),
         .load_last           (load_last),
         .any_cluster_free    (any_cluster_free),
+        .bram_result_valid   (bram_read_done_pulse),
+        .inject_stall        (inject_pending),
         .bram_miss           (bram_miss),
         .bram_started        (bram_started),
         .bram_done           (bram_done),
         .check_bram          (check_bram),
+        .pixel_skip          (),
         .opcode_broadcast_en (opcode_broadcast_en),
         .load_c_en           (load_c_en),
         .load_z_en           (load_z_en),
@@ -337,8 +371,9 @@ logic [7:0] tile_table_addr;
 // Counts to 256 (0x100) and holds there — no wrap, no pulse needed.
 logic [8:0] tile_pixel_cnt [0:255];
 
-// {row[7:4], col[7:4]} matches tile_done indexing used everywhere else
-assign tile_table_addr = {cu_wr_y[7:4], cu_wr_x[7:4]};
+// cu_wr_waddr = {tile_y[3:0], tile_x[3:0], row_in_tile[3:0], col_half[0]}
+// waddr[12:5] = {tile_y[3:0], tile_x[3:0]} = tile index
+assign tile_table_addr = cu_wr_waddr[12:5];
 
 // cu_tile_done_set[i] is level-high once tile i has received all 256 pixels
 genvar i;
@@ -353,7 +388,6 @@ always_ff @(posedge clk) begin
         for (int j = 0; j < 256; j++)
             tile_pixel_cnt[j] <= 9'h000;
     end else if (cu_wr_en && !tile_pixel_cnt[tile_table_addr][8]) begin
-        // only increment until saturated at 256 (bit[8] set)
         tile_pixel_cnt[tile_table_addr] <= tile_pixel_cnt[tile_table_addr] + 9'h001;
     end
 end

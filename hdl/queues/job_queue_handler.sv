@@ -41,7 +41,7 @@ module job_queue_handler (
     assign q_push      = sched_push && !q_full;
 
     // Pop side - single requester, no arbitration needed
-    assign q_pop = wants_job && !q_empty;
+    assign q_pop = wants_job && !q_empty && !grant;
 
     // Register grant and coord_out so both are valid on the same cycle
     always_ff @(posedge clk) begin

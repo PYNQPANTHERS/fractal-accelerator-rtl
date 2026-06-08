@@ -1,6 +1,8 @@
 
 // bram_read_write
-//   Arbitrates BRAM access between the FSM read path and the result write
+//   Arbitrates colour/state BRAM access between the FSM read path and result writes.
+//   Pixel writes are full-word RMW: PREREAD fetches the 64-bit word, WRITE merges
+//   the new byte and writes the word back — no aliasing between consecutive writes.
 
 module bram_read_write #(
     parameter int PIXEL_W = 8
@@ -13,18 +15,24 @@ module bram_read_write #(
     input  logic [PIXEL_W-1:0]  a,
     input  logic [PIXEL_W-1:0]  b,
 
-    // colour BRAM interface — 8-bit data
+    // colour BRAM byte-read interface (frame_fsm check path)
     output logic                bram_rd_en,
     input  logic [7:0]          bram_rd_data,
+
+    // colour BRAM full-word write interface (RMW result path)
+    output logic [12:0]         bram_wr_waddr,
+    output logic [63:0]         bram_wr_word,
     output logic                bram_wr_en,
-    output logic [PIXEL_W-1:0]  bram_wr_a,
-    output logic [PIXEL_W-1:0]  bram_wr_b,
-    output logic [7:0]          bram_wr_data,
+
+    // colour BRAM word-read for RMW pre-read
+    output logic [12:0]         bram_rmw_rd_addr,
+    output logic                bram_rmw_rd_en,
+    input  logic [63:0]         bram_rmw_rd_data,
 
     // state BRAM interface — 2-bit: {done, start}
     output logic                sb_rd,
     output logic                sb_we,
-    output logic [PIXEL_W-1:0]  sb_x,        // muxed read/write address
+    output logic [PIXEL_W-1:0]  sb_x,
     output logic [PIXEL_W-1:0]  sb_y,
     output logic [1:0]          sb_wstate,
     input  logic [1:0]          sb_rstate,
@@ -40,25 +48,26 @@ module bram_read_write #(
     output logic                miss,
     output logic                started,
     output logic                done,
-    output logic [7:0]          colour
+    output logic [7:0]          colour,
+
+    // one-cycle pulse: fresh miss/done/started values are now valid for the
+    // pixel whose check_bram triggered the READ that just completed
+    output logic                read_done_pulse
 );
 
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         IDLE,
         READ,
-        WRITE
+        PREREAD,   // issue word-read for RMW
+        WRITE      // merge byte and write full word back
     } state_t;
 
     state_t current_state, next_state;
 
-    // 0 = last action was read  
-    // 1 = last action was write 
     logic prev_load;
-
-    logic              started_write_pending;
+    logic started_write_pending;
     logic [PIXEL_W-1:0] a_latch, b_latch;
 
-    // arbitration 
     logic any_wr_pending;
     assign any_wr_pending = started_write_pending || res_valid;
 
@@ -76,12 +85,23 @@ module bram_read_write #(
     logic bram_action;
     assign bram_action = (current_state == IDLE) && (go_read || go_write);
 
-    // started write beats result write within the write slot
     logic serve_started, serve_result;
     assign serve_started = started_write_pending;
     assign serve_result  = res_valid && !started_write_pending;
 
-    // state machine 
+    // Tile address for the result pixel being written
+    logic [15:0] res_ta;
+    logic [12:0] res_waddr;
+    logic [2:0]  res_boff;
+    assign res_ta    = {res_b[7:4], res_a[7:4], res_b[3:0], res_a[3:0]};
+    assign res_waddr = res_ta[15:3];
+    assign res_boff  = res_ta[2:0];
+
+    // Latch write target across PREREAD → WRITE
+    logic [12:0] wr_waddr_q;
+    logic [2:0]  wr_boff_q;
+    logic [7:0]  wr_data_q;
+
     always_ff @(posedge clk) begin
         if (rst) current_state <= IDLE;
         else     current_state <= next_state;
@@ -91,14 +111,14 @@ module bram_read_write #(
         next_state = current_state;
         unique case (current_state)
             IDLE:    if      (go_read)  next_state = READ;
-                     else if (go_write) next_state = WRITE;
+                     else if (go_write) next_state = PREREAD;
             READ:                       next_state = IDLE;
+            PREREAD:                    next_state = WRITE;
             WRITE:                      next_state = IDLE;
             default:                    next_state = IDLE;
         endcase
     end
 
-    // datapath registers 
     always_ff @(posedge clk) begin
         if (rst) begin
             prev_load             <= 1'b0;
@@ -109,6 +129,9 @@ module bram_read_write #(
             started               <= 1'b0;
             done                  <= 1'b0;
             colour                <= 8'b0;
+            wr_waddr_q            <= '0;
+            wr_boff_q             <= '0;
+            wr_data_q             <= '0;
         end else begin
             if (bram_action) prev_load <= ~prev_load;
 
@@ -117,16 +140,20 @@ module bram_read_write #(
                 b_latch <= b;
             end
 
-            // latch decoded outputs in READ — hold until next READ
-            // state bits come from state_bram (sb_rstate), colour from colour BRAM
             if (current_state == READ) begin
                 started <= sb_rstate[0] & ~sb_rstate[1];
                 done    <= sb_rstate[1];
                 miss    <= ~sb_rstate[0] & ~sb_rstate[1];
                 colour  <= bram_rd_data;
-
                 if (~sb_rstate[0] & ~sb_rstate[1])
                     started_write_pending <= 1'b1;
+            end
+
+            // Latch write target on entry to PREREAD
+            if (current_state == PREREAD) begin
+                wr_waddr_q <= res_waddr;
+                wr_boff_q  <= res_boff;
+                wr_data_q  <= res_colour;
             end
 
             if (current_state == WRITE && serve_started)
@@ -134,23 +161,39 @@ module bram_read_write #(
         end
     end
 
-    // colour BRAM read
+    // Pulse high for the one cycle immediately after READ exits — this is the
+    // first cycle where done/miss/started hold fresh values for the current pixel.
+    always_ff @(posedge clk) begin
+        if (rst) read_done_pulse <= 1'b0;
+        else     read_done_pulse <= (current_state == READ);
+    end
+
+    // Merged write word: take the pre-read word and insert the new byte
+    logic [63:0] merged_word;
+    always_comb begin
+        merged_word = bram_rmw_rd_data;
+        merged_word[wr_boff_q*8 +: 8] = wr_data_q;
+    end
+
+    // colour BRAM byte-read (frame_fsm check)
     assign bram_rd_en = (current_state == IDLE) && go_read;
 
-    // colour BRAM write (result only — colour not known at started time)
-    assign bram_wr_en   = (current_state == WRITE) && serve_result;
-    assign bram_wr_a    = res_a;
-    assign bram_wr_b    = res_b;
-    assign bram_wr_data = res_colour;
+    // colour BRAM RMW pre-read
+    assign bram_rmw_rd_en   = (current_state == PREREAD);
+    assign bram_rmw_rd_addr = res_waddr;  // combinational from current res pixel
+
+    // colour BRAM full-word write
+    assign bram_wr_en    = (current_state == WRITE) && serve_result;
+    assign bram_wr_waddr = wr_waddr_q;
+    assign bram_wr_word  = merged_word;
 
     assign res_rd_en = (current_state == WRITE) && serve_result;
 
-    // state BRAM read — same cycle as colour BRAM read
-    assign sb_rd = (current_state == IDLE) && go_read;
-    // state BRAM write — muxed address; started=2'b01, done=2'b11
-    assign sb_we     = (current_state == WRITE);
-    assign sb_x      = sb_rd ? a : (serve_started ? a_latch : res_a);
-    assign sb_y      = sb_rd ? b : (serve_started ? b_latch : res_b);
-    assign sb_wstate = serve_started ? 2'b01 : 2'b11;
+    // state BRAM
+    assign sb_rd      = (current_state == IDLE) && go_read;
+    assign sb_we      = (current_state == WRITE);
+    assign sb_x       = sb_rd ? a : (serve_started ? a_latch : res_a);
+    assign sb_y       = sb_rd ? b : (serve_started ? b_latch : res_b);
+    assign sb_wstate  = serve_started ? 2'b01 : 2'b11;
 
 endmodule

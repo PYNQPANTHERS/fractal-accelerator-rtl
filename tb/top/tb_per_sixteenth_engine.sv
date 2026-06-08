@@ -108,10 +108,10 @@ module tb_per_sixteenth_engine;
     int          dram_cnt  = 0;
 
     always @(posedge clk) begin
-        if (dut.u_colour_bram.ctrl_wr_en && bram_cnt < MAX_BRAM) begin
-            bram_x  [bram_cnt] = dut.u_colour_bram.ctrl_wr_x;
-            bram_y  [bram_cnt] = dut.u_colour_bram.ctrl_wr_y;
-            bram_col[bram_cnt] = dut.u_colour_bram.ctrl_wr_data;
+        if (dut.u_control_unit.u_bram_rw.bram_wr_en && bram_cnt < MAX_BRAM) begin
+            bram_x  [bram_cnt] = dut.u_control_unit.u_bram_rw.res_a;
+            bram_y  [bram_cnt] = dut.u_control_unit.u_bram_rw.res_b;
+            bram_col[bram_cnt] = dut.u_control_unit.u_bram_rw.res_colour;
             bram_cnt++;
         end
         if (axi_wr_en && axi_wr_ready && dram_cnt < MAX_DRAM) begin
@@ -155,13 +155,13 @@ module tb_per_sixteenth_engine;
         end
 
         // Log first 8 colour_bram writes: shows what actually lands in BRAM
-        if (dut.u_colour_bram.ctrl_wr_en && bram_write_logged < 8) begin
+        if (dut.u_control_unit.u_bram_rw.bram_wr_en && bram_write_logged < 8) begin
             $display("  [bram_wr] cyc=%0d  x=%0d y=%0d  colour=0x%02X (%0d)",
                      cyc,
-                     dut.u_colour_bram.ctrl_wr_x,
-                     dut.u_colour_bram.ctrl_wr_y,
-                     dut.u_colour_bram.ctrl_wr_data,
-                     dut.u_colour_bram.ctrl_wr_data);
+                     dut.u_control_unit.u_bram_rw.res_a,
+                     dut.u_control_unit.u_bram_rw.res_b,
+                     dut.u_control_unit.u_bram_rw.res_colour,
+                     dut.u_control_unit.u_bram_rw.res_colour);
             bram_write_logged++;
         end
 
