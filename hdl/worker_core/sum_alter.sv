@@ -7,7 +7,7 @@ input signed [2*NARROW_WIDTH-1:0] sum_y_reg_2,
 
 input [3:0] magnitude_negation_encoding,
 
-
+input logic is_wide,
 
 output logic signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_1,
 output logic signed [2*NARROW_WIDTH-1:0] changed_sum_x_reg_2,

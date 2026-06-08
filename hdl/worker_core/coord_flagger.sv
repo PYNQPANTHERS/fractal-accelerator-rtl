@@ -6,6 +6,7 @@
 module coord_flagger #(parameter NARROW_WIDTH = 18, NARROW_FRACTIONAL_BITS = 16, INTEGER_BITS = 2) // currently checks if |coord| > 2
 (
     input signed [2*NARROW_WIDTH-1:0] coordinate,
+    input logic is_wide,
     output logic flag
 
 );
@@ -15,9 +16,13 @@ module coord_flagger #(parameter NARROW_WIDTH = 18, NARROW_FRACTIONAL_BITS = 16,
 
 
 always_comb begin
-    if(coordinate[TOP:BOTTOM] == {(INTEGER_BITS+1){1'b0}}) flag = 0;
-    else if(coordinate[TOP:BOTTOM] == {(INTEGER_BITS+1){1'b1}}) flag = 0;
-    else flag = 1;
+    if (1'b0) begin
+        flag = 0;
+    end else begin
+        if(coordinate[TOP:BOTTOM] == {(INTEGER_BITS+1){1'b0}}) flag = 0;
+        else if(coordinate[TOP:BOTTOM] == {(INTEGER_BITS+1){1'b1}}) flag = 0;
+        else flag = 1;
+    end
 end
 
 
