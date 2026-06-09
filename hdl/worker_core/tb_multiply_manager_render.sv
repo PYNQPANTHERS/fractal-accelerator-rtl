@@ -50,12 +50,26 @@ module tb_multiply_manager_render;
     localparam int ITERATION_COUNT_WIDTH = 16;
     localparam int LOW                   = 0;
 
+<<<<<<< HEAD
     localparam int NFRAC = NARROW_WIDTH - INTEGER_BITS;  // 16 — fractional bits in narrow Q2.16
     localparam int WFRAC = 33;                           // fractional bits in wide Q2.33
 
     // Render geometry
     localparam int WIDTH  = 512;
     localparam int HEIGHT = 512;
+=======
+    localparam int NFRAC   = NARROW_WIDTH - INTEGER_BITS;  // 16
+    localparam int WIDTH   = 128;
+    localparam int HEIGHT  = 128;
+    localparam real XMIN   = -1.5;
+    localparam real XMAX   =  1.5;
+    localparam real YMIN   = -1.5;
+    localparam real YMAX   =  1.5;
+
+    // max_iteration field: DUT iteration ceiling = 2^(max_iteration + LOW)
+    // 5'd9 -> 512 iterations, a good balance of detail vs sim time
+    localparam logic [4:0] MAX_ITER = 5'd6;
+>>>>>>> worker_core_development
 
     // Narrow render window
     localparam real N_XMIN = -1.5;
@@ -263,15 +277,15 @@ module tb_multiply_manager_render;
         // =====================================================================
         $display("=== NARROW MODE RENDER: %0dx%0d, range [%.2f,%.2f] ===",
                  WIDTH, HEIGHT, N_XMIN, N_XMAX);
+        // fixed config for all pixels: standard Mandelbrot
+        julia_type                  = 1'b0;
+        magnitude_negation_encoding = 4'b0000;
+        max_iteration               = MAX_ITER;
+        julia_c_x                   = to_q216(-0.74);
+        julia_c_y                   = to_q216(0);
 
         
 
-        // Standard Mandelbrot: julia_type=0, no magnitude/negation flags
-        julia_type                   = 1'b0;
-        magnitude_negation_encoding  = 4'b0000;
-        max_iteration                = MAX_ITER;
-        julia_c_x                    = '0;
-        julia_c_y                    = '0;
 
         fd = $fopen("sim/render/frame_narrow.csv", "w");
         if (!fd) begin $display("ERROR: cannot open frame_narrow.csv"); $finish; end

@@ -1,4 +1,5 @@
 module multiply #(parameter NARROW_WIDTH = 18)(
+    input clk,
     input  signed [NARROW_WIDTH-1:0]   x,
     input  signed [NARROW_WIDTH-1:0]   y,
     input  [1:0]                       mode,
@@ -8,26 +9,18 @@ module multiply #(parameter NARROW_WIDTH = 18)(
     output logic signed [2*NARROW_WIDTH-1:0] result
 );
 
-always_comb begin
+logic signed [2*NARROW_WIDTH-1:0] combinational_result;
 
-    if (is_wide) begin
-        case (mode)
-            2'b00:   result = x * x;
-            2'b01:   result = y * y;
-            2'b10:   result = (x * y) <<< 1;  // arithmetic left shift = *2
-            2'b11:   result = x * y; // cross product, no shift
-            default: result = '0;
-        endcase
-        
-    end else begin
-        case (mode)
-            2'b00:   result = x * x;
-            2'b01:   result = y * y;
-            2'b10:   result = (x * y) <<< 1;  // arithmetic left shift = *2
-            default: result = '0;
-        endcase
-    end
-    
+always_comb begin
+    case (mode)
+        2'b00:   combinational_result = x * x;
+        2'b01:   combinational_result = y * y;
+        2'b10:   combinational_result = (x * y) <<< 1;  // arithmetic left shift = *2
+        default: combinational_result = '0;
+    endcase
 end
 
+always_ff @(posedge clk) begin
+    result <= combinational_result;
+end
 endmodule
