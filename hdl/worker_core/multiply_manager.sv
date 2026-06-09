@@ -519,11 +519,12 @@ always_ff @(posedge clk) begin
             iteration_reg_1 <= '0;
 
             if(julia_type) begin //julia set setup
-                {sum_x_reg_1, sum_x_reg_2} <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
+                sum_x_reg_1 <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:1]};
+                sum_x_reg_2 <= {starting_x_reg_2[0], {2*NARROW_WIDTH-1{1'b0}}};
                 
-                {sum_y_reg_1, sum_y_reg_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
-                {wide_partial_1, wide_partial_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
- 
+                sum_y_reg_1 <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:1]};
+                sum_y_reg_2 <= {starting_x_reg_2[0], {2*NARROW_WIDTH-1{1'b0}}};
+
             end
             else begin // mandelbrot set setup
                 sum_x_reg_1 <= '0;
@@ -545,7 +546,7 @@ always_ff @(posedge clk) begin
                     else begin
                         //multiplier 1
                         spare_x_reg_1 <= encoded_x_reg_1[2*NARROW_FRACTIONAL_BITS+1:NARROW_FRACTIONAL_BITS]; //x_high
-                        sum_y_reg_2 <= {1'b0, encoded_x_reg_1[NARROW_FRACTIONAL_BITS-1:0], encoded_x_reg_2[2*NARROW_WIDTH-1]}; //x_low (unsigned)
+                        sum_y_reg_1 <= {1'b0, encoded_x_reg_1[NARROW_FRACTIONAL_BITS-1:0], encoded_x_reg_2[2*NARROW_WIDTH-1]}; //x_low (unsigned)
                         
                         //multiplier 2
                         spare_x_reg_2 <= encoded_y_reg_1[2*NARROW_FRACTIONAL_BITS+1:NARROW_FRACTIONAL_BITS]; //y_high                        
@@ -613,21 +614,26 @@ always_ff @(posedge clk) begin
                 end
 
                 W_ADD_JULIA : begin
-                    sum_x_reg_1 <= $signed(sum_x_reg_1) + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    sum_x_reg_1 <= $signed(sum_x_reg_1) + ($signed({{NARROW_WIDTH{julia_c_x[NARROW_WIDTH-1]}}, julia_c_x}) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_1 <= $signed(wide_partial_1) + ($signed({{NARROW_WIDTH{julia_c_y[NARROW_WIDTH-1]}}, julia_c_y}) <<< NARROW_FRACTIONAL_BITS);
                     
-                    sum_y_reg_1 <= $signed(wide_partial_1) + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
                     sum_y_reg_2 <= wide_partial_2;
 
-                    joint_cycle <= W_ALTER_SUM;
                     iteration_reg_1 <= iteration_reg_1 + 1;
+
+                    if (left_magnitude_flag) joint_cycle <= W_DONE;
+                    else joint_cycle <= W_ALTER_SUM;
                 end
 
                 W_ADD_COORD : begin
                     {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) + {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
                     {sum_y_reg_1, sum_y_reg_2} <= $signed({wide_partial_1, wide_partial_2}) + {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
 
-                    joint_cycle <= W_ALTER_SUM;
+                    
                     iteration_reg_1 <= iteration_reg_1 + 1;
+
+                    if (left_magnitude_flag) joint_cycle <= W_DONE;
+                    else joint_cycle <= W_ALTER_SUM;
                 end
 
                 W_DONE : begin

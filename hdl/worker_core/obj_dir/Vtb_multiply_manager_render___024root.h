@@ -32,6 +32,8 @@ class alignas(VL_CACHE_LINE_BYTES) Vtb_multiply_manager_render___024root final {
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1_overflow_flag;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1_overflow_flag;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__is_wide;
+        CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode;
+        CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag;
         CData/*0:0*/ __VstlFirstIteration;
         CData/*0:0*/ __VstlPhaseResult;
@@ -49,14 +51,11 @@ class alignas(VL_CACHE_LINE_BYTES) Vtb_multiply_manager_render___024root final {
         IData/*17:0*/ tb_multiply_manager_render__DOT__starting_y_reg_1;
         IData/*17:0*/ tb_multiply_manager_render__DOT__starting_y_reg_2;
         IData/*31:0*/ tb_multiply_manager_render__DOT__iter_result;
+        IData/*31:0*/ tb_multiply_manager_render__DOT__col;
         IData/*17:0*/ tb_multiply_manager_render__DOT__qx;
         IData/*17:0*/ tb_multiply_manager_render__DOT__qy;
-        IData/*17:0*/ tb_multiply_manager_render__DOT__wxh;
         IData/*17:0*/ tb_multiply_manager_render__DOT__wyh;
-        IData/*17:0*/ tb_multiply_manager_render__DOT__wxl;
         IData/*17:0*/ tb_multiply_manager_render__DOT__wyl;
-        IData/*31:0*/ tb_multiply_manager_render__DOT__unnamedblk1__DOT__unnamedblk2__DOT__col;
-        IData/*31:0*/ tb_multiply_manager_render__DOT__unnamedblk3__DOT__unnamedblk4__DOT__col;
         IData/*17:0*/ tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1;
         IData/*17:0*/ tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2;
         IData/*31:0*/ tb_multiply_manager_render__DOT__dut__DOT__grouping_status;
@@ -81,9 +80,11 @@ class alignas(VL_CACHE_LINE_BYTES) Vtb_multiply_manager_render___024root final {
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1;
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2;
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result;
+        QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result;
     };
     struct {
-        QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result;
+        QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_4;
+        QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_5;
         VlUnpacked<QData/*63:0*/, 1> __VstlTriggered;
         VlUnpacked<QData/*63:0*/, 1> __VactTriggered;
         VlUnpacked<QData/*63:0*/, 1> __VactTriggeredAcc;

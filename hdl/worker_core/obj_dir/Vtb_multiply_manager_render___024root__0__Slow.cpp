@@ -54,7 +54,7 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___eval_settle(Vtb_multip
 #ifdef VL_DEBUG
             Vtb_multiply_manager_render___024root___dump_triggers__stl(vlSelfRef.__VstlTriggered, "stl"s);
 #endif
-            VL_FATAL_MT("tb_multiply_manager_render.sv", 43, "", "DIDNOTCONVERGE: Settle region did not converge after '--converge-limit' of 10000 tries");
+            VL_FATAL_MT("tb_multiply_manager_render.sv", 7, "", "DIDNOTCONVERGE: Settle region did not converge after '--converge-limit' of 10000 tries");
         }
         __VstlIterCount = ((IData)(1U) + __VstlIterCount);
         vlSelfRef.__VstlPhaseResult = Vtb_multiply_manager_render___024root___eval_phase__stl(vlSelf);
@@ -107,10 +107,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     Vtb_multiply_manager_render__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
     auto& vlSelfRef = std::ref(*vlSelf).get();
     // Locals
-    CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode;
-    tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0;
-    CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode;
-    tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0;
     VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x;
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
     VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y;
@@ -119,18 +115,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x);
     VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y;
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y);
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_4;
-    __VdfgRegularize_h6e95ff9d_0_4 = 0;
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_6;
-    __VdfgRegularize_h6e95ff9d_0_6 = 0;
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_7;
-    __VdfgRegularize_h6e95ff9d_0_7 = 0;
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_8;
-    __VdfgRegularize_h6e95ff9d_0_8 = 0;
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_10;
-    __VdfgRegularize_h6e95ff9d_0_10 = 0;
-    QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_11;
-    __VdfgRegularize_h6e95ff9d_0_11 = 0;
     VlWide<3>/*95:0*/ __Vtemp_2;
     VlWide<3>/*95:0*/ __Vtemp_7;
     VlWide<3>/*95:0*/ __Vtemp_9;
@@ -149,6 +133,64 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag 
         = (1U & ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1) 
                  >> (0x0000000fU & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__max_iteration))));
+    vlSelfRef.__VdfgRegularize_h6e95ff9d_0_4 = (0x0000000fffffffffULL 
+                                                & VL_MULS_QQQ(36, 
+                                                              (0x0000000fffffffffULL 
+                                                               & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1)), 
+                                                              (0x0000000fffffffffULL 
+                                                               & VL_EXTENDS_QI(36,18, 
+                                                                               (0x0003ffffU 
+                                                                                & (IData)(
+                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
+                                                                                >> 0x00000010U)))))));
+    vlSelfRef.__VdfgRegularize_h6e95ff9d_0_5 = (0x0000000fffffffffULL 
+                                                & VL_MULS_QQQ(36, 
+                                                              (0x0000000fffffffffULL 
+                                                               & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2)), 
+                                                              (0x0000000fffffffffULL 
+                                                               & VL_EXTENDS_QI(36,18, 
+                                                                               (0x0003ffffU 
+                                                                                & (IData)(
+                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+                                                                                >> 0x00000010U)))))));
+    if ((1U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status)) {
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode 
+            = ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
+                ? 0U : ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
+                         ? 1U : ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
+                                  ? 2U : 0U)));
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode 
+            = ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
+                ? 0U : ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
+                         ? 1U : ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
+                                  ? 2U : 0U)));
+    } else if ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status)) {
+        if ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
+        } else if ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 2U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 2U;
+        } else if ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 1U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 1U;
+        } else if ((5U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
+        } else if ((6U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 3U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 3U;
+        } else if ((7U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 3U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 3U;
+        } else {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
+        }
+    } else {
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
+    }
     vlSelfRef.tb_multiply_manager_render__DOT__done = 0U;
     vlSelfRef.tb_multiply_manager_render__DOT__done_side = 0U;
     if ((1U & (~ ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status) 
@@ -180,104 +222,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
             vlSelfRef.tb_multiply_manager_render__DOT__iteration_out 
                 = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_2;
         }
-    }
-    __VdfgRegularize_h6e95ff9d_0_6 = (0x0000000fffffffffULL 
-                                      & VL_MULS_QQQ(36, 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, 
-                                                                     (0x0003ffffU 
-                                                                      & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
-                                                                                >> 0x00000010U))))), 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, 
-                                                                     (0x0003ffffU 
-                                                                      & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
-                                                                                >> 0x00000010U)))))));
-    __VdfgRegularize_h6e95ff9d_0_7 = (0x0000000fffffffffULL 
-                                      & VL_MULS_QQQ(36, 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1)), 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1))));
-    __VdfgRegularize_h6e95ff9d_0_10 = (0x0000000fffffffffULL 
-                                       & VL_MULS_QQQ(36, 
-                                                     (0x0000000fffffffffULL 
-                                                      & VL_EXTENDS_QI(36,18, 
-                                                                      (0x0003ffffU 
-                                                                       & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-                                                                                >> 0x00000010U))))), 
-                                                     (0x0000000fffffffffULL 
-                                                      & VL_EXTENDS_QI(36,18, 
-                                                                      (0x0003ffffU 
-                                                                       & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-                                                                                >> 0x00000010U)))))));
-    __VdfgRegularize_h6e95ff9d_0_11 = (0x0000000fffffffffULL 
-                                       & VL_MULS_QQQ(36, 
-                                                     (0x0000000fffffffffULL 
-                                                      & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2)), 
-                                                     (0x0000000fffffffffULL 
-                                                      & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2))));
-    __VdfgRegularize_h6e95ff9d_0_4 = (0x0000000fffffffffULL 
-                                      & VL_MULS_QQQ(36, 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1)), 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, 
-                                                                     (0x0003ffffU 
-                                                                      & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
-                                                                                >> 0x00000010U)))))));
-    __VdfgRegularize_h6e95ff9d_0_8 = (0x0000000fffffffffULL 
-                                      & VL_MULS_QQQ(36, 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2)), 
-                                                    (0x0000000fffffffffULL 
-                                                     & VL_EXTENDS_QI(36,18, 
-                                                                     (0x0003ffffU 
-                                                                      & (IData)(
-                                                                                (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-                                                                                >> 0x00000010U)))))));
-    if ((1U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status)) {
-        tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode 
-            = ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
-                ? 0U : ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
-                         ? 1U : ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle)
-                                  ? 2U : 0U)));
-        tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode 
-            = ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
-                ? 0U : ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
-                         ? 1U : ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle)
-                                  ? 2U : 0U)));
-    } else if ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status)) {
-        if ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
-        } else if ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 2U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 2U;
-        } else if ((4U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 1U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 1U;
-        } else if ((5U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
-        } else if ((6U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 3U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 3U;
-        } else if ((7U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 3U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 3U;
-        } else {
-            tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
-            tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
-        }
-    } else {
-        tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
-        tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
     }
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide 
         = ((1U != vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status) 
@@ -325,22 +269,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
         = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U];
     if (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide) {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-            = (0x0000000fffffffffULL & ((2U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
-                                         ? ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_4
-                                             : VL_SHIFTL_QQI(36,36,32, __VdfgRegularize_h6e95ff9d_0_4, 1U))
-                                         : ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_6
-                                             : __VdfgRegularize_h6e95ff9d_0_7)));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-            = (0x0000000fffffffffULL & ((2U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
-                                         ? ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_8
-                                             : VL_SHIFTL_QQI(36,36,32, __VdfgRegularize_h6e95ff9d_0_8, 1U))
-                                         : ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_10
-                                             : __VdfgRegularize_h6e95ff9d_0_11)));
         if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
             VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
             if ((0x00000080U & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) {
@@ -414,24 +342,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
                                          << 0x00000020U) 
                                         | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U]))));
     } else {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-            = (0x0000000fffffffffULL & ((0U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
-                                         ? __VdfgRegularize_h6e95ff9d_0_7
-                                         : ((1U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_6
-                                             : (VL_SHIFTL_QQI(36,36,32, __VdfgRegularize_h6e95ff9d_0_4, 1U) 
-                                                & (- (QData)((IData)(
-                                                                     (2U 
-                                                                      == (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode)))))))));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-            = (0x0000000fffffffffULL & ((0U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
-                                         ? __VdfgRegularize_h6e95ff9d_0_11
-                                         : ((1U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
-                                             ? __VdfgRegularize_h6e95ff9d_0_10
-                                             : (VL_SHIFTL_QQI(36,36,32, __VdfgRegularize_h6e95ff9d_0_8, 1U) 
-                                                & (- (QData)((IData)(
-                                                                     (2U 
-                                                                      == (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode)))))))));
         if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
             vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
                 = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1)
@@ -543,17 +453,14 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___ctor_var_reset(Vtb_mul
     vlSelf->tb_multiply_manager_render__DOT__done = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 18063217463031560265ull);
     vlSelf->tb_multiply_manager_render__DOT__done_side = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10637301049261230795ull);
     vlSelf->tb_multiply_manager_render__DOT__iteration_out = VL_SCOPED_RAND_RESET_I(16, __VscopeHash, 12435826141161021381ull);
-    vlSelf->tb_multiply_manager_render__DOT__iter_result = 0;
+    vlSelf->tb_multiply_manager_render__DOT__iter_result = VL_SCOPED_RAND_RESET_I(32, __VscopeHash, 17204841755186562840ull);
     vlSelf->tb_multiply_manager_render__DOT__cx = 0;
     vlSelf->tb_multiply_manager_render__DOT__cy = 0;
+    vlSelf->tb_multiply_manager_render__DOT__col = VL_SCOPED_RAND_RESET_I(32, __VscopeHash, 952642243099094760ull);
     vlSelf->tb_multiply_manager_render__DOT__qx = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 1559008737105320463ull);
     vlSelf->tb_multiply_manager_render__DOT__qy = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 16079420819319329589ull);
-    vlSelf->tb_multiply_manager_render__DOT__wxh = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 11194356497138720449ull);
     vlSelf->tb_multiply_manager_render__DOT__wyh = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 7305279020596442218ull);
-    vlSelf->tb_multiply_manager_render__DOT__wxl = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 11817318174113748742ull);
     vlSelf->tb_multiply_manager_render__DOT__wyl = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 7162963001990255265ull);
-    vlSelf->tb_multiply_manager_render__DOT__unnamedblk1__DOT__unnamedblk2__DOT__col = 0;
-    vlSelf->tb_multiply_manager_render__DOT__unnamedblk3__DOT__unnamedblk4__DOT__col = 0;
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 97715868273828857ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 8265874096411340723ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 2679185434295180180ull);
@@ -580,8 +487,12 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___ctor_var_reset(Vtb_mul
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 5281743964140940510ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 16089301976727855456ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 6183087454989628370ull);
+    vlSelf->tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = VL_SCOPED_RAND_RESET_I(2, __VscopeHash, 4538826844136488880ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 14560582586106884554ull);
+    vlSelf->tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = VL_SCOPED_RAND_RESET_I(2, __VscopeHash, 7330327172363841561ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15112798388096306103ull);
+    vlSelf->__VdfgRegularize_h6e95ff9d_0_4 = 0;
+    vlSelf->__VdfgRegularize_h6e95ff9d_0_5 = 0;
     for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
         vlSelf->__VstlTriggered[__Vi0] = 0;
     }
