@@ -115,6 +115,10 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
     VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y;
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x);
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y);
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_4;
     __VdfgRegularize_h6e95ff9d_0_4 = 0;
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_6;
@@ -128,9 +132,9 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_11;
     __VdfgRegularize_h6e95ff9d_0_11 = 0;
     VlWide<3>/*95:0*/ __Vtemp_2;
-    VlWide<3>/*95:0*/ __Vtemp_5;
-    VlWide<3>/*95:0*/ __Vtemp_8;
-    VlWide<3>/*95:0*/ __Vtemp_11;
+    VlWide<3>/*95:0*/ __Vtemp_7;
+    VlWide<3>/*95:0*/ __Vtemp_9;
+    VlWide<3>/*95:0*/ __Vtemp_14;
     // Body
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1_overflow_flag 
         = ((0U != (7U & (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
@@ -293,6 +297,12 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
             >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                         >> 0x00000020U)) 
                                << 4U));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U];
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
@@ -308,6 +318,12 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
             >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                                         >> 0x00000020U)) 
                                << 4U));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U];
     if (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide) {
         vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
             = (0x0000000fffffffffULL & ((2U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
@@ -326,57 +342,77 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
                                              ? __VdfgRegularize_h6e95ff9d_0_10
                                              : __VdfgRegularize_h6e95ff9d_0_11)));
         if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
-                                               >> 4U)));
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U]))));
+            VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
+            if ((0x00000080U & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                    = __Vtemp_2[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                    = __Vtemp_2[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                    = (0x000000ffU & __Vtemp_2[2U]);
+            } else {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                    = (0x000000ffU & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U]);
+            }
         }
         if ((2U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(
-                                                             (0x000000ffU 
-                                                              & __Vtemp_2[2U]))) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(__Vtemp_2[1U])) 
-                                               >> 4U)));
-            VL_NEGATE_W(3, __Vtemp_5, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_5[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(__Vtemp_5[0U]))));
+            VL_NEGATE_W(3, __Vtemp_7, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x);
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                = __Vtemp_7[0U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                = __Vtemp_7[1U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                = (0x000000ffU & __Vtemp_7[2U]);
         }
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U])) 
+                                         << 0x0000001cU) 
+                                        | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U])) 
+                                           >> 4U)));
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U])) 
+                                         << 0x00000020U) 
+                                        | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U]))));
         if ((4U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U])) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
-                                               >> 4U)));
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U]))));
+            VL_NEGATE_W(3, __Vtemp_9, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+            if ((0x00000080U & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U])) {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                    = __Vtemp_9[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                    = __Vtemp_9[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                    = (0x000000ffU & __Vtemp_9[2U]);
+            } else {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                    = (0x000000ffU & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U]);
+            }
         }
         if ((1U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            VL_NEGATE_W(3, __Vtemp_8, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(
-                                                             (0x000000ffU 
-                                                              & __Vtemp_8[2U]))) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(__Vtemp_8[1U])) 
-                                               >> 4U)));
-            VL_NEGATE_W(3, __Vtemp_11, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_11[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(__Vtemp_11[0U]))));
+            VL_NEGATE_W(3, __Vtemp_14, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y);
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                = __Vtemp_14[0U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                = __Vtemp_14[1U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                = (0x000000ffU & __Vtemp_14[2U]);
         }
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U])) 
+                                         << 0x0000001cU) 
+                                        | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U])) 
+                                           >> 4U)));
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U])) 
+                                         << 0x00000020U) 
+                                        | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U]))));
     } else {
         vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
             = (0x0000000fffffffffULL & ((0U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))

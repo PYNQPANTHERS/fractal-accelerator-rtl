@@ -523,10 +523,14 @@ void Vtb_multiply_manager_render___024root___act_comb__TOP__0(Vtb_multiply_manag
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
     VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y;
     VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x);
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y);
     VlWide<3>/*95:0*/ __Vtemp_2;
-    VlWide<3>/*95:0*/ __Vtemp_5;
-    VlWide<3>/*95:0*/ __Vtemp_8;
-    VlWide<3>/*95:0*/ __Vtemp_11;
+    VlWide<3>/*95:0*/ __Vtemp_7;
+    VlWide<3>/*95:0*/ __Vtemp_9;
+    VlWide<3>/*95:0*/ __Vtemp_14;
     // Body
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag 
         = (1U & ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1) 
@@ -546,6 +550,12 @@ void Vtb_multiply_manager_render___024root___act_comb__TOP__0(Vtb_multiply_manag
             >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                         >> 0x00000020U)) 
                                << 4U));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U];
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
@@ -561,59 +571,85 @@ void Vtb_multiply_manager_render___024root___act_comb__TOP__0(Vtb_multiply_manag
             >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                                         >> 0x00000020U)) 
                                << 4U));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U];
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+        = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U];
     if (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide) {
         if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
-                                               >> 4U)));
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U]))));
+            VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
+            if ((0x00000080U & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                    = __Vtemp_2[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                    = __Vtemp_2[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                    = (0x000000ffU & __Vtemp_2[2U]);
+            } else {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                    = (0x000000ffU & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U]);
+            }
         }
         if ((2U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(
-                                                             (0x000000ffU 
-                                                              & __Vtemp_2[2U]))) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(__Vtemp_2[1U])) 
-                                               >> 4U)));
-            VL_NEGATE_W(3, __Vtemp_5, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_5[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(__Vtemp_5[0U]))));
+            VL_NEGATE_W(3, __Vtemp_7, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x);
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U] 
+                = __Vtemp_7[0U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U] 
+                = __Vtemp_7[1U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U] 
+                = (0x000000ffU & __Vtemp_7[2U]);
         }
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[2U])) 
+                                         << 0x0000001cU) 
+                                        | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U])) 
+                                           >> 4U)));
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[1U])) 
+                                         << 0x00000020U) 
+                                        | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_x[0U]))));
         if ((4U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U])) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
-                                               >> 4U)));
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U]))));
+            VL_NEGATE_W(3, __Vtemp_9, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+            if ((0x00000080U & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U])) {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                    = __Vtemp_9[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                    = __Vtemp_9[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                    = (0x000000ffU & __Vtemp_9[2U]);
+            } else {
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                    = tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U];
+                tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                    = (0x000000ffU & tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U]);
+            }
         }
         if ((1U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-            VL_NEGATE_W(3, __Vtemp_8, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-                = (0x0000000fffffffffULL & (((QData)((IData)(
-                                                             (0x000000ffU 
-                                                              & __Vtemp_8[2U]))) 
-                                             << 0x0000001cU) 
-                                            | ((QData)((IData)(__Vtemp_8[1U])) 
-                                               >> 4U)));
-            VL_NEGATE_W(3, __Vtemp_11, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
-            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_11[1U])) 
-                                             << 0x00000020U) 
-                                            | (QData)((IData)(__Vtemp_11[0U]))));
+            VL_NEGATE_W(3, __Vtemp_14, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y);
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U] 
+                = __Vtemp_14[0U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U] 
+                = __Vtemp_14[1U];
+            tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U] 
+                = (0x000000ffU & __Vtemp_14[2U]);
         }
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[2U])) 
+                                         << 0x0000001cU) 
+                                        | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U])) 
+                                           >> 4U)));
+        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+            = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[1U])) 
+                                         << 0x00000020U) 
+                                        | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__changed_wide_y[0U]))));
     } else {
         if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
             vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
@@ -725,22 +761,20 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
     VlWide<3>/*95:0*/ __Vtemp_15;
     VlWide<3>/*95:0*/ __Vtemp_16;
     VlWide<3>/*95:0*/ __Vtemp_19;
-    VlWide<3>/*95:0*/ __Vtemp_20;
     VlWide<3>/*95:0*/ __Vtemp_21;
-    VlWide<3>/*95:0*/ __Vtemp_24;
+    VlWide<3>/*95:0*/ __Vtemp_22;
     VlWide<3>/*95:0*/ __Vtemp_25;
-    VlWide<3>/*95:0*/ __Vtemp_26;
-    VlWide<3>/*95:0*/ __Vtemp_29;
-    VlWide<3>/*95:0*/ __Vtemp_30;
-    VlWide<3>/*95:0*/ __Vtemp_31;
+    VlWide<3>/*95:0*/ __Vtemp_27;
+    VlWide<3>/*95:0*/ __Vtemp_28;
+    VlWide<3>/*95:0*/ __Vtemp_33;
     VlWide<3>/*95:0*/ __Vtemp_34;
     VlWide<3>/*95:0*/ __Vtemp_35;
-    VlWide<3>/*95:0*/ __Vtemp_36;
+    VlWide<3>/*95:0*/ __Vtemp_38;
     VlWide<3>/*95:0*/ __Vtemp_39;
     VlWide<3>/*95:0*/ __Vtemp_40;
     VlWide<3>/*95:0*/ __Vtemp_43;
     VlWide<3>/*95:0*/ __Vtemp_44;
-    VlWide<3>/*95:0*/ __Vtemp_47;
+    VlWide<3>/*95:0*/ __Vtemp_45;
     VlWide<3>/*95:0*/ __Vtemp_48;
     VlWide<3>/*95:0*/ __Vtemp_49;
     VlWide<3>/*95:0*/ __Vtemp_50;
@@ -749,33 +783,9 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
     VlWide<3>/*95:0*/ __Vtemp_55;
     VlWide<3>/*95:0*/ __Vtemp_56;
     VlWide<3>/*95:0*/ __Vtemp_57;
-    VlWide<3>/*95:0*/ __Vtemp_58;
-    VlWide<3>/*95:0*/ __Vtemp_59;
     VlWide<3>/*95:0*/ __Vtemp_60;
-    VlWide<3>/*95:0*/ __Vtemp_63;
-    VlWide<3>/*95:0*/ __Vtemp_64;
-    VlWide<3>/*95:0*/ __Vtemp_65;
-    VlWide<3>/*95:0*/ __Vtemp_66;
-    VlWide<3>/*95:0*/ __Vtemp_69;
-    VlWide<3>/*95:0*/ __Vtemp_70;
-    VlWide<3>/*95:0*/ __Vtemp_73;
-    VlWide<3>/*95:0*/ __Vtemp_74;
-    VlWide<3>/*95:0*/ __Vtemp_75;
-    VlWide<3>/*95:0*/ __Vtemp_76;
-    VlWide<3>/*95:0*/ __Vtemp_79;
-    VlWide<3>/*95:0*/ __Vtemp_80;
-    VlWide<3>/*95:0*/ __Vtemp_83;
-    VlWide<3>/*95:0*/ __Vtemp_84;
-    VlWide<3>/*95:0*/ __Vtemp_85;
-    VlWide<3>/*95:0*/ __Vtemp_86;
-    VlWide<3>/*95:0*/ __Vtemp_89;
-    VlWide<3>/*95:0*/ __Vtemp_90;
-    VlWide<3>/*95:0*/ __Vtemp_93;
-    VlWide<3>/*95:0*/ __Vtemp_94;
-    VlWide<3>/*95:0*/ __Vtemp_95;
-    VlWide<3>/*95:0*/ __Vtemp_96;
-    VlWide<3>/*95:0*/ __Vtemp_99;
-    VlWide<3>/*95:0*/ __Vtemp_100;
+    VlWide<3>/*95:0*/ __Vtemp_61;
+    VlWide<3>/*95:0*/ __Vtemp_62;
     // Body
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__left_thread 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_thread;
@@ -791,20 +801,20 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_2 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_2;
-    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1;
+    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2;
-    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__left_cycle 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__right_cycle 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle;
+    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle 
@@ -1097,38 +1107,38 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                         vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1 
                             = (0x0003ffffU & (IData)(
                                                      (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-                                                      >> 0x12U)));
-                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
-                            = ((QData)((IData)((0x0003ffffU 
-                                                & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1)))) 
-                               << 0x00000010U);
+                                                      >> 0x10U)));
+                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+                            = (QData)((IData)(((0x0001fffeU 
+                                                & ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1) 
+                                                   << 1U)) 
+                                               | (1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+                                                             >> 0x23U))))));
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2 
                             = (0x0003ffffU & (IData)(
                                                      (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-                                                      >> 0x12U)));
-                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-                            = ((QData)((IData)((0x0003ffffU 
-                                                & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1)))) 
-                               << 0x00000010U);
+                                                      >> 0x10U)));
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle 
                             = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag)
                                 ? 0x0000000aU : 2U);
+                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+                            = (QData)((IData)(((0x0001fffeU 
+                                                & ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1) 
+                                                   << 1U)) 
+                                               | (1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+                                                             >> 0x23U))))));
                     }
                 } else if ((2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                        = (0x0000000fffffffffULL & 
-                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                            >> 2U));
-                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                        = ((QData)((IData)((3U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result)))) 
-                           << 0x00000022U);
+                        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result;
+                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 = 0ULL;
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
-                        = (0x0000000fffffffffULL & 
-                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                            >> 2U));
-                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                        = ((QData)((IData)((3U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result)))) 
-                           << 0x00000022U);
+                        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result;
+                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 = 0ULL;
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 3U;
                 } else if ((3U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                     __Vtemp_2[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
@@ -1141,16 +1151,22 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                                                  >> 0x00000020U)) 
                                         << 4U));
-                    __Vtemp_3[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result) 
-                                     << 0x00000011U);
-                    __Vtemp_3[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result) 
-                                      >> 0x0000000fU) 
-                                     | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                                 >> 0x00000020U)) 
-                                        << 0x00000011U));
-                    __Vtemp_3[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                              >> 0x00000020U)) 
-                                     >> 0x0000000fU);
+                    __Vtemp_3[0U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                             << 0x00000011U));
+                    __Vtemp_3[1U] = (((- (IData)((1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                             >> 0x23U))))) 
+                                      << 0x00000015U) 
+                                     | (IData)(((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                 << 0x00000011U) 
+                                                >> 0x00000020U)));
+                    __Vtemp_3[2U] = (0x000000ffU & 
+                                     ((- (IData)((1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                             >> 0x23U))))) 
+                                      >> 0x0000000bU));
                     VL_ADD_W(3, __Vtemp_4, __Vtemp_2, __Vtemp_3);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                         = (0x0000000fffffffffULL & 
@@ -1174,16 +1190,22 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                                  >> 0x00000020U)) 
                                         << 4U));
-                    __Vtemp_8[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                     << 0x00000011U);
-                    __Vtemp_8[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                      >> 0x0000000fU) 
-                                     | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                                 >> 0x00000020U)) 
-                                        << 0x00000011U));
-                    __Vtemp_8[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                              >> 0x00000020U)) 
-                                     >> 0x0000000fU);
+                    __Vtemp_8[0U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                             << 0x00000011U));
+                    __Vtemp_8[1U] = (((- (IData)((1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                             >> 0x23U))))) 
+                                      << 0x00000015U) 
+                                     | (IData)(((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                 << 0x00000011U) 
+                                                >> 0x00000020U)));
+                    __Vtemp_8[2U] = (0x000000ffU & 
+                                     ((- (IData)((1U 
+                                                  & (IData)(
+                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                             >> 0x23U))))) 
+                                      >> 0x0000000bU));
                     VL_ADD_W(3, __Vtemp_9, __Vtemp_7, __Vtemp_8);
                     VL_SHIFTL_WWI(72,72,32, __Vtemp_10, __Vtemp_9, 1U);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
@@ -1203,16 +1225,22 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                       | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                                   >> 0x00000020U)) 
                                          << 4U));
-                    __Vtemp_14[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                      << 0x00000011U);
-                    __Vtemp_14[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                       >> 0x0000000fU) 
-                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                                  >> 0x00000020U)) 
-                                         << 0x00000011U));
-                    __Vtemp_14[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                               >> 0x00000020U)) 
-                                      >> 0x0000000fU);
+                    __Vtemp_14[0U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                              << 0x00000011U));
+                    __Vtemp_14[1U] = (((- (IData)((1U 
+                                                   & (IData)(
+                                                             (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                              >> 0x23U))))) 
+                                       << 0x00000015U) 
+                                      | (IData)(((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                  << 0x00000011U) 
+                                                 >> 0x00000020U)));
+                    __Vtemp_14[2U] = (0x000000ffU & 
+                                      ((- (IData)((1U 
+                                                   & (IData)(
+                                                             (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                              >> 0x23U))))) 
+                                       >> 0x0000000bU));
                     VL_ADD_W(3, __Vtemp_15, __Vtemp_13, __Vtemp_14);
                     VL_SHIFTL_WWI(72,72,32, __Vtemp_16, __Vtemp_15, 1U);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
@@ -1230,89 +1258,139 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                       | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                                   >> 0x00000020U)) 
                                          << 4U));
-                    __Vtemp_20[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result);
-                    __Vtemp_20[1U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                              >> 0x00000020U));
-                    __Vtemp_20[2U] = 0U;
-                    VL_ADD_W(3, __Vtemp_21, __Vtemp_19, __Vtemp_20);
+                    __Vtemp_21[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                      << 2U);
+                    __Vtemp_21[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                       >> 0x0000001eU) 
+                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                  >> 0x00000020U)) 
+                                         << 2U));
+                    __Vtemp_21[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                               >> 0x00000020U)) 
+                                      >> 0x0000001eU);
+                    VL_ADD_W(3, __Vtemp_22, __Vtemp_19, __Vtemp_21);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                         = (0x0000000fffffffffULL & 
                            (((QData)((IData)((0x000000ffU 
-                                              & __Vtemp_21[2U]))) 
-                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_21[1U])) 
+                                              & __Vtemp_22[2U]))) 
+                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_22[1U])) 
                                                 >> 4U)));
-                    __Vtemp_24[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                    __Vtemp_24[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                    __Vtemp_25[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
+                    __Vtemp_25[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                        << 4U) | (IData)(
                                                         (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                                                          >> 0x00000020U)));
-                    __Vtemp_24[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                    __Vtemp_25[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                        >> 0x0000001cU) 
                                       | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                                                   >> 0x00000020U)) 
                                          << 4U));
-                    __Vtemp_25[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result);
-                    __Vtemp_25[1U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                              >> 0x00000020U));
-                    __Vtemp_25[2U] = 0U;
-                    VL_ADD_W(3, __Vtemp_26, __Vtemp_24, __Vtemp_25);
+                    __Vtemp_27[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                      << 2U);
+                    __Vtemp_27[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                       >> 0x0000001eU) 
+                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                  >> 0x00000020U)) 
+                                         << 2U));
+                    __Vtemp_27[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                               >> 0x00000020U)) 
+                                      >> 0x0000001eU);
+                    VL_ADD_W(3, __Vtemp_28, __Vtemp_25, __Vtemp_27);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                         = (0x0000000fffffffffULL & 
                            (((QData)((IData)((0x000000ffU 
-                                              & __Vtemp_26[2U]))) 
-                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_26[1U])) 
+                                              & __Vtemp_28[2U]))) 
+                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_28[1U])) 
                                                 >> 4U)));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                         = (0x0000000fffffffffULL & 
                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                            + vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result));
+                            + (0x0000000ffffffffcULL 
+                               & (((QData)((IData)(
+                                                   (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                    >> 0x00000020U))) 
+                                   << 0x00000022U) 
+                                  | ((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result)) 
+                                     << 2U)))));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                         = (0x0000000fffffffffULL & 
                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                            + vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result));
+                            + (0x0000000ffffffffcULL 
+                               & (((QData)((IData)(
+                                                   (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                    >> 0x00000020U))) 
+                                   << 0x00000022U) 
+                                  | ((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result)) 
+                                     << 2U)))));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 5U;
                 } else if ((5U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
                         = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
-                    __Vtemp_29[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
-                    __Vtemp_29[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                    __Vtemp_33[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
+                    __Vtemp_33[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
                                        << 4U) | (IData)(
                                                         (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                                                          >> 0x00000020U)));
-                    __Vtemp_29[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                    __Vtemp_33[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
                                        >> 0x0000001cU) 
                                       | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                                   >> 0x00000020U)) 
                                          << 4U));
-                    __Vtemp_30[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                    __Vtemp_30[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                    __Vtemp_34[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
+                    __Vtemp_34[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                        << 4U) | (IData)(
                                                         (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                                                          >> 0x00000020U)));
-                    __Vtemp_30[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                    __Vtemp_34[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                        >> 0x0000001cU) 
                                       | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                                                   >> 0x00000020U)) 
                                          << 4U));
-                    VL_SUB_W(3, __Vtemp_31, __Vtemp_29, __Vtemp_30);
+                    VL_SUB_W(3, __Vtemp_35, __Vtemp_33, __Vtemp_34);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                         = (0x0000000fffffffffULL & 
                            (((QData)((IData)((0x000000ffU 
-                                              & __Vtemp_31[2U]))) 
-                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_31[1U])) 
+                                              & __Vtemp_35[2U]))) 
+                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_35[1U])) 
                                                 >> 4U)));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 6U;
-                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
-                        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                         = (0x0000000fffffffffULL & 
                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                             - vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2));
+                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
+                        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
+                    __Vtemp_38[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
+                    __Vtemp_38[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                                       << 4U) | (IData)(
+                                                        (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
+                                                         >> 0x00000020U)));
+                    __Vtemp_38[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                                       >> 0x0000001cU) 
+                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
+                                                  >> 0x00000020U)) 
+                                         << 4U));
+                    __Vtemp_39[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
+                    __Vtemp_39[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                                       << 4U) | (IData)(
+                                                        (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
+                                                         >> 0x00000020U)));
+                    __Vtemp_39[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                                       >> 0x0000001cU) 
+                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
+                                                  >> 0x00000020U)) 
+                                         << 4U));
+                    VL_ADD_W(3, __Vtemp_40, __Vtemp_38, __Vtemp_39);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__magnitude_reg_1 
                         = (0x0000000fffffffffULL & 
-                           VL_SHIFTL_QQI(36,36,32, 
-                                         (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                                          + vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1), 2U));
+                           (((QData)((IData)((0x000000ffU 
+                                              & __Vtemp_40[2U]))) 
+                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_40[1U])) 
+                                                >> 4U)));
+                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__magnitude_reg_2 
+                        = (0x0000000fffffffffULL & 
+                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
+                            + vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2));
                 } else if ((6U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                     if ((0U != (3U & (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__magnitude_reg_1 
                                               >> 0x00000022U))))) {
@@ -1321,36 +1399,52 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                             = ((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2)) 
                                << 0x00000010U);
-                        __Vtemp_34[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                          << 0x00000011U);
-                        __Vtemp_34[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                           >> 0x0000000fU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                                      >> 0x00000020U)) 
-                                             << 0x00000011U));
-                        __Vtemp_34[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                                   >> 0x00000020U)) 
-                                          >> 0x0000000fU);
-                        __Vtemp_35[0U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result) 
-                                          << 0x00000011U);
-                        __Vtemp_35[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result) 
-                                           >> 0x0000000fU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                                      >> 0x00000020U)) 
-                                             << 0x00000011U));
-                        __Vtemp_35[2U] = ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                                   >> 0x00000020U)) 
-                                          >> 0x0000000fU);
-                        VL_ADD_W(3, __Vtemp_36, __Vtemp_34, __Vtemp_35);
+                        __Vtemp_43[0U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                  << 0x00000011U));
+                        __Vtemp_43[1U] = (((- (IData)(
+                                                      (1U 
+                                                       & (IData)(
+                                                                 (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                                  >> 0x23U))))) 
+                                           << 0x00000015U) 
+                                          | (IData)(
+                                                    ((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                      << 0x00000011U) 
+                                                     >> 0x00000020U)));
+                        __Vtemp_43[2U] = (0x000000ffU 
+                                          & ((- (IData)(
+                                                        (1U 
+                                                         & (IData)(
+                                                                   (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
+                                                                    >> 0x23U))))) 
+                                             >> 0x0000000bU));
+                        __Vtemp_44[0U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                  << 0x00000011U));
+                        __Vtemp_44[1U] = (((- (IData)(
+                                                      (1U 
+                                                       & (IData)(
+                                                                 (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                                  >> 0x23U))))) 
+                                           << 0x00000015U) 
+                                          | (IData)(
+                                                    ((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                      << 0x00000011U) 
+                                                     >> 0x00000020U)));
+                        __Vtemp_44[2U] = (0x000000ffU 
+                                          & ((- (IData)(
+                                                        (1U 
+                                                         & (IData)(
+                                                                   (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                                                    >> 0x23U))))) 
+                                             >> 0x0000000bU));
+                        VL_ADD_W(3, __Vtemp_45, __Vtemp_43, __Vtemp_44);
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                             = (0x0000000fffffffffULL 
                                & (((QData)((IData)(
                                                    (0x000000ffU 
-                                                    & __Vtemp_36[2U]))) 
+                                                    & __Vtemp_45[2U]))) 
                                    << 0x0000001cU) 
-                                  | ((QData)((IData)(__Vtemp_36[1U])) 
+                                  | ((QData)((IData)(__Vtemp_45[1U])) 
                                      >> 4U)));
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                             = (0x0000000fffffffffULL 
@@ -1362,81 +1456,43 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                                      (0x0007ffffU 
                                                       & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result)))) 
                                      << 0x00000011U)));
-                        __Vtemp_39[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
-                        __Vtemp_39[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                           << 4U) | (IData)(
-                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                                                             >> 0x00000020U)));
-                        __Vtemp_39[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                           >> 0x0000001cU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                                                      >> 0x00000020U)) 
-                                             << 4U));
-                        VL_SHIFTL_WWI(72,72,32, __Vtemp_40, __Vtemp_39, 2U);
-                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                            = (0x0000000fffffffffULL 
-                               & (((QData)((IData)(
-                                                   (0x000000ffU 
-                                                    & __Vtemp_40[2U]))) 
-                                   << 0x0000001cU) 
-                                  | ((QData)((IData)(__Vtemp_40[1U])) 
-                                     >> 4U)));
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 7U;
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2 
                             = (0x0003ffffU & (IData)(
                                                      (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                                                       >> 0x10U)));
-                        __Vtemp_43[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
-                        __Vtemp_43[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                           << 4U) | (IData)(
-                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                                                             >> 0x00000020U)));
-                        __Vtemp_43[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                           >> 0x0000001cU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                                                      >> 0x00000020U)) 
-                                             << 4U));
-                        VL_SHIFTL_WWI(72,72,32, __Vtemp_44, __Vtemp_43, 2U);
-                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                            = (0x0000000fffffffffULL 
-                               & (((QData)((IData)(__Vtemp_44[1U])) 
-                                   << 0x00000020U) 
-                                  | (QData)((IData)(__Vtemp_44[0U]))));
                     }
                 } else if ((7U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                     if ((0U != (3U & (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__magnitude_reg_1 
                                               >> 0x00000022U))))) {
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 0x0000000aU;
                     } else {
-                        __Vtemp_47[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                        __Vtemp_47[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                        __Vtemp_48[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
+                        __Vtemp_48[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                            << 4U) | (IData)(
                                                             (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                                                              >> 0x00000020U)));
-                        __Vtemp_47[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                        __Vtemp_48[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                            >> 0x0000001cU) 
                                           | ((IData)(
                                                      (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                                                       >> 0x00000020U)) 
                                              << 4U));
-                        __Vtemp_48[0U] = 0U;
-                        __Vtemp_48[1U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                          << 2U);
-                        __Vtemp_48[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                           >> 0x0000001eU) 
+                        __Vtemp_49[0U] = 0U;
+                        __Vtemp_49[1U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                          << 4U);
+                        __Vtemp_49[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
+                                           >> 0x0000001cU) 
                                           | ((IData)(
                                                      (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
                                                       >> 0x00000020U)) 
-                                             << 2U));
-                        VL_ADD_W(3, __Vtemp_49, __Vtemp_47, __Vtemp_48);
-                        __Vtemp_50[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result);
-                        __Vtemp_50[1U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
+                                             << 4U));
+                        VL_ADD_W(3, __Vtemp_50, __Vtemp_48, __Vtemp_49);
+                        __Vtemp_51[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result);
+                        __Vtemp_51[1U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
                                                   >> 0x00000020U));
-                        __Vtemp_50[2U] = 0U;
-                        VL_ADD_W(3, __Vtemp_51, __Vtemp_49, __Vtemp_50);
-                        VL_SHIFTL_WWI(72,72,32, __Vtemp_52, __Vtemp_51, 3U);
+                        __Vtemp_51[2U] = 0U;
+                        VL_ADD_W(3, __Vtemp_52, __Vtemp_50, __Vtemp_51);
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                             = (0x0000000fffffffffULL 
                                & (((QData)((IData)(
@@ -1445,196 +1501,132 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
                                    << 0x0000001cU) 
                                   | ((QData)((IData)(__Vtemp_52[1U])) 
                                      >> 4U)));
+                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
+                            = (0x0000000fffffffffULL 
+                               & (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
+                                  + vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result));
                         __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle 
                             = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__julia_type)
                                 ? 9U : 8U);
-                        __Vtemp_55[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                        __Vtemp_55[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
-                                           << 4U) | (IData)(
-                                                            (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                                                             >> 0x00000020U)));
-                        __Vtemp_55[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
-                                           >> 0x0000001cU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
-                                                      >> 0x00000020U)) 
-                                             << 4U));
-                        __Vtemp_56[0U] = 0U;
-                        __Vtemp_56[1U] = ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                          << 2U);
-                        __Vtemp_56[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result) 
-                                           >> 0x0000001eU) 
-                                          | ((IData)(
-                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
-                                                      >> 0x00000020U)) 
-                                             << 2U));
-                        VL_ADD_W(3, __Vtemp_57, __Vtemp_55, __Vtemp_56);
-                        __Vtemp_58[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result);
-                        __Vtemp_58[1U] = (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result 
-                                                  >> 0x00000020U));
-                        __Vtemp_58[2U] = 0U;
-                        VL_ADD_W(3, __Vtemp_59, __Vtemp_57, __Vtemp_58);
-                        VL_SHIFTL_WWI(72,72,32, __Vtemp_60, __Vtemp_59, 3U);
-                        __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                            = (0x0000000fffffffffULL 
-                               & (((QData)((IData)(__Vtemp_60[1U])) 
-                                   << 0x00000020U) 
-                                  | (QData)((IData)(__Vtemp_60[0U]))));
                     }
                 } else {
-                    __Vtemp_63[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
-                    __Vtemp_63[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                       << 4U) | (IData)(
-                                                        (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                                                         >> 0x00000020U)));
-                    __Vtemp_63[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
-                                       >> 0x0000001cU) 
-                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
-                                                  >> 0x00000020U)) 
-                                         << 4U));
-                    __Vtemp_64[0U] = vlSelfRef.tb_multiply_manager_render__DOT__julia_c_x;
-                    __Vtemp_64[1U] = 0U;
-                    __Vtemp_64[2U] = 0U;
-                    VL_SHIFTL_WWI(72,72,32, __Vtemp_65, __Vtemp_64, 0x00000036U);
-                    VL_ADD_W(3, __Vtemp_66, __Vtemp_63, __Vtemp_65);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                         = (0x0000000fffffffffULL & 
-                           (((QData)((IData)((0x000000ffU 
-                                              & __Vtemp_66[2U]))) 
-                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_66[1U])) 
-                                                >> 4U)));
+                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
+                            + VL_SHIFTL_QQI(36,36,32, 
+                                            VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__julia_c_x), 0x00000010U)));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1 
                         = (0x0000ffffU & ((IData)(1U) 
                                           + (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1)));
-                    __Vtemp_69[0U] = vlSelfRef.tb_multiply_manager_render__DOT__julia_c_x;
-                    __Vtemp_69[1U] = 0U;
-                    __Vtemp_69[2U] = 0U;
-                    VL_SHIFTL_WWI(72,72,32, __Vtemp_70, __Vtemp_69, 0x00000036U);
-                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                        = (0x0000000fffffffffULL & 
-                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                            + (((QData)((IData)(__Vtemp_70[1U])) 
-                                << 0x00000020U) | (QData)((IData)(__Vtemp_70[0U])))));
-                    __Vtemp_73[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                    __Vtemp_73[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
-                                       << 4U) | (IData)(
-                                                        (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                                                         >> 0x00000020U)));
-                    __Vtemp_73[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
-                                       >> 0x0000001cU) 
-                                      | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
-                                                  >> 0x00000020U)) 
-                                         << 4U));
-                    __Vtemp_74[0U] = vlSelfRef.tb_multiply_manager_render__DOT__julia_c_y;
-                    __Vtemp_74[1U] = 0U;
-                    __Vtemp_74[2U] = 0U;
-                    VL_SHIFTL_WWI(72,72,32, __Vtemp_75, __Vtemp_74, 0x00000036U);
-                    VL_ADD_W(3, __Vtemp_76, __Vtemp_73, __Vtemp_75);
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                         = (0x0000000fffffffffULL & 
-                           (((QData)((IData)((0x000000ffU 
-                                              & __Vtemp_76[2U]))) 
-                             << 0x0000001cU) | ((QData)((IData)(__Vtemp_76[1U])) 
-                                                >> 4U)));
-                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 1U;
-                    __Vtemp_79[0U] = vlSelfRef.tb_multiply_manager_render__DOT__julia_c_y;
-                    __Vtemp_79[1U] = 0U;
-                    __Vtemp_79[2U] = 0U;
-                    VL_SHIFTL_WWI(72,72,32, __Vtemp_80, __Vtemp_79, 0x00000036U);
+                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
+                            + VL_SHIFTL_QQI(36,36,32, 
+                                            VL_EXTENDS_QI(36,18, vlSelfRef.tb_multiply_manager_render__DOT__julia_c_x), 0x00000010U)));
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-                        = (0x0000000fffffffffULL & 
-                           (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                            + (((QData)((IData)(__Vtemp_80[1U])) 
-                                << 0x00000020U) | (QData)((IData)(__Vtemp_80[0U])))));
+                        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2;
+                    __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 1U;
                 }
             } else if ((8U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
-                __Vtemp_83[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
-                __Vtemp_83[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                __Vtemp_55[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
+                __Vtemp_55[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
                                    << 4U) | (IData)(
                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                                                      >> 0x00000020U)));
-                __Vtemp_83[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+                __Vtemp_55[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
                                    >> 0x0000001cU) 
                                   | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                                               >> 0x00000020U)) 
                                      << 4U));
-                __Vtemp_84[0U] = (IData)((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1)) 
-                                           << 0x00000012U) 
-                                          | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))));
-                __Vtemp_84[1U] = (IData)(((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1)) 
-                                            << 0x00000012U) 
-                                           | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))) 
-                                          >> 0x00000020U));
-                __Vtemp_84[2U] = 0U;
-                VL_SHIFTL_WWI(72,72,32, __Vtemp_85, __Vtemp_84, 0x00000024U);
-                VL_ADD_W(3, __Vtemp_86, __Vtemp_83, __Vtemp_85);
+                __Vtemp_56[0U] = (IData)(((QData)((IData)(
+                                                          (0x0001ffffU 
+                                                           & vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))) 
+                                          << 0x00000023U));
+                __Vtemp_56[1U] = ((((0x000c0000U & 
+                                     ((- (IData)((1U 
+                                                  & (vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1 
+                                                     >> 0x11U)))) 
+                                      << 0x00000012U)) 
+                                    | vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1) 
+                                   << 0x00000014U) 
+                                  | (IData)((((QData)((IData)(
+                                                              (0x0001ffffU 
+                                                               & vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))) 
+                                              << 0x00000023U) 
+                                             >> 0x00000020U)));
+                __Vtemp_56[2U] = (((0x000c0000U & (
+                                                   (- (IData)(
+                                                              (1U 
+                                                               & (vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1 
+                                                                  >> 0x11U)))) 
+                                                   << 0x00000012U)) 
+                                   | vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1) 
+                                  >> 0x0000000cU);
+                VL_ADD_W(3, __Vtemp_57, __Vtemp_55, __Vtemp_56);
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
                     = (0x0000000fffffffffULL & (((QData)((IData)(
                                                                  (0x000000ffU 
-                                                                  & __Vtemp_86[2U]))) 
+                                                                  & __Vtemp_57[2U]))) 
                                                  << 0x0000001cU) 
-                                                | ((QData)((IData)(__Vtemp_86[1U])) 
+                                                | ((QData)((IData)(__Vtemp_57[1U])) 
                                                    >> 4U)));
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1 
                     = (0x0000ffffU & ((IData)(1U) + (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1)));
-                __Vtemp_89[0U] = (IData)((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1)) 
-                                           << 0x00000012U) 
-                                          | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))));
-                __Vtemp_89[1U] = (IData)(((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1)) 
-                                            << 0x00000012U) 
-                                           | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))) 
-                                          >> 0x00000020U));
-                __Vtemp_89[2U] = 0U;
-                VL_SHIFTL_WWI(72,72,32, __Vtemp_90, __Vtemp_89, 0x00000024U);
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
                     = (0x0000000fffffffffULL & (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-                                                + (
-                                                   ((QData)((IData)(__Vtemp_90[1U])) 
-                                                    << 0x00000020U) 
-                                                   | (QData)((IData)(__Vtemp_90[0U])))));
-                __Vtemp_93[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
-                __Vtemp_93[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                                                + ((QData)((IData)(
+                                                                   (1U 
+                                                                    & vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_2))) 
+                                                   << 0x00000023U)));
+                __Vtemp_60[0U] = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2);
+                __Vtemp_60[1U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                    << 4U) | (IData)(
                                                     (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
                                                      >> 0x00000020U)));
-                __Vtemp_93[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
+                __Vtemp_60[2U] = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1) 
                                    >> 0x0000001cU) 
                                   | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_1 
                                               >> 0x00000020U)) 
                                      << 4U));
-                __Vtemp_94[0U] = (IData)((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1)) 
-                                           << 0x00000012U) 
-                                          | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))));
-                __Vtemp_94[1U] = (IData)(((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1)) 
-                                            << 0x00000012U) 
-                                           | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))) 
-                                          >> 0x00000020U));
-                __Vtemp_94[2U] = 0U;
-                VL_SHIFTL_WWI(72,72,32, __Vtemp_95, __Vtemp_94, 0x00000024U);
-                VL_ADD_W(3, __Vtemp_96, __Vtemp_93, __Vtemp_95);
+                __Vtemp_61[0U] = (IData)(((QData)((IData)(
+                                                          (0x0001ffffU 
+                                                           & vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))) 
+                                          << 0x00000023U));
+                __Vtemp_61[1U] = ((((0x000c0000U & 
+                                     ((- (IData)((1U 
+                                                  & (vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1 
+                                                     >> 0x11U)))) 
+                                      << 0x00000012U)) 
+                                    | vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1) 
+                                   << 0x00000014U) 
+                                  | (IData)((((QData)((IData)(
+                                                              (0x0001ffffU 
+                                                               & vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))) 
+                                              << 0x00000023U) 
+                                             >> 0x00000020U)));
+                __Vtemp_61[2U] = (((0x000c0000U & (
+                                                   (- (IData)(
+                                                              (1U 
+                                                               & (vlSelfRef.tb_multiply_manager_render__DOT__starting_x_reg_1 
+                                                                  >> 0x11U)))) 
+                                                   << 0x00000012U)) 
+                                   | vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1) 
+                                  >> 0x0000000cU);
+                VL_ADD_W(3, __Vtemp_62, __Vtemp_60, __Vtemp_61);
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                     = (0x0000000fffffffffULL & (((QData)((IData)(
                                                                  (0x000000ffU 
-                                                                  & __Vtemp_96[2U]))) 
+                                                                  & __Vtemp_62[2U]))) 
                                                  << 0x0000001cU) 
-                                                | ((QData)((IData)(__Vtemp_96[1U])) 
+                                                | ((QData)((IData)(__Vtemp_62[1U])) 
                                                    >> 4U)));
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__joint_cycle = 1U;
-                __Vtemp_99[0U] = (IData)((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1)) 
-                                           << 0x00000012U) 
-                                          | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))));
-                __Vtemp_99[1U] = (IData)(((((QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_1)) 
-                                            << 0x00000012U) 
-                                           | (QData)((IData)(vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))) 
-                                          >> 0x00000020U));
-                __Vtemp_99[2U] = 0U;
-                VL_SHIFTL_WWI(72,72,32, __Vtemp_100, __Vtemp_99, 0x00000024U);
                 __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
                     = (0x0000000fffffffffULL & (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 
-                                                + (
-                                                   ((QData)((IData)(__Vtemp_100[1U])) 
-                                                    << 0x00000020U) 
-                                                   | (QData)((IData)(__Vtemp_100[0U])))));
+                                                + ((QData)((IData)(
+                                                                   (1U 
+                                                                    & vlSelfRef.tb_multiply_manager_render__DOT__starting_y_reg_2))) 
+                                                   << 0x00000023U)));
             } else if ((0x0000000aU == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle)) {
                 if (vlSelfRef.tb_multiply_manager_render__DOT__received) {
                     __Vdly__tb_multiply_manager_render__DOT__dut__DOT__left_thread = 0U;
@@ -1670,20 +1662,20 @@ void Vtb_multiply_manager_render___024root___nba_sequent__TOP__0(Vtb_multiply_ma
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_2 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_2;
-    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
-        = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1;
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
+        = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2;
-    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
-        = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_cycle 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__left_cycle;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__right_cycle 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__right_cycle;
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+        = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
         = __Vdly__tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__joint_cycle 

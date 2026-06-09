@@ -474,8 +474,7 @@ always_ff @(posedge clk) begin
                 
                 {sum_y_reg_1, sum_y_reg_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
                 {wide_partial_1, wide_partial_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
-
-                
+ 
             end
             else begin // mandelbrot set setup
                 sum_x_reg_1 <= '0;
@@ -496,12 +495,12 @@ always_ff @(posedge clk) begin
                     if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) joint_cycle <= W_DONE;
                     else begin
                         //multiplier 1
-                        spare_x_reg_1 <= encoded_x_reg_1[2*NARROW_WIDTH-1:NARROW_WIDTH]; //x_high
-                        sum_y_reg_1 <= {2'b0, encoded_x_reg_1[NARROW_WIDTH-1:0], {NARROW_FRACTIONAL_BITS{1'b0}}}; //x_low (unsigned)
+                        spare_x_reg_1 <= encoded_x_reg_1[2*NARROW_FRACTIONAL_BITS+1:NARROW_FRACTIONAL_BITS]; //x_high
+                        sum_y_reg_2 <= {1'b0, encoded_x_reg_1[NARROW_FRACTIONAL_BITS-1:0], encoded_x_reg_2[2*NARROW_WIDTH-1]}; //x_low (unsigned)
                         
                         //multiplier 2
-                        spare_x_reg_2 <= encoded_y_reg_1[2*NARROW_WIDTH-1:NARROW_WIDTH]; //y_high                        
-                        sum_y_reg_2 <= {2'b0, encoded_y_reg_1[NARROW_WIDTH-1:0], {NARROW_FRACTIONAL_BITS{1'b0}}}; //y_low (unsigned)
+                        spare_x_reg_2 <= encoded_y_reg_1[2*NARROW_FRACTIONAL_BITS+1:NARROW_FRACTIONAL_BITS]; //y_high                        
+                        sum_y_reg_2 <= {1'b0, encoded_y_reg_1[NARROW_FRACTIONAL_BITS-1:0], encoded_y_reg_2[2*NARROW_WIDTH-1]}; //y_low (unsigned)
 
                         if(left_max_iteration_flag) joint_cycle <= W_DONE;
                         else joint_cycle <= W_X_SQUARED;
@@ -510,33 +509,33 @@ always_ff @(posedge clk) begin
                 end
 
                 W_X_SQUARED : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= {2'b0, left_multiply_result, {2*NARROW_WIDTH-2{1'b0}}}; //now contains x_high_high
-                    {wide_partial_1, wide_partial_2} <= {2'b0, right_multiply_result, {2*NARROW_WIDTH-2{1'b0}}}; //now contains y_high_high
+                    {sum_x_reg_1, sum_x_reg_2} <= {left_multiply_result, {2*NARROW_WIDTH{1'b0}}}; //now contains x_high_high
+                    {wide_partial_1, wide_partial_2} <= {right_multiply_result, {2*NARROW_WIDTH{1'b0}}}; //now contains y_high_high
                     joint_cycle <= W_X_SQUARED_2;
                 end
 
                 W_X_SQUARED_2 : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= {sum_x_reg_1, sum_x_reg_2} + {{NARROW_WIDTH+1{1'b0}}, left_multiply_result, {NARROW_WIDTH-1{1'b0}}} <<< 1; //now contains x_high_high and x_high_low <<< 1
-                    {wide_partial_1, wide_partial_2} <= {wide_partial_1, wide_partial_2} + {{NARROW_WIDTH+1{1'b0}}, right_multiply_result, {NARROW_WIDTH-1{1'b0}}}; //now contains y_high_high and y_high_low <<< 1
+                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) + {{NARROW_WIDTH+1{left_multiply_result[2*NARROW_WIDTH-1]}}, left_multiply_result, {NARROW_WIDTH-1{1'b0}}} <<< 1; //now contains x_high_high and x_high_low <<< 1
+                    {wide_partial_1, wide_partial_2} <= $signed({wide_partial_1, wide_partial_2}) + {{NARROW_WIDTH+1{right_multiply_result[2*NARROW_WIDTH-1]}}, right_multiply_result, {NARROW_WIDTH-1{1'b0}}}; //now contains y_high_high and y_high_low <<< 1
 
 
                     joint_cycle <= W_Y_SQUARED;
                 end
 
                 W_Y_SQUARED : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= {sum_x_reg_1, sum_x_reg_2} + {{2*NARROW_WIDTH{1'b0}}, left_multiply_result}; //now contains x^2
-                    {wide_partial_1, wide_partial_2} <= {wide_partial_1, wide_partial_2} + {{2*NARROW_WIDTH{1'b0}}, right_multiply_result}; //now contains y^2
+                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) + {{2*NARROW_WIDTH-2{1'b0}}, left_multiply_result, 2'b0}; //now contains x^2
+                    {wide_partial_1, wide_partial_2} <= $signed({wide_partial_1, wide_partial_2}) + {{2*NARROW_WIDTH-2{1'b0}}, left_multiply_result, 2'b0}; //now contains y^2
 
                     joint_cycle <= W_Y_SQUARED_2;
                 end
 
                 W_Y_SQUARED_2 : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= ({sum_x_reg_1, sum_x_reg_2} - {wide_partial_1, wide_partial_2}); //now contains x^2 - y^2
+                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) - $signed({wide_partial_1, wide_partial_2}); //now contains x^2 - y^2
 
                     sum_y_reg_1 <= sum_y_reg_2; //swap x_low and y_low in the multipliers for cross terms
                     sum_y_reg_2 <= sum_y_reg_1;
 
-                    magnitude_reg_1 <= (sum_x_reg_1 + wide_partial_1) <<< 2;
+                    {magnitude_reg_1, magnitude_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) + $signed({wide_partial_1, wide_partial_2});
 
                     joint_cycle <= W_TWO_I_XY;
                 end
@@ -545,12 +544,10 @@ always_ff @(posedge clk) begin
                     //here we have a flag if the magnitude is greater from the comparitor
                     if(left_magnitude_flag) joint_cycle <= W_DONE;
                     else begin
-                        {wide_partial_1, wide_partial_2} <= {{NARROW_WIDTH+1{1'b0}}, left_multiply_result, {NARROW_WIDTH-1{1'b0}}} + {{NARROW_WIDTH+1{1'b0}}, right_multiply_result, {NARROW_WIDTH-1{1'b0}}}; // now accumulating 2xy
+                        {wide_partial_1, wide_partial_2} <= {{NARROW_WIDTH+1{left_multiply_result[2*NARROW_WIDTH-1]}}, left_multiply_result, {NARROW_WIDTH-1{1'b0}}} + {{NARROW_WIDTH+1{right_multiply_result[2*NARROW_WIDTH-1]}}, right_multiply_result, {NARROW_WIDTH-1{1'b0}}}; // now accumulating 2xy
 
                         spare_x_reg_2 <= sum_y_reg_1[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS]; //needs to hold y_low
                         sum_y_reg_1 <= {2'b0, spare_x_reg_2, {NARROW_FRACTIONAL_BITS{1'b0}}}; //needs to hold y_high
-
-                        {sum_x_reg_1, sum_x_reg_2} <= ({sum_x_reg_1, sum_x_reg_2}) <<< 2; // shift to get rid of top 2 MSB
 
                         joint_cycle <= W_TWO_I_XY_2;
                     end
@@ -559,25 +556,26 @@ always_ff @(posedge clk) begin
                 W_TWO_I_XY_2 : begin
                     if(left_magnitude_flag) joint_cycle <= W_DONE;
                     else begin
-                        {wide_partial_1, wide_partial_2} <= ({wide_partial_1, wide_partial_2} + {2'b0, left_multiply_result, {2*NARROW_WIDTH-2{1'b0}}} + {{2*NARROW_WIDTH{1'b0}}, right_multiply_result}) <<< 3; // full 2xy
-                        
-
+                        {wide_partial_1, wide_partial_2} <= $signed({wide_partial_1, wide_partial_2}) + {left_multiply_result, {2*NARROW_WIDTH{1'b0}}} + {{2*NARROW_WIDTH{1'b0}}, right_multiply_result}; // full 2xy
+                    
                         if(julia_type) joint_cycle <= W_ADD_JULIA;
                         else joint_cycle <= W_ADD_COORD;
                     end
                 end
 
                 W_ADD_JULIA : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= {sum_x_reg_1, sum_x_reg_2} + ($signed(julia_c_x) <<< 3*NARROW_WIDTH);
-                    {sum_y_reg_1, sum_y_reg_2} <= {wide_partial_1, wide_partial_2} + ($signed(julia_c_y) <<< 3*NARROW_WIDTH);
+                    sum_x_reg_1 <= $signed(sum_x_reg_1) + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    
+                    sum_y_reg_1 <= $signed(wide_partial_1) + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                    sum_y_reg_2 <= wide_partial_2;
 
                     joint_cycle <= W_ALTER_SUM;
                     iteration_reg_1 <= iteration_reg_1 + 1;
                 end
 
                 W_ADD_COORD : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= {sum_x_reg_1, sum_x_reg_2} + ($signed({starting_x_reg_1, starting_x_reg_2}) <<< 2*NARROW_WIDTH); //, {2*NARROW_WIDTH{1'b0}}});
-                    {sum_y_reg_1, sum_y_reg_2} <= {wide_partial_1, wide_partial_2} + ($signed({starting_y_reg_1, starting_y_reg_2}) <<< 2*NARROW_WIDTH); //, {2*NARROW_WIDTH{1'b0}}});
+                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) + {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
+                    {sum_y_reg_1, sum_y_reg_2} <= $signed({wide_partial_1, wide_partial_2}) + {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
 
                     joint_cycle <= W_ALTER_SUM;
                     iteration_reg_1 <= iteration_reg_1 + 1;
