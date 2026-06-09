@@ -1,3 +1,0 @@
-Vtb_multiply_manager_wide___024root__Slow.o: \
- Vtb_multiply_manager_wide___024root__Slow.cpp \
- Vtb_multiply_manager_wide__pch.h
