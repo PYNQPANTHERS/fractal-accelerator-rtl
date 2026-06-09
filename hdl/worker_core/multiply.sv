@@ -16,6 +16,7 @@ always_comb begin
         2'b00:   combinational_result = x * x;
         2'b01:   combinational_result = y * y;
         2'b10:   combinational_result = (x * y) <<< 1;  // arithmetic left shift = *2
+        2'b11:   combinational_result = x * y;
         default: combinational_result = '0;
     endcase
 end

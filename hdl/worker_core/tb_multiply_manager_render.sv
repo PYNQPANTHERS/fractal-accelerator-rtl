@@ -50,14 +50,6 @@ module tb_multiply_manager_render;
     localparam int ITERATION_COUNT_WIDTH = 16;
     localparam int LOW                   = 0;
 
-<<<<<<< HEAD
-    localparam int NFRAC = NARROW_WIDTH - INTEGER_BITS;  // 16 — fractional bits in narrow Q2.16
-    localparam int WFRAC = 33;                           // fractional bits in wide Q2.33
-
-    // Render geometry
-    localparam int WIDTH  = 512;
-    localparam int HEIGHT = 512;
-=======
     localparam int NFRAC   = NARROW_WIDTH - INTEGER_BITS;  // 16
     localparam int WIDTH   = 128;
     localparam int HEIGHT  = 128;
@@ -69,7 +61,6 @@ module tb_multiply_manager_render;
     // max_iteration field: DUT iteration ceiling = 2^(max_iteration + LOW)
     // 5'd9 -> 512 iterations, a good balance of detail vs sim time
     localparam logic [4:0] MAX_ITER = 5'd6;
->>>>>>> worker_core_development
 
     // Narrow render window
     localparam real N_XMIN = -1.5;
