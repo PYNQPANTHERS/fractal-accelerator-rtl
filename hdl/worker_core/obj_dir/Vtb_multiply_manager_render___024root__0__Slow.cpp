@@ -107,12 +107,14 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     Vtb_multiply_manager_render__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
     auto& vlSelfRef = std::ref(*vlSelf).get();
     // Locals
-    CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__is_wide;
-    tb_multiply_manager_render__DOT__dut__DOT__is_wide = 0;
     CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode;
     tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0;
     CData/*1:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode;
     tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0;
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
+    VlWide<3>/*71:0*/ tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y;
+    VL_ZERO_W(72, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_4;
     __VdfgRegularize_h6e95ff9d_0_4 = 0;
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_6;
@@ -125,6 +127,10 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
     __VdfgRegularize_h6e95ff9d_0_10 = 0;
     QData/*35:0*/ __VdfgRegularize_h6e95ff9d_0_11;
     __VdfgRegularize_h6e95ff9d_0_11 = 0;
+    VlWide<3>/*95:0*/ __Vtemp_2;
+    VlWide<3>/*95:0*/ __Vtemp_5;
+    VlWide<3>/*95:0*/ __Vtemp_8;
+    VlWide<3>/*95:0*/ __Vtemp_11;
     // Body
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1_overflow_flag 
         = ((0U != (7U & (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
@@ -136,52 +142,6 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
                                  >> 0x00000021U)))) 
            & (7U != (7U & (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
                                    >> 0x00000021U)))));
-    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1;
-    if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-            = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1)
-                                         ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1)
-                                         : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-            = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-            = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2)
-                                         ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2)
-                                         : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2));
-    } else {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-            = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
-    }
-    if ((2U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
-            = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
-            = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2));
-    }
-    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
-    if ((4U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-            = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1)
-                                         ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1)
-                                         : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-            = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-            = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2)
-                                         ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2)
-                                         : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2));
-    } else {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-            = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
-    }
-    if ((1U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
-            = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1));
-        vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
-            = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2));
-    }
     vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag 
         = (1U & ((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__iteration_reg_1) 
                  >> (0x0000000fU & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__max_iteration))));
@@ -315,10 +275,40 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
         tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode = 0U;
         tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode = 0U;
     }
-    tb_multiply_manager_render__DOT__dut__DOT__is_wide 
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide 
         = ((1U != vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status) 
            && (2U == vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__grouping_status));
-    if (tb_multiply_manager_render__DOT__dut__DOT__is_wide) {
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1;
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2;
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U] 
+        = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2);
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U] 
+        = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+            << 4U) | (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2 
+                              >> 0x00000020U)));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U] 
+        = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1) 
+            >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1 
+                                        >> 0x00000020U)) 
+                               << 4U));
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1;
+    vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+        = vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2;
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U] 
+        = (IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2);
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U] 
+        = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1) 
+            << 4U) | (IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2 
+                              >> 0x00000020U)));
+    tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U] 
+        = (((IData)(vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1) 
+            >> 0x0000001cU) | ((IData)((vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1 
+                                        >> 0x00000020U)) 
+                               << 4U));
+    if (vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__is_wide) {
         vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
             = (0x0000000fffffffffULL & ((2U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
                                          ? ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
@@ -335,6 +325,58 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
                                          : ((1U & (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode))
                                              ? __VdfgRegularize_h6e95ff9d_0_10
                                              : __VdfgRegularize_h6e95ff9d_0_11)));
+        if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[2U])) 
+                                             << 0x0000001cU) 
+                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
+                                               >> 4U)));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[1U])) 
+                                             << 0x00000020U) 
+                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x[0U]))));
+        }
+        if ((2U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            VL_NEGATE_W(3, __Vtemp_2, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+                = (0x0000000fffffffffULL & (((QData)((IData)(
+                                                             (0x000000ffU 
+                                                              & __Vtemp_2[2U]))) 
+                                             << 0x0000001cU) 
+                                            | ((QData)((IData)(__Vtemp_2[1U])) 
+                                               >> 4U)));
+            VL_NEGATE_W(3, __Vtemp_5, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_x);
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_5[1U])) 
+                                             << 0x00000020U) 
+                                            | (QData)((IData)(__Vtemp_5[0U]))));
+        }
+        if ((4U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[2U])) 
+                                             << 0x0000001cU) 
+                                            | ((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
+                                               >> 4U)));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+                = (0x0000000fffffffffULL & (((QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[1U])) 
+                                             << 0x00000020U) 
+                                            | (QData)((IData)(tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y[0U]))));
+        }
+        if ((1U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            VL_NEGATE_W(3, __Vtemp_8, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+                = (0x0000000fffffffffULL & (((QData)((IData)(
+                                                             (0x000000ffU 
+                                                              & __Vtemp_8[2U]))) 
+                                             << 0x0000001cU) 
+                                            | ((QData)((IData)(__Vtemp_8[1U])) 
+                                               >> 4U)));
+            VL_NEGATE_W(3, __Vtemp_11, tb_multiply_manager_render__DOT__dut__DOT__mag_neg_encoder__DOT__wide_y);
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+                = (0x0000000fffffffffULL & (((QData)((IData)(__Vtemp_11[1U])) 
+                                             << 0x00000020U) 
+                                            | (QData)((IData)(__Vtemp_11[0U]))));
+        }
     } else {
         vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result 
             = (0x0000000fffffffffULL & ((0U == (IData)(tb_multiply_manager_render__DOT__dut__DOT__left_multiply_mode))
@@ -354,6 +396,38 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___stl_sequent__TOP__0(Vt
                                                 & (- (QData)((IData)(
                                                                      (2U 
                                                                       == (IData)(tb_multiply_manager_render__DOT__dut__DOT__right_multiply_mode)))))))));
+        if ((8U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+                = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1)
+                                             ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1)
+                                             : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+                = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2)
+                                             ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2)
+                                             : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_2));
+        }
+        if ((2U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1 
+                = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_1));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2 
+                = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_x_reg_2));
+        }
+        if ((4U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+                = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1)
+                                             ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1)
+                                             : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+                = (0x0000000fffffffffULL & (VL_GTS_IQQ(36, 0ULL, vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2)
+                                             ? (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2)
+                                             : vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_2));
+        }
+        if ((1U & (IData)(vlSelfRef.tb_multiply_manager_render__DOT__magnitude_negation_encoding))) {
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1 
+                = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1));
+            vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2 
+                = (0x0000000fffffffffULL & (- vlSelfRef.tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2));
+        }
     }
 }
 
@@ -452,6 +526,7 @@ VL_ATTR_COLD void Vtb_multiply_manager_render___024root___ctor_var_reset(Vtb_mul
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__wide_partial_2 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 10561022166096314513ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1_overflow_flag = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3782926737138849018ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1_overflow_flag = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14195800822766308264ull);
+    vlSelf->tb_multiply_manager_render__DOT__dut__DOT__is_wide = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5151761530331694696ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_1 = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 1768984354308601315ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__spare_x_reg_2 = VL_SCOPED_RAND_RESET_I(18, __VscopeHash, 3404692986186700013ull);
     vlSelf->tb_multiply_manager_render__DOT__dut__DOT__magnitude_reg_1 = VL_SCOPED_RAND_RESET_Q(36, __VscopeHash, 4347956927467756880ull);

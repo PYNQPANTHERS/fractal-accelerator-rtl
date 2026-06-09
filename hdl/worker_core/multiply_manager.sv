@@ -470,14 +470,11 @@ always_ff @(posedge clk) begin
             iteration_reg_1 <= '0;
 
             if(julia_type) begin //julia set setup
-                sum_x_reg_1 <= {starting_x_reg_1, starting_x_reg_2};
-                sum_x_reg_2 <= '0;
+                {sum_x_reg_1, sum_x_reg_2} <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
+                
+                {sum_y_reg_1, sum_y_reg_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
+                {wide_partial_1, wide_partial_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
 
-                sum_y_reg_1 <= {starting_y_reg_1, starting_y_reg_2};
-                sum_y_reg_2 <= '0;
-
-                wide_partial_1 <= '0;
-                wide_partial_2 <= '0;
                 
             end
             else begin // mandelbrot set setup

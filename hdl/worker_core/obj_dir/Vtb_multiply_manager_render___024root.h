@@ -31,6 +31,7 @@ class alignas(VL_CACHE_LINE_BYTES) Vtb_multiply_manager_render___024root final {
         CData/*0:0*/ tb_multiply_manager_render__DOT__done_side;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__sum_x_reg_1_overflow_flag;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__sum_y_reg_1_overflow_flag;
+        CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__is_wide;
         CData/*0:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_max_iteration_flag;
         CData/*0:0*/ __VstlFirstIteration;
         CData/*0:0*/ __VstlPhaseResult;
@@ -80,9 +81,9 @@ class alignas(VL_CACHE_LINE_BYTES) Vtb_multiply_manager_render___024root final {
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_1;
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__encoded_y_reg_2;
         QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__left_multiply_result;
-        QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result;
     };
     struct {
+        QData/*35:0*/ tb_multiply_manager_render__DOT__dut__DOT__right_multiply_result;
         VlUnpacked<QData/*63:0*/, 1> __VstlTriggered;
         VlUnpacked<QData/*63:0*/, 1> __VactTriggered;
         VlUnpacked<QData/*63:0*/, 1> __VactTriggeredAcc;

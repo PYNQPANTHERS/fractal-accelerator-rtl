@@ -11,7 +11,7 @@ Vtb_multiply_manager_render__Syms::Vtb_multiply_manager_render__Syms(VerilatedCo
     , TOP{this, namep}
 {
     // Check resources
-    Verilated::stackCheck(2486);
+    Verilated::stackCheck(2890);
     // Setup sub module instances
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-9);
