@@ -522,8 +522,8 @@ always_ff @(posedge clk) begin
                 sum_x_reg_1 <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:1]};
                 sum_x_reg_2 <= {starting_x_reg_2[0], {2*NARROW_WIDTH-1{1'b0}}};
                 
-                sum_y_reg_1 <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:1]};
-                sum_y_reg_2 <= {starting_x_reg_2[0], {2*NARROW_WIDTH-1{1'b0}}};
+                sum_y_reg_1 <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:1]};
+                sum_y_reg_2 <= {starting_y_reg_2[0], {2*NARROW_WIDTH-1{1'b0}}};
 
             end
             else begin // mandelbrot set setup
@@ -542,7 +542,13 @@ always_ff @(posedge clk) begin
         else if(right_thread == RUNNING && left_thread == RUNNING && grouping_status == JOINED) begin
             case(joint_cycle)
                 W_ALTER_SUM : begin
-                    if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) joint_cycle <= W_DONE;
+                    if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) begin 
+                        joint_cycle <= W_DONE;
+                        $display("sum overflow");
+                        $display("[%0t] OVERFLOW FLAGS: sum_x=%b sum_y=%b → jumping to W_DONE",$time,sum_x_reg_1_overflow_flag,sum_y_reg_1_overflow_flag);
+                        $display("sum_x_reg_1 = %f (raw int)", (sum_x_reg_1));
+                        $display("sum_y_reg_1 = %f (raw int)", ((sum_y_reg_1)));
+                    end
                     else begin
                         //multiplier 1
                         spare_x_reg_1 <= encoded_x_reg_1[2*NARROW_FRACTIONAL_BITS+1:NARROW_FRACTIONAL_BITS]; //x_high
@@ -559,6 +565,9 @@ always_ff @(posedge clk) begin
                 end
 
                 W_X_SQUARED : begin
+                    $display("spare_x_reg_1 = %f (2.16 fixed-point)", $itor($signed(spare_x_reg_1)) / (2.0**16));
+                    $display("spare_x_reg_2 = %f (2.16 fixed-point)", $itor($signed(spare_x_reg_2)) / (2.0**16));
+
                     {sum_x_reg_1, sum_x_reg_2} <= {left_multiply_result, {2*NARROW_WIDTH{1'b0}}}; //now contains x_high_high
                     {wide_partial_1, wide_partial_2} <= {right_multiply_result, {2*NARROW_WIDTH{1'b0}}}; //now contains y_high_high
                     joint_cycle <= W_X_SQUARED_2;
@@ -637,7 +646,7 @@ always_ff @(posedge clk) begin
                 end
 
                 W_DONE : begin
-                    if(received) begin
+                    if(done && received) begin
                         left_thread <= T_IDLE;
                         right_thread <= T_IDLE;
                         joint_cycle <= W_IDLE;
