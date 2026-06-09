@@ -41,7 +41,7 @@ module scheduler #(
 
     typedef enum logic [3:0] {
         IDLE, STARTUP, SEARCH, PUSH_BORDER, WAIT_COMP,
-        FILL, SPLIT, QUEUE_FLUSH, QUEUE_ALL,
+        FILL, SPLIT, QUEUE_ALL,
         ADVANCE, ADVANCE2, FINISHED
     } state_t;
     state_t state;
@@ -201,7 +201,12 @@ module scheduler #(
                 PUSH_BORDER: begin
                     if (differ) begin
                         split_cnt <= '0;
-                        state     <= (cur_depth == 3'd4) ? QUEUE_FLUSH : SPLIT;
+                        if (cur_depth == 3'd4) begin
+                            qa_x  <= '0;
+                            qa_y  <= '0;
+                            state <= QUEUE_ALL;
+                        end else
+                            state <= SPLIT;
                     end else if (!sched_stall) begin
                         if (b_done)
                             state <= WAIT_COMP;
@@ -216,7 +221,12 @@ module scheduler #(
                 WAIT_COMP: begin
                     if (differ) begin
                         split_cnt <= '0;
-                        state     <= (cur_depth == 3'd4) ? QUEUE_FLUSH : SPLIT;
+                        if (cur_depth == 3'd4) begin
+                            qa_x  <= '0;
+                            qa_y  <= '0;
+                            state <= QUEUE_ALL;
+                        end else
+                            state <= SPLIT;
                     end else if (complete)
                         state <= FILL;
                 end
@@ -235,12 +245,6 @@ module scheduler #(
                     end else begin
                         split_cnt <= split_cnt + 2'd1;
                     end
-                end
-
-                QUEUE_FLUSH: begin
-                    qa_x  <= '0;
-                    qa_y  <= '0;
-                    state <= QUEUE_ALL;
                 end
 
                 QUEUE_ALL: begin
@@ -333,10 +337,6 @@ module scheduler #(
                     end
                     default: ;  // cnt==3: descend to TL (handled in sequential block)
                 endcase
-            end
-
-            QUEUE_FLUSH: begin
-                flush = 1'b1;
             end
 
             QUEUE_ALL: begin

@@ -13,7 +13,10 @@ module top_level (
     input  logic        hp_axi_wr_ready,
 
     // Interrupt to PS
-    output logic irq_all_done
+    output logic irq_all_done,
+
+    // PS handshake: high while PL is rendering (PS should not re-assert ps_start)
+    output logic irq_started
 );
 
     // AXI Lite config registers (written by PS)
@@ -40,6 +43,7 @@ module top_level (
     logic [31:0] ctrl_sixteenth_base_addr;
     logic        ctrl_sixteenth_complete;
     logic        ctrl_all_done;
+    logic        ctrl_started;
 
     // engine_rst combines global reset with between-sixteenth reset from controller
     wire engine_combined_rst = rst | ctrl_engine_rst;
@@ -67,7 +71,8 @@ module top_level (
         .sixteenth_id       (ctrl_sixteenth_id),
         .sixteenth_base_addr(ctrl_sixteenth_base_addr),
         .sixteenth_complete (ctrl_sixteenth_complete),
-        .all_done           (ctrl_all_done)
+        .all_done           (ctrl_all_done),
+        .started            (ctrl_started)
     );
 
     // per_sixteenth_engine
@@ -93,5 +98,6 @@ module top_level (
     );
 
     assign irq_all_done = ctrl_all_done;
+    assign irq_started  = ctrl_started;
 
 endmodule

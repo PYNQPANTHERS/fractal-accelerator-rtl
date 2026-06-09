@@ -31,6 +31,10 @@ module colour_bram (
     (* ram_style = "block" *)
     logic [63:0] mem [0:8191];
 
+    initial begin
+        for (int i = 0; i < 8192; i++) mem[i] = 64'h0;
+    end
+
     // Tile address for byte read: {y[7:4], x[7:4], y[3:0], x[3:0]} → 16 bits
     logic [15:0] ctrl_rd_ta;
     logic [12:0] ctrl_rd_waddr_i;
@@ -55,7 +59,11 @@ module colour_bram (
         ctrl_rd_data = a_rd_word[a_byte_off_reg*8 +: 8];
 
     // Port B — RMW pre-read and b2d read (arbitrated: wr beats b2d)
-    assign b2d_rd_grant = b2d_rd_en && !ctrl_wr_en && !ctrl_rmw_rd_en;
+    // Grant is registered so it arrives on the same cycle as the data (both
+    // are one cycle after the request), letting bram_to_dram capture b2d_rd_data
+    // the moment grant fires rather than one cycle too early.
+    always_ff @(posedge clk)
+        b2d_rd_grant <= b2d_rd_en && !ctrl_wr_en && !ctrl_rmw_rd_en;
 
     always_ff @(posedge clk) begin
         if (ctrl_wr_en)

@@ -174,6 +174,28 @@ pse:
 	@echo "           $(RENDER_DIR)/pse_image.csv"
 	@echo ""
 
+# Level-1b: per_sixteenth_engine, single run, top-full config, dumps CSV on sixteenth_complete
+.PHONY: pse-single
+pse-single:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval TB_NAME := tb_pse_single)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Compiling: tb/top/$(TB_NAME).sv"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	iverilog $(IVFLAGS) -o $(OUT) $(ENGINE_HDL_SRCS) tb/top/$(TB_NAME).sv
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Running:   $(TB_NAME)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	vvp $(OUT)
+	@echo ""
+	@echo "  Outputs: $(RENDER_DIR)/single_bram.csv"
+	@echo "           $(RENDER_DIR)/single_dram.csv"
+	@echo "           $(RENDER_DIR)/single_image.csv"
+	@echo ""
+
 # Level-2: per_sixteenth_engine, two sixteenths, cross-run checks
 .PHONY: engine-full
 engine-full:

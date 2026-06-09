@@ -79,6 +79,9 @@ module per_sixteenth_engine #(
     logic [1:0]  sbram_rstate;
     logic        sbram_rd_valid;
     logic        sbram_wr_done;
+    logic        sbram_clear_done;
+    logic        b2d_sixteenth_complete;
+    assign sixteenth_complete = b2d_sixteenth_complete && sbram_clear_done;
     // tile_table wire (single write driven directly from cu_tile_done_set/addr)
     logic        tt_wr_quad_en;
     logic [7:0]  tt_wr_quad_tlx;
@@ -157,8 +160,8 @@ module per_sixteenth_engine #(
 
         // frame control
         .fractal_type       (fractal_type),
-        .pan_x              (pan_x[16:0]),
-        .pan_y              (pan_y[16:0]),
+        .pan_x              (pan_x[17:0]),
+        .pan_y              (pan_y[17:0]),
         .zoom_level         (zoom_level[3:0]),
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
@@ -282,10 +285,12 @@ module per_sixteenth_engine #(
         .rd      (sbram_rd),
         .we      (sbram_we),
         .wstate  (sbram_wstate),
-        .rstate  (sbram_rstate),
-        .rd_valid(sbram_rd_valid),
-        .wr_done (sbram_wr_done)
+        .rstate    (sbram_rstate),
+        .rd_valid  (sbram_rd_valid),
+        .wr_done   (sbram_wr_done),
+        .clear_done(sbram_clear_done)
     );
+
 
     // tile_table
     // 256-entry register file: one entry per 16x16 tile.
@@ -326,7 +331,7 @@ module per_sixteenth_engine #(
         .cache_valid_index  (),
         .cache_valid_value  (),
         .sixteenth_base_addr(sixteenth_base_addr),
-        .sixteenth_complete   (sixteenth_complete)
+        .sixteenth_complete   (b2d_sixteenth_complete)
     );
 
 endmodule

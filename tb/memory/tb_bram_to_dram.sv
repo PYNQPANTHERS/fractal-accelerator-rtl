@@ -94,11 +94,12 @@ module tb_bram_to_dram;
     // Pattern: byte[i] of word A = (A*8 + i) & 0xFF — deterministic, non-trivial.
     logic [63:0] bram_model [0:8191];
 
-    // Default BRAM response: always grant, return model data
-    // (overridden in BRAM-deny test via procedural block)
-    always_comb begin
-        b2d_rd_grant = b2d_rd_en;
-        b2d_rd_data  = bram_model[b2d_word_addr];
+    // Default BRAM response: registered grant + data, matching real colour_bram
+    // timing (grant and data both arrive 1 cycle after request).
+    // Overridden in BRAM-deny test via force/release on b2d_rd_grant.
+    always_ff @(posedge clk) begin
+        b2d_rd_grant <= b2d_rd_en;
+        if (b2d_rd_en) b2d_rd_data <= bram_model[b2d_word_addr];
     end
 
     initial begin

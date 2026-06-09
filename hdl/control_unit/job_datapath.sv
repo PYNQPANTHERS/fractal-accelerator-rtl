@@ -3,7 +3,7 @@
 //   Word multiplexer that drives disp_job_data across the cycles of a transfer.
 // ─────────────────────────────────────────────────────────────────────────────
 module job_datapath #(
-    parameter  int DATA_WIDTH = 17,
+    parameter  int DATA_WIDTH = 18,
     parameter  int JOB_DATA_W = 18,
     parameter  int OPCODE_W   = 5,
     localparam int Z_WIDTH    = DATA_WIDTH + 1,
@@ -24,17 +24,25 @@ module job_datapath #(
 
     // upper-half width (whatever is left above the low JOB_DATA_W bits)
     localparam int UPPER_W = Z_WIDE - JOB_DATA_W;
-    localparam int UPPER_PAD = JOB_DATA_W - UPPER_W;   // pad upper slice to bus width
 
     // lower halves: low JOB_DATA_W bits of each value
     logic [JOB_DATA_W-1:0] real_lower, imag_lower;
     assign real_lower = z_real[JOB_DATA_W-1:0];
     assign imag_lower = z_imag[JOB_DATA_W-1:0];
 
-    // upper halves: high bits, zero-padded up to the bus width
+    // upper halves: if upper slice is wider than bus, take the low JOB_DATA_W bits of it
+    //               (top bits are redundant sign extension from multiply); otherwise pad.
     logic [JOB_DATA_W-1:0] real_upper, imag_upper;
-    assign real_upper = {{UPPER_PAD{z_real[Z_WIDE-1]}}, z_real[Z_WIDE-1:JOB_DATA_W]};
-    assign imag_upper = {{UPPER_PAD{z_imag[Z_WIDE-1]}}, z_imag[Z_WIDE-1:JOB_DATA_W]};
+    generate
+        if (UPPER_W >= JOB_DATA_W) begin : gen_upper_trunc
+            assign real_upper = z_real[JOB_DATA_W + JOB_DATA_W - 1 : JOB_DATA_W];
+            assign imag_upper = z_imag[JOB_DATA_W + JOB_DATA_W - 1 : JOB_DATA_W];
+        end else begin : gen_upper_pad
+            localparam int UPPER_PAD = JOB_DATA_W - UPPER_W;
+            assign real_upper = {{UPPER_PAD{z_real[Z_WIDE-1]}}, z_real[Z_WIDE-1:JOB_DATA_W]};
+            assign imag_upper = {{UPPER_PAD{z_imag[Z_WIDE-1]}}, z_imag[Z_WIDE-1:JOB_DATA_W]};
+        end
+    endgenerate
 
     always_comb begin : word_mux
         disp_job_data = '0;

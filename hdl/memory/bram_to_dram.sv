@@ -35,12 +35,11 @@ module bram_to_dram (
     output logic         sixteenth_complete
 );
 
-    typedef enum logic [2:0] {
+    typedef enum logic [1:0] {
         SCAN,
         CHECK_TABLE,
         GENERATE_FILL,
-        BURST_PIPE,
-        PIPE_DRAIN
+        BURST_PIPE
     } state_t;
 
     state_t state;
@@ -56,7 +55,7 @@ module bram_to_dram (
     logic         pipe_valid;
 
     logic [255:0] pending;
-    assign pending = tile_done & ~transferred;
+    assign pending = (tile_done == '1) ? (tile_done & ~transferred) : '0;
 
     // priority encoder — lowest set bit of pending
     logic [7:0] next_tile;
@@ -85,7 +84,6 @@ module bram_to_dram (
     end
 
     // ── AXI write outputs: combinational so handshake is glitch-free ────────
-    // Drive from registered state; only advance state when axi_wr_ready=1.
     always_comb begin
         axi_wr_en   = 1'b0;
         axi_wr_addr = '0;
@@ -97,13 +95,6 @@ module bram_to_dram (
                 axi_wr_data = fill_word;
             end
             BURST_PIPE: begin
-                if (pipe_valid) begin
-                    axi_wr_en   = 1'b1;
-                    axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
-                    axi_wr_data = pipe_data;
-                end
-            end
-            PIPE_DRAIN: begin
                 if (pipe_valid) begin
                     axi_wr_en   = 1'b1;
                     axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
@@ -175,64 +166,35 @@ module bram_to_dram (
 
                 BURST_PIPE: begin
                     if (pipe_valid) begin
-                        // AXI write presented combinationally; advance only when accepted
+                        // Word is ready — present to AXI and wait for acceptance.
+                        // No BRAM activity here: avoids latching the stale grant that
+                        // always trails a BRAM priming cycle by one clock (2-cycle latency).
                         if (axi_wr_ready) begin
-                            wr_count <= wr_count + 1;
-                            // Try to latch the next BRAM word
-                            if (b2d_rd_grant) begin
-                                pipe_data <= b2d_rd_data;
-                                rd_count  <= rd_count + 1;
-                                if (rd_count == 5'd31) begin
-                                    state <= PIPE_DRAIN;
-                                end else begin
-                                    b2d_rd_en     <= 1'b1;
-                                    b2d_word_addr <= {cur_tile, 5'(rd_count + 1)};
-                                end
+                            pipe_valid <= 1'b0;
+                            if (wr_count == 5'd31) begin
+                                // Last word accepted — tile complete
+                                transferred[cur_tile] <= 1'b1;
+                                cache_valid_wr_en     <= 1'b1;
+                                cache_valid_index     <= cur_tile;
+                                cache_valid_value     <= 1'b1;
+                                state                 <= SCAN;
                             end else begin
-                                // BRAM denied while accepting AXI write — stall pipeline
-                                // clear pipe_valid and retry same rd_count address
-                                pipe_valid    <= 1'b0;
-                                b2d_rd_en     <= 1'b1;
-                                b2d_word_addr <= {cur_tile, rd_count};
-                            end
-                        end else begin
-                            // AXI stall: hold pipe_data, keep next BRAM word requested
-                            // so it is ready to latch the moment AXI accepts
-                            if (b2d_rd_grant && rd_count < 5'd31) begin
+                                wr_count      <= wr_count + 1;
+                                // Issue BRAM read for the next word now that AXI consumed this one
                                 b2d_rd_en     <= 1'b1;
                                 b2d_word_addr <= {cur_tile, rd_count};
                             end
                         end
                     end else begin
-                        // Pipeline not yet primed — wait for first BRAM grant
+                        // Waiting for BRAM grant — retry until granted
                         if (b2d_rd_grant) begin
                             pipe_data  <= b2d_rd_data;
                             pipe_valid <= 1'b1;
                             rd_count   <= rd_count + 1;
-                            if (rd_count < 5'd31) begin
-                                b2d_rd_en     <= 1'b1;
-                                b2d_word_addr <= {cur_tile, 5'(rd_count + 1)};
-                            end else begin
-                                state <= PIPE_DRAIN;
-                            end
                         end else begin
-                            // BRAM denied — retry same address
                             b2d_rd_en     <= 1'b1;
                             b2d_word_addr <= {cur_tile, rd_count};
                         end
-                    end
-                end
-
-                PIPE_DRAIN: begin
-                    // Last word in pipe_data — presented combinationally above.
-                    if (pipe_valid && axi_wr_ready) begin
-                        pipe_valid            <= 1'b0;
-                        wr_count              <= wr_count + 1;
-                        transferred[cur_tile] <= 1'b1;
-                        cache_valid_wr_en     <= 1'b1;
-                        cache_valid_index     <= cur_tile;
-                        cache_valid_value     <= 1'b1;
-                        state                 <= SCAN;
                     end
                 end
 

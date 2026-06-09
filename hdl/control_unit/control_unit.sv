@@ -1,5 +1,5 @@
 module control_unit #(
-    parameter int DATA_WIDTH          = 17,
+    parameter int DATA_WIDTH          = 18,
     parameter int CLUSTER_COUNT       = 4,
     parameter int CLUSTER_SIZE        = 8,
     parameter int PIXEL_ADDR_W        = 16,
