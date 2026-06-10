@@ -23,15 +23,15 @@ module frame_render_tb;
 // ──────────────────────────────────────────────
 // ▸ Customise here
 // ──────────────────────────────────────────────
-localparam int    WIDTH      = 128;          // horizontal pixels
-localparam int    HEIGHT     = 128;          // vertical pixels
-localparam real   RE_MIN     = -1.5;
-localparam real   RE_MAX     =  1.5;
-localparam real   IM_MIN     = -1.5;
-localparam real   IM_MAX     =  1.5;
+localparam int    WIDTH      = 512;          // horizontal pixels
+localparam int    HEIGHT     = 512;          // vertical pixels
+localparam real   RE_MIN     = -0.8;
+localparam real   RE_MAX     = -0.7;
+localparam real   IM_MIN     = 0.1;
+localparam real   IM_MAX     =  0.2;
 localparam real   JULIA_CX   = -0.700;      // Julia constant real
 localparam real   JULIA_CY   =  0.270;      // Julia constant imag
-localparam logic [4:0] MAX_ITER_FIELD = 5'd2; // 2^(6+field) iterations
+localparam logic [4:0] MAX_ITER_FIELD = 5'd3; // 2^(6+field) iterations
 
 // ──────────────────────────────────────────────
 // DUT parameters
@@ -283,34 +283,34 @@ initial begin
     send_opcode(build_opcode(0, 0, 0, 0, 0, 0, MAX_ITER_FIELD));
     render_frame(0);
 
-    // ── Frame 1 : Burning Ship ────────────────
-    $display("\n══ Frame 1: Burning Ship  %0dx%0d ══", WIDTH, HEIGHT);
-    send_opcode(build_opcode(0, 0, 1, 1, 0, 0, MAX_ITER_FIELD));
-    render_frame(1);
+    // // ── Frame 1 : Burning Ship ────────────────
+    // $display("\n══ Frame 1: Burning Ship  %0dx%0d ══", WIDTH, HEIGHT);
+    // send_opcode(build_opcode(0, 0, 1, 1, 0, 0, MAX_ITER_FIELD));
+    // render_frame(1);
 
-    // ── Frame 2 : Julia ───────────────────────
-    $display("\n══ Frame 2: Julia (c=%.3f+%.3fi)  %0dx%0d ══",
-             JULIA_CX, JULIA_CY, WIDTH, HEIGHT);
-    send_julia_opcode(build_opcode(0, 1, 0, 0, 0, 0, MAX_ITER_FIELD),
-                      JULIA_CX, JULIA_CY);
-    render_frame(2);
+    // // ── Frame 2 : Julia ───────────────────────
+    // $display("\n══ Frame 2: Julia (c=%.3f+%.3fi)  %0dx%0d ══",
+    //          JULIA_CX, JULIA_CY, WIDTH, HEIGHT);
+    // send_julia_opcode(build_opcode(0, 1, 0, 0, 0, 0, MAX_ITER_FIELD),
+    //                   JULIA_CX, JULIA_CY);
+    // render_frame(2);
 
     // ── Timing summary ────────────────────────
     $display("\n══ Frame timing summary ══");
     $display("  Frame 0 (Mandelbrot)  : %0d cycles",
              frame_end_cycle[0] - frame_start_cycle[0]);
-    $display("  Frame 1 (Burning Ship): %0d cycles",
-             frame_end_cycle[1] - frame_start_cycle[1]);
-    $display("  Frame 2 (Julia)       : %0d cycles",
-             frame_end_cycle[2] - frame_start_cycle[2]);
-    $display("  Total                 : %0d cycles",
-             frame_end_cycle[2] - frame_start_cycle[0]);
+    // $display("  Frame 1 (Burning Ship): %0d cycles",
+    //          frame_end_cycle[1] - frame_start_cycle[1]);
+    // $display("  Frame 2 (Julia)       : %0d cycles",
+    //          frame_end_cycle[2] - frame_start_cycle[2]);
+    // $display("  Total                 : %0d cycles",
+    //          frame_end_cycle[2] - frame_start_cycle[0]);
 
     // ── Dump CSVs ─────────────────────────────
     $display("\n══ Writing CSVs ══");
     dump_csv("frame0_mandelbrot.csv",   0);
-    dump_csv("frame1_burningship.csv",  1);
-    dump_csv("frame2_julia.csv",        2);
+    // dump_csv("frame1_burningship.csv",  1);
+    // dump_csv("frame2_julia.csv",        2);
 
     $display("\nDone.\n");
     $finish;

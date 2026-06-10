@@ -304,8 +304,7 @@ always_ff @(posedge clk) begin
                     //$display("    x^2 put in sum_x iter=%0d  sum_x=%0d  sum_y=%0d  mag=%0d",
                     //iteration_reg_1, $signed(sum_x_reg_1), $signed(sum_y_reg_1), $signed(magnitude_reg_1));
 
-                    sum_x_reg_1 <= sum_x_reg_1 - left_multiply_result;
-                    magnitude_reg_1 <= magnitude_reg_1 + left_multiply_result;
+
                 
                 
                     //here we have a flag if the magnitude is greater from the comparitor
@@ -314,6 +313,8 @@ always_ff @(posedge clk) begin
                         //$display("[L] iter=%0d  MAGNITUDE escape  mag=%0d", iteration_reg_1, magnitude_reg_1);
                     end
                     else begin
+                        sum_x_reg_1 <= sum_x_reg_1 - left_multiply_result;
+                        magnitude_reg_1 <= magnitude_reg_1 + left_multiply_result;
                         if(julia_type) left_cycle <= ADD_JULIA;
                         else left_cycle <= ADD_COORD;
                     end
@@ -322,25 +323,31 @@ always_ff @(posedge clk) begin
                 ADD_JULIA : begin
 
 
-                    sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= left_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
-                    iteration_reg_1 <= iteration_reg_1 + 1;
+
                     
                     if(left_magnitude_flag) begin
                         left_cycle <= DONE;
                         //$display("[L] iter=%0d  MAGNITUDE escape  mag=%0d", iteration_reg_1, magnitude_reg_1);
                     end
-                    else left_cycle <= ALTER_SUM;
+                    else begin
+                        left_cycle <= ALTER_SUM;
+                        sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= left_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        iteration_reg_1 <= iteration_reg_1 + 1;
+                    end
                 end
 
                 ADD_COORD : begin
 
-                    sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_1 <= left_multiply_result + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                    iteration_reg_1 <= iteration_reg_1 + 1;
+
                     
                     if(left_magnitude_flag) left_cycle <= DONE;
-                    else left_cycle <= ALTER_SUM;
+                    else begin
+                        left_cycle <= ALTER_SUM;
+                        sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= left_multiply_result + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                        iteration_reg_1 <= iteration_reg_1 + 1;
+                    end
                 end
 
                 DONE : begin
@@ -412,34 +419,41 @@ always_ff @(posedge clk) begin
 
                 TWO_I_XY : begin
                 //pipeline register reads from y^2
-                    sum_x_reg_2 <= sum_x_reg_2 - right_multiply_result;
-                    magnitude_reg_2 <= magnitude_reg_2 + right_multiply_result;
+
                 
                 
                     //here we have a flag if the magnitude is greater from the comparitor
                     if(right_magnitude_flag) right_cycle <= DONE;
                     else begin
+                        sum_x_reg_2 <= sum_x_reg_2 - right_multiply_result;
+                        magnitude_reg_2 <= magnitude_reg_2 + right_multiply_result;
                         if(julia_type) right_cycle <= ADD_JULIA;
                         else right_cycle <= ADD_COORD;
                     end
                 end
 
                 ADD_JULIA : begin
-                    sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_2 <= right_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
-                    iteration_reg_2 <= iteration_reg_2 + 1;
+
                     
                     if(right_magnitude_flag) right_cycle <= DONE;
-                    else right_cycle <= ALTER_SUM;
+                    else begin
+                        right_cycle <= ALTER_SUM;
+                        sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= right_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        iteration_reg_2 <= iteration_reg_2 + 1;                    
+                    end
                 end
 
                 ADD_COORD : begin
-                    sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                    sum_y_reg_2 <= right_multiply_result + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                    iteration_reg_2 <= iteration_reg_2 + 1;
+
                     
                     if(right_magnitude_flag) right_cycle <= DONE;
-                    else right_cycle <= ALTER_SUM;
+                    else begin
+                        right_cycle <= ALTER_SUM;
+                        sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= right_multiply_result + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                        iteration_reg_2 <= iteration_reg_2 + 1;
+                    end
                 end
 
                 DONE : begin
