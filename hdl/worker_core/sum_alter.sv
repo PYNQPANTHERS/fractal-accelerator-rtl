@@ -17,11 +17,11 @@ output logic signed [2*NARROW_WIDTH-1:0] changed_sum_y_reg_2
 localparam SUM_INT_BITS = 2*INTEGER_BITS;
 localparam SUM_FRACTIONAL_BITS = 2*(NARROW_WIDTH-INTEGER_BITS);
 
-logic [4*NARROW_WIDTH-1:0] wide_x;
-logic [4*NARROW_WIDTH-1:0] wide_y;
+logic signed [4*NARROW_WIDTH-1:0] wide_x;
+logic signed [4*NARROW_WIDTH-1:0] wide_y;
 
-logic [4*NARROW_WIDTH-1:0] changed_wide_x;
-logic [4*NARROW_WIDTH-1:0] changed_wide_y;
+logic signed [4*NARROW_WIDTH-1:0] changed_wide_x;
+logic signed [4*NARROW_WIDTH-1:0] changed_wide_y;
 
 wire abs_x  = magnitude_negation_encoding[3];
 wire neg_x  = magnitude_negation_encoding[1];

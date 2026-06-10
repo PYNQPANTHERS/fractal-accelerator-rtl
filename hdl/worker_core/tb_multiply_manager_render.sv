@@ -51,16 +51,12 @@ module tb_multiply_manager_render;
     localparam int LOW                   = 0;
 
     localparam int NFRAC   = NARROW_WIDTH - INTEGER_BITS;  // 16
-    localparam int WIDTH   = 128;
-    localparam int HEIGHT  = 128;
+    localparam int WIDTH   = 1024;
+    localparam int HEIGHT  = 1024;
     localparam real XMIN   = -1.5;
     localparam real XMAX   =  1.5;
     localparam real YMIN   = -1.5;
     localparam real YMAX   =  1.5;
-
-    // max_iteration field: DUT iteration ceiling = 2^(max_iteration + LOW)
-    // 5'd9 -> 512 iterations, a good balance of detail vs sim time
-    localparam logic [4:0] MAX_ITER = 5'd6;
 
     // Narrow render window
     localparam real N_XMIN = -1.5;
@@ -86,7 +82,7 @@ module tb_multiply_manager_render;
 
     // Iteration ceiling: 2^(MAX_ITER + LOW)
     //   8 → 256 iters  (fast simulation; increase for denser images)
-    localparam logic [4:0] MAX_ITER = 5'd200;
+    localparam logic [4:0] MAX_ITER = 5'd9;
 
     // =========================================================================
     // DUT I/O
@@ -266,39 +262,39 @@ module tb_multiply_manager_render;
         // =====================================================================
         // PASS 1 — Narrow mode render
         // =====================================================================
-        $display("=== NARROW MODE RENDER: %0dx%0d, range [%.2f,%.2f] ===",
-                 WIDTH, HEIGHT, N_XMIN, N_XMAX);
-        // fixed config for all pixels: standard Mandelbrot
-        julia_type                  = 1'b0;
-        magnitude_negation_encoding = 4'b0000;
-        max_iteration               = MAX_ITER;
-        julia_c_x                   = to_q216(-0.74);
-        julia_c_y                   = to_q216(0);
+        // $display("=== NARROW MODE RENDER: %0dx%0d, range [%.2f,%.2f] ===",
+        //          WIDTH, HEIGHT, N_XMIN, N_XMAX);
+        // // fixed config for all pixels: standard Mandelbrot
+        // julia_type                  = 1'b1;
+        // magnitude_negation_encoding = 4'b0000;
+        // max_iteration               = MAX_ITER;
+        // julia_c_x                   = to_q216(-0.74);
+        // julia_c_y                   = to_q216(0);
 
         
 
 
-        fd = $fopen("sim/render/frame_narrow.csv", "w");
-        if (!fd) begin $display("ERROR: cannot open frame_narrow.csv"); $finish; end
-        $fwrite(fd, "px,py,iterations\n");
+        // fd = $fopen("sim/render/frame_narrow.csv", "w");
+        // if (!fd) begin $display("ERROR: cannot open frame_narrow.csv"); $finish; end
+        // $fwrite(fd, "px,py,iterations\n");
 
-        pixel_count = 0;
-        for (int row = 0; row < HEIGHT; row++) begin
-            cy = N_YMIN + (N_YMAX - N_YMIN) * row / (HEIGHT - 1);
-            qy = to_q216(cy);
-            for (int col = 0; col < WIDTH; col++) begin
-                cx = N_XMIN + (N_XMAX - N_XMIN) * col / (WIDTH - 1);
-                qx = to_q216(cx);
-                run_pixel(qx, qy, iter_result);
-                $fwrite(fd, "%0d,%0d,%0d\n", col, row, iter_result);
-                pixel_count++;
-            end
-            if ((row % 32) == 31)
-                $display("  [narrow] row %0d / %0d  (%0d pixels)", row+1, HEIGHT, pixel_count);
-        end
+        // pixel_count = 0;
+        // for (int row = 0; row < HEIGHT; row++) begin
+        //     cy = N_YMIN + (N_YMAX - N_YMIN) * row / (HEIGHT - 1);
+        //     qy = to_q216(cy);
+        //     for (int col = 0; col < WIDTH; col++) begin
+        //         cx = N_XMIN + (N_XMAX - N_XMIN) * col / (WIDTH - 1);
+        //         qx = to_q216(cx);
+        //         run_pixel(qx, qy, iter_result);
+        //         $fwrite(fd, "%0d,%0d,%0d\n", col, row, iter_result);
+        //         pixel_count++;
+        //     end
+        //     if ((row % 32) == 31)
+        //         $display("  [narrow] row %0d / %0d  (%0d pixels)", row+1, HEIGHT, pixel_count);
+        // end
 
-        $fclose(fd);
-        $display("Narrow render complete. %0d pixels → sim/render/frame_narrow.csv\n", pixel_count);
+        // $fclose(fd);
+        // $display("Narrow render complete. %0d pixels → sim/render/frame_narrow.csv\n", pixel_count);
 
         // =====================================================================
         // PASS 2 — Wide mode render
@@ -317,11 +313,11 @@ module tb_multiply_manager_render;
         // julia_c_x/y remain at Q2.16 in both modes — the Julia constant always
         // uses narrow precision, zero-padded.  No change needed from the narrow
         // pass setup; the DUT ignores them here since julia_type=0.
-        julia_type                   = 1'b0;
+        julia_type                   = 1'b1;
         magnitude_negation_encoding  = 4'b0000;
         max_iteration                = MAX_ITER;
-        julia_c_x                    = '0;
-        julia_c_y                    = '0;
+        julia_c_x                    = to_q216(-0.74);
+        julia_c_y                    = to_q216(0);
 
         fd = $fopen("sim/render/frame_wide.csv", "w");
         if (!fd) begin $display("ERROR: cannot open frame_wide.csv"); $finish; end
@@ -357,7 +353,7 @@ module tb_multiply_manager_render;
     // accordingly: 2 × 512×512 × 800 cycles/pixel × 10 ns ≈ 4.2 s sim time.
     // =========================================================================
     initial begin
-        #10_000_000_000;
+        #200_000_000_000;
         $display("==== GLOBAL TIMEOUT ====");
         $finish;
     end
