@@ -18,7 +18,7 @@ module complete_queue (
 
     fifo #(
         .DATA_WIDTH(20),
-        .DEPTH(32)
+        .DEPTH(2)
     ) u_fifo (
         .clk      (clk),
         .rst      (rst),
