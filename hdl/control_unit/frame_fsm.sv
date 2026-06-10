@@ -17,13 +17,19 @@ module frame_fsm (
     input  logic load_last,
     input  logic any_cluster_free,
 
-    // bram read results (valid for one cycle in bram_read's DECODE state)
-    input  logic bram_miss,       // pixel not started, not done    -> dispatch
-    input  logic bram_started,    // pixel in flight elsewhere      -> skip
-    input  logic bram_done,       // pixel already compute          -> skip
+    // bram read results — only valid when bram_result_valid pulses
+    input  logic bram_result_valid, // one-cycle pulse: READ just completed, outputs are fresh
+    input  logic bram_miss,         // pixel not started, not done  -> dispatch
+    input  logic bram_started,      // pixel in flight elsewhere    -> skip
+    input  logic bram_done,         // pixel already computed       -> skip
+
+    // held high while a "done" injection is pending retry; prevents accepting a new
+    // pixel that could also be "done" and overflow the single-slot latch
+    input  logic inject_stall,
 
     // strobes
     output logic check_bram,         // held high while in CHECK_BRAM state
+    output logic pixel_skip,         // one-cycle pulse: pixel was DONE or STARTED, skipped
     output logic opcode_broadcast_en,
     output logic load_c_en,
     output logic load_z_en,
@@ -50,10 +56,10 @@ module frame_fsm (
 
     my_state current_state, next_state;
 
-    // accept: in JOB_WAIT, job offered, and a cluster is free
+    // accept: in JOB_WAIT, job offered, cluster is free, and no done-injection retry pending
     logic accept;
-    assign accept    = (current_state == JOB_WAIT) && job_valid && any_cluster_free;
-    assign job_ready = (current_state == JOB_WAIT) && any_cluster_free;
+    assign accept    = (current_state == JOB_WAIT) && job_valid && any_cluster_free && !inject_stall;
+    assign job_ready = (current_state == JOB_WAIT) && any_cluster_free && !inject_stall;
 
     always_ff @(posedge clk) begin : state_reg
         if (rst) current_state <= IDLE;
@@ -84,13 +90,17 @@ module frame_fsm (
                 if (accept) next_state = CHECK_BRAM;
             end
             CHECK_BRAM: begin
-                // bram_read takes 2 cycles (READ_DS + DECODE) after check_bram
-                // asserted; outputs are only valid in the DECODE cycle.
-                if (bram_done || bram_started) begin
-                    next_state = JOB_WAIT;   // pixel handled elsewhere, skip
-                end else if (bram_miss) begin
-                    if (wide) next_state = LOAD_Z_WIDE;
-                    else      next_state = LOAD_Z_NARROW;
+                // Wait for bram_result_valid (one-cycle pulse from bram_read_write
+                // that fires when the READ state has just finished and miss/started/done
+                // hold fresh values). Without this gate, stale held outputs from the
+                // previous pixel would cause immediate incorrect exits.
+                if (bram_result_valid) begin
+                    if (bram_done || bram_started) begin
+                        next_state = JOB_WAIT;   // pixel handled elsewhere, skip
+                    end else if (bram_miss) begin
+                        if (wide) next_state = LOAD_Z_WIDE;
+                        else      next_state = LOAD_Z_NARROW;
+                    end
                 end
             end
             LOAD_Z_NARROW,
@@ -113,6 +123,8 @@ module frame_fsm (
 
     assign accept_pulse   = accept;
     assign capture_winner = accept;
+
+    assign pixel_skip = (current_state == CHECK_BRAM) && bram_result_valid && (bram_done || bram_started);
 
     assign start_load_pulse = ((next_state == LOAD_C_NARROW)  && (current_state != LOAD_C_NARROW)) ||
                               ((next_state == LOAD_C_WIDE)    && (current_state != LOAD_C_WIDE))    ||

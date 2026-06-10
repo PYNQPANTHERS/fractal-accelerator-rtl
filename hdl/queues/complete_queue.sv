@@ -6,18 +6,18 @@ module complete_queue (
 
     // Write port (from complete_queue_handler, one entry per cycle max)
     input  logic        push,
-    input  logic [21:0] data_in,   // { colour[3:0], y[8:0], x[8:0] }
+    input  logic [19:0] data_in,   // { colour[3:0], y[7:0], x[7:0] }
 
     // Read port (to comparator)
     input  logic        pop,
-    output logic [21:0] data_out,
+    output logic [19:0] data_out,
 
     output logic        full,
     output logic        empty
 );
 
     fifo #(
-        .DATA_WIDTH(22),
+        .DATA_WIDTH(20),
         .DEPTH(32)
     ) u_fifo (
         .clk      (clk),

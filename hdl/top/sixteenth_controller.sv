@@ -1,42 +1,36 @@
-// FSM that sequences all 16 sixteenths of a 1024x1024 render
-// Sixteenth layout: row-major, 4 columns x 4 rows, each 256x256 pixels
+// Sequences all 16 sixteenths of a 1024x1024 render, row-major
 
 module sixteenth_controller (
     input  logic clk,
     input  logic rst,
 
-    // PS start trigger
     input  logic ps_start,
 
-    // Config inputs from PS AXI registers
-    input  logic [4:0]  cfg_equation_id,
-    input  logic [31:0] cfg_centre_x,
-    input  logic [31:0] cfg_centre_y,
+    // Config from PS AXI registers
+    input  logic [4:0]  cfg_fractal_type,
+    input  logic [31:0] cfg_pan_x,
+    input  logic [31:0] cfg_pan_y,
     input  logic [31:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
 
-    // Engine reset (assert in IDLE, LOAD, NEXT; deassert in RENDER)
     output logic engine_rst,
-
-    // Engine control
     output logic start,
 
-    // Registered config outputs to per_sixteenth_engine
-    output logic [4:0]  equation_id,
-    output logic [31:0] centre_x,
-    output logic [31:0] centre_y,
+    // Registered outputs to per_sixteenth_engine
+    output logic [4:0]  fractal_type,
+    output logic [31:0] pan_x,
+    output logic [31:0] pan_y,
     output logic [31:0] zoom_level,
     output logic [11:0] max_iter,
     output logic [9:0]  x_offset,
     output logic [9:0]  y_offset,
+    output logic [3:0]  sixteenth_id,
     output logic [31:0] sixteenth_base_addr,
 
-    // Engine done signal
     input  logic sixteenth_complete,
-
-    // Interrupt to PS
-    output logic all_done
+    output logic all_done,
+    output logic started  // high from first RENDER until IDLE; PS must not re-trigger while high
 );
 
     typedef enum logic [1:0] {
@@ -50,6 +44,7 @@ module sixteenth_controller (
     logic [3:0]  sixteenth_index;
     logic [1:0]  sixteenth_col;
     logic [1:0]  sixteenth_row;
+    logic        start_fired;  // one-shot arm: cleared by engine_rst, set when start pulse is sent
 
     assign sixteenth_col = sixteenth_index[1:0];
     assign sixteenth_row = sixteenth_index[3:2];
@@ -60,29 +55,34 @@ module sixteenth_controller (
             sixteenth_index     <= 4'd0;
             all_done            <= 1'b0;
             start               <= 1'b0;
+            start_fired         <= 1'b0;
+            started             <= 1'b0;
             engine_rst          <= 1'b1;
-            equation_id         <= '0;
-            centre_x            <= '0;
-            centre_y            <= '0;
+            fractal_type        <= '0;
+            pan_x               <= '0;
+            pan_y               <= '0;
             zoom_level          <= '0;
             max_iter            <= '0;
             x_offset            <= '0;
             y_offset            <= '0;
+            sixteenth_id        <= '0;
             sixteenth_base_addr <= '0;
         end else begin
             all_done <= 1'b0;
             start    <= 1'b0;
 
+            if (engine_rst) start_fired <= 1'b0;
+
             case (state)
 
                 IDLE: begin
                     engine_rst      <= 1'b1;
+                    started         <= 1'b0;
                     sixteenth_index <= 4'd0;
                     if (ps_start) begin
-                        // TODO: connect to AXI Lite slave wrapper
-                        equation_id <= cfg_equation_id;
-                        centre_x    <= cfg_centre_x;
-                        centre_y    <= cfg_centre_y;
+                        fractal_type <= cfg_fractal_type;
+                        pan_x       <= cfg_pan_x;
+                        pan_y       <= cfg_pan_y;
                         zoom_level  <= cfg_zoom_level;
                         max_iter    <= cfg_max_iter;
                         state       <= LOAD;
@@ -93,23 +93,27 @@ module sixteenth_controller (
                     engine_rst          <= 1'b1;
                     x_offset            <= {sixteenth_col, 8'b0};
                     y_offset            <= {sixteenth_row, 8'b0};
+                    sixteenth_id        <= sixteenth_index;
                     sixteenth_base_addr <= cfg_image_base_addr +
-                                          32'(sixteenth_index) * 32'd66048;
-                    // TODO: cache load - DMA cached tiles into colour_bram
+                                          32'(sixteenth_index) * 32'd65536;
                     state <= RENDER;
                 end
 
                 RENDER: begin
                     engine_rst <= 1'b0;
-                    start      <= 1'b1;
+                    started    <= 1'b1;
+                    if (!start_fired) begin
+                        start       <= 1'b1;
+                        start_fired <= 1'b1;
+                    end
                     if (sixteenth_complete) begin
-                        start <= 1'b0;
                         state <= NEXT;
                     end
                 end
 
                 NEXT: begin
                     engine_rst <= 1'b1;
+                    started    <= 1'b1;
                     if (sixteenth_index == 4'd15) begin
                         all_done <= 1'b1;
                         state    <= IDLE;

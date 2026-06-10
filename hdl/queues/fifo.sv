@@ -30,7 +30,7 @@ module fifo #(
     assign full  = (count == (PTR_W+1)'(DEPTH));
     assign empty = (count == '0);
  
-    // data_out is combinational from tail — always shows current head of queue
+    // data_out is combinational from tail - always shows current head of queue
     assign data_out = mem[tail];
  
     always_ff @(posedge clk) begin

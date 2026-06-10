@@ -5,8 +5,7 @@
 module complete_queue_handler (
     input  logic        clk,
     input  logic        rst,
-
-    // Control unit push interface 
+    // Control unit push interface
     input  logic        done,
     input  logic [7:0]  iter_x,
     input  logic [7:0]  iter_y,
@@ -28,6 +27,7 @@ module complete_queue_handler (
     complete_queue u_complete_queue (
         .clk      (clk),
         .rst      (rst),
+        // .flush    (flush), --- IGNORE ---
         .push     (q_push),
         .data_in  (q_data_in),
         .pop      (comp_pop),

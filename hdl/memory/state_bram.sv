@@ -5,14 +5,15 @@ module state_bram (
     input  logic        clk,
     input  logic        rst,
 
-    input  logic [8:0]  x,
-    input  logic [8:0]  y,
+    input  logic [7:0]  x,
+    input  logic [7:0]  y,
     input  logic        rd,
     input  logic        we,
     input  logic [1:0]  wstate,
     output logic [1:0]  rstate,
-    output logic        rd_valid,  // high 1 cycle after rd when rst=0
-    output logic        wr_done    // high 1 cycle after we when rst=0
+    output logic        rd_valid,   // high 1 cycle after rd when rst=0
+    output logic        wr_done,    // high 1 cycle after we when rst=0
+    output logic        clear_done  // high when background clear of new active BRAM is complete
 );
 
     (* ram_style = "block" *) logic [1:0] mem_a [0:65535];
@@ -24,7 +25,7 @@ module state_bram (
     logic        rst_d;
 
     logic [15:0] pixel_addr;
-    assign pixel_addr = {y[7:0], x[7:0]};
+    assign pixel_addr = {y, x};
 
     always_ff @(posedge clk) rst_d <= rst;
 
@@ -70,6 +71,8 @@ module state_bram (
     end
 
     assign rstate = active ? rdata_b : rdata_a;
+
+    assign clear_done = !clr_active;
 
     always_ff @(posedge clk) rd_valid <= rd & ~rst;
     always_ff @(posedge clk) wr_done  <= we & ~rst;
