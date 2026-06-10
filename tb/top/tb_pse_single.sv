@@ -7,6 +7,11 @@
 
 module tb_pse_single;
 
+    localparam int TILE_W       = 8;
+    localparam int TILES_P_AXIS = 256 / TILE_W;
+    localparam int TOTAL_TILES  = TILES_P_AXIS * TILES_P_AXIS;
+    localparam int WORDS_P_TILE = TILE_W * TILE_W / 8;
+
     localparam CLK_HALF = 5;
     logic clk = 0;
     always #CLK_HALF clk = ~clk;
@@ -33,7 +38,7 @@ module tb_pse_single;
     localparam logic [11:0] MAX_I = 12'd3;
     localparam logic [31:0] BASE  = 32'h0000_0000;
 
-    per_sixteenth_engine dut (
+    per_sixteenth_engine #(.TILE_W(TILE_W)) dut (
         .clk                (clk),
         .rst                (rst),
         .start              (start),
@@ -138,19 +143,6 @@ module tb_pse_single;
 
     // ── Job queue push monitor ────────────────────────────────────────────────
     always @(posedge clk) begin
-        if (dut.jqh_sched_push) begin
-            $display("  [jq_push] cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tile=(%0d,%0d)  coord=(%0d,%0d)  pw_x=%0d  pw_y=%0d  all_left=%0b  all_top=%0b",
-                     cyc,
-                     dut.u_scheduler.current_state.name(),
-                     dut.u_scheduler.box_id,
-                     dut.u_scheduler.zoom_level,
-                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                     dut.sched_x, dut.sched_y,
-                     dut.u_scheduler.pixel_width_x,
-                     dut.u_scheduler.pixel_width_y,
-                     dut.u_scheduler.all_left_quadrants,
-                     dut.u_scheduler.all_top_quadrants);
-        end
         if (dut.jqh_flush) begin
             $display("  [flush]   cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tlx=%0d  tly=%0d  pw_x=%0d  pw_y=%0d",
                      cyc,
@@ -166,14 +158,14 @@ module tb_pse_single;
     // ── Log when tile_done fires for any tile ─────────────────────────────────
     // Read tile_table one cycle after the rising edge so the registered write
     // from tt_wr_quad_en has had time to land (avoids tt_filled=0 for fills).
-    logic [255:0] tile_done_prev;
-    logic [255:0] tile_done_rose;  // rising-edge mask, held for one cycle
+    logic [TOTAL_TILES-1:0] tile_done_prev;
+    logic [TOTAL_TILES-1:0] tile_done_rose;
     always @(posedge clk) begin
         tile_done_prev <= dut.tile_done;
         tile_done_rose <= dut.tile_done & ~tile_done_prev;
     end
     always @(posedge clk) begin
-        for (int _i = 0; _i < 256; _i++) begin
+        for (int _i = 0; _i < TOTAL_TILES; _i++) begin
             if (tile_done_rose[_i])
                 $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
                          cyc, _i,
@@ -210,6 +202,17 @@ module tb_pse_single;
     endtask
 
     task automatic dump_image_csv(input string path, input logic [31:0] base);
+        // Address layout from bram_to_dram:
+        //   offset = (tile_idx << log2(BYTES_PER_TILE)) + (word_in_tile << 3)
+        // BYTES_PER_TILE = TILE_W*TILE_W, log2 = 2*log2(TILE_W)
+        // word_in_tile selects row/col within tile:
+        //   words_per_row = TILE_W/8
+        //   row_in_tile   = word_in_tile / words_per_row
+        //   col_word      = word_in_tile % words_per_row  (which group of 8 px in the row)
+        localparam int BYTES_PER_TILE_L = TILE_W * TILE_W;
+        localparam int LOG2_BPT         = $clog2(BYTES_PER_TILE_L);  // tile offset shift
+        localparam int WORDS_PER_ROW    = TILE_W / 8;                 // 1 for TW=8, 2 for TW=16
+        localparam int LOG2_WPR         = $clog2(WORDS_PER_ROW > 0 ? WORDS_PER_ROW : 1);
         logic [7:0] image [0:255][0:255];
         integer fd;
         int tile_idx, word_in_tile, tile_col, tile_row, row_in_tile, col_start, px, py;
@@ -217,15 +220,15 @@ module tb_pse_single;
         for (int r = 0; r < 256; r++) for (int c = 0; c < 256; c++) image[r][c] = 8'hFF;
         for (int i = 0; i < dram_cnt; i++) begin
             off          = dram_addr[i] - base;
-            tile_idx     = off[15:8];
-            word_in_tile = off[7:3];
-            tile_col     = tile_idx[3:0];
-            tile_row     = tile_idx[7:4];
-            row_in_tile  = word_in_tile >> 1;
-            col_start    = (word_in_tile & 1) << 3;
+            tile_idx     = off >> LOG2_BPT;
+            word_in_tile = off[LOG2_BPT-1:3];
+            tile_col     = tile_idx % TILES_P_AXIS;
+            tile_row     = tile_idx / TILES_P_AXIS;
+            row_in_tile  = word_in_tile >> LOG2_WPR;
+            col_start    = (word_in_tile % WORDS_PER_ROW) * 8;
             for (int b = 0; b < 8; b++) begin
-                px = tile_col * 16 + col_start + b;
-                py = tile_row * 16 + row_in_tile;
+                px = tile_col * TILE_W + col_start + b;
+                py = tile_row * TILE_W + row_in_tile;
                 if (px < 256 && py < 256) image[py][px] = dram_data[i][b*8 +: 8];
             end
         end
@@ -242,18 +245,17 @@ module tb_pse_single;
     task automatic dump_bram_direct_csv(input string path);
         integer fd;
         logic [63:0] word;
-        int px, py;
+        int px, py, tile_col, tile_row;
         fd = $fopen(path, "w");
         $fwrite(fd, "row,col,colour\n");
-        // colour_bram is tile-ordered: word addr = {tile_y[3:0], tile_x[3:0], word_in_tile[4:0]}
-        // tile_idx = {tile_row[3:0], tile_col[3:0]}, 256 tiles, 32 words each
-        for (int tile = 0; tile < 256; tile++) begin
-            for (int w = 0; w < 32; w++) begin
-                word = dut.u_colour_bram.mem[tile * 32 + w];
-                // 8 pixels per word, 2 words per tile row → row_in_tile = w>>1, col_offset = (w&1)*8
+        for (int tile = 0; tile < TOTAL_TILES; tile++) begin
+            tile_col = tile % TILES_P_AXIS;
+            tile_row = tile / TILES_P_AXIS;
+            for (int w = 0; w < WORDS_P_TILE; w++) begin
+                word = dut.u_colour_bram.mem[tile * WORDS_P_TILE + w];
                 for (int b = 0; b < 8; b++) begin
-                    px = (tile[3:0]) * 16 + (w[0] ? 8 : 0) + b;
-                    py = (tile[7:4]) * 16 + (w >> 1);
+                    px = tile_col * TILE_W + (w[0] ? 8 : 0) + b;
+                    py = tile_row * TILE_W + (w >> 1);
                     $fwrite(fd, "%0d,%0d,%0d\n", py, px, word[b*8 +: 8] & 8'h3F);
                 end
             end
@@ -273,10 +275,10 @@ module tb_pse_single;
                      $countones(dut.sched_tile_done),
                      $countones(dut.cbram_tile_done),
                      $countones(dut.u_bram_to_dram.transferred));
-            for (int _i = 0; _i < 256; _i++) begin
+            for (int _i = 0; _i < TOTAL_TILES; _i++) begin
                 if (!dut.tile_done[_i])
                     $display("  [missing_tile_done] tile=%0d  col=%0d  row=%0d  sched_done=%0b  cbram_cnt=%0d",
-                             _i, _i[3:0], _i[7:4],
+                             _i, _i % TILES_P_AXIS, _i / TILES_P_AXIS,
                              dut.sched_tile_done[_i],
                              dut.u_colour_bram.active ?
                                  dut.u_colour_bram.tile_wr_cnt_b[_i] :

@@ -5,7 +5,8 @@
 //   the new byte and writes the word back - no aliasing between consecutive writes.
 
 module bram_read_write #(
-    parameter int PIXEL_W = 8
+    parameter int PIXEL_W = 8,
+    parameter int TILE_W  = 16  // tile width/height in pixels (must be power of 2)
 ) (
     input  logic                clk,
     input  logic                rst,
@@ -20,14 +21,14 @@ module bram_read_write #(
     input  logic [7:0]          bram_rd_data,
 
     // colour BRAM full-word write interface (RMW result path)
-    output logic [12:0]         bram_wr_waddr,
-    output logic [63:0]         bram_wr_word,
-    output logic                bram_wr_en,
+    output logic [BRAM_ADDR_W-1:0] bram_wr_waddr,
+    output logic [63:0]            bram_wr_word,
+    output logic                   bram_wr_en,
 
     // colour BRAM word-read for RMW pre-read
-    output logic [12:0]         bram_rmw_rd_addr,
-    output logic                bram_rmw_rd_en,
-    input  logic [63:0]         bram_rmw_rd_data,
+    output logic [BRAM_ADDR_W-1:0] bram_rmw_rd_addr,
+    output logic                   bram_rmw_rd_en,
+    input  logic [63:0]            bram_rmw_rd_data,
 
     // state BRAM interface - 2-bit: {done, start}
     output logic                sb_rd,
@@ -55,6 +56,14 @@ module bram_read_write #(
     // pixel whose check_bram triggered the READ that just completed
     output logic                read_done_pulse
 );
+
+    localparam int TILE_BITS      = $clog2(TILE_W);
+    localparam int PIX_PER_TILE   = TILE_W * TILE_W;
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;
+    localparam int TILES_PER_AXIS = 256 / TILE_W;
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
+    localparam int BRAM_WORDS     = TOTAL_TILES * WORDS_PER_TILE;
+    localparam int BRAM_ADDR_W    = $clog2(BRAM_WORDS);
 
     typedef enum logic [2:0] {
         IDLE,
@@ -94,16 +103,18 @@ module bram_read_write #(
     assign serve_started = started_write_pending;
     assign serve_result  = res_valid_new && !started_write_pending;
 
-    // Tile address for the result pixel being written
-    logic [15:0] res_ta;
-    logic [12:0] res_waddr;
-    logic [2:0]  res_boff;
-    assign res_ta    = {res_b[7:4], res_a[7:4], res_b[3:0], res_a[3:0]};
+    // Tile address encoding: {y[7:TILE_BITS], x[7:TILE_BITS], y[TILE_BITS-1:0], x[TILE_BITS-1:0]}
+    // Total = 2*(8-TILE_BITS) + 2*TILE_BITS = 16 bits; word addr = ta[15:3]
+    logic [15:0]          res_ta;
+    logic [BRAM_ADDR_W-1:0] res_waddr;
+    logic [2:0]           res_boff;
+    assign res_ta    = {res_b[7:TILE_BITS], res_a[7:TILE_BITS],
+                        res_b[TILE_BITS-1:0], res_a[TILE_BITS-1:0]};
     assign res_waddr = res_ta[15:3];
     assign res_boff  = res_ta[2:0];
 
     // Latch write target across PREREAD → WRITE
-    logic [12:0] wr_waddr_q;
+    logic [BRAM_ADDR_W-1:0] wr_waddr_q;
     logic [2:0]  wr_boff_q;
     logic [7:0]  wr_data_q;
 

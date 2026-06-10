@@ -27,7 +27,8 @@
 module scheduler #(
     parameter int COORD_W      = 8,  // coordinate bit width (image = 2**COORD_W pixels per axis)
     parameter int ZOOM_WIDTH   = 3,  // max zoom level bit width
-    parameter int COLOUR_WIDTH = 6   // width of colour
+    parameter int COLOUR_WIDTH = 6,  // width of colour
+    parameter int TILE_W       = 16  // tile width/height in pixels (must be power of 2)
 )(
     // general logic
     input  logic                    clk,
@@ -63,8 +64,12 @@ module scheduler #(
     output logic [COLOUR_WIDTH-1:0] tt_wr_quad_colour,
 
     // BRAM to DRAM logic
-    output logic [255:0]            sched_tile_done_set
+    output logic [TOTAL_TILES-1:0]  sched_tile_done_set
 );
+
+    localparam int TILE_BITS      = $clog2(TILE_W);
+    localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
 
 
 typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} my_states;
@@ -85,7 +90,7 @@ border_pixel_generator #(.N(COORD_W)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
     .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
     .top_left_x(tlx), .top_left_y(tly),
-    .width_pixels_x(normal_width), .x_coord(x_coord_to_queue),
+    .normal_width(normal_width), .x_coord(x_coord_to_queue),
     .y_coord(y_coord_to_queue), .valid(border_pixel_valid));
 
 
@@ -150,7 +155,7 @@ assign stack_out_all_top  = _stk_all_top;
 // used by the 01→10 x-step in NEXT_BOX, which must subtract w00 (not the right-box width w01).
 logic [COORD_W:0] pixel_width_x_left;
 
-localparam logic [ZOOM_WIDTH-1:0] MAX_ZOOM = ZOOM_WIDTH'(4);
+localparam logic [ZOOM_WIDTH-1:0] MAX_ZOOM = ZOOM_WIDTH'($clog2((1 << COORD_W) / TILE_W));
 
 always_ff @ (posedge clk or posedge rst) begin
     if(rst) begin
@@ -376,6 +381,8 @@ always_comb begin
                 sched_push = 1'b1;
                 if ((sched_x == tlx + pixel_width_x[COORD_W-1:0] - 1'b1) &&
                     (sched_y == tly + pixel_width_y[COORD_W-1:0] - 1'b1)) begin
+                    // if (box_id == 2'b11) next_state = INCREASE_LEVEL;
+                    // else                 next_state = NEXT_BOX;
                     next_state = QUEUE_BOX_DRAIN;
                 end
             end
@@ -437,30 +444,29 @@ always_comb begin
 end
 
 // ── sched_tile_done_set ─────────────────────────────────────────────────
-// One bit per 16x16-pixel tile. Set for FILL_BOX (combinational from tt_wr_quad_en)
-// and for QUEUE_BOX completion (one-cycle registered pulse covering all touched tiles).
+// One bit per TILE_W×TILE_W tile. Set for FILL_BOX (combinational from tt_wr_quad_en).
 
-// ── FILL_BOX tile range ──
-logic [COORD_W:0]   fill_x_end, fill_y_end;
-logic [3:0]         tile_c0, tile_c1, tile_r0, tile_r1;
-logic [15:0]        tile_col_mask, tile_row_mask;
-logic [255:0]       tile_done_mask;
+logic [COORD_W:0]         fill_x_end, fill_y_end;
+localparam int TILE_IDX_BITS = $clog2(TILES_PER_AXIS);
+logic [TILE_IDX_BITS-1:0]  tile_c0, tile_c1, tile_r0, tile_r1;
+logic [TILES_PER_AXIS-1:0] tile_col_mask, tile_row_mask;
+logic [TOTAL_TILES-1:0]   tile_done_mask;
 
 assign fill_x_end = {1'b0, tt_wr_quad_tlx} + tt_wr_quad_size - 1'b1;
 assign fill_y_end = {1'b0, tt_wr_quad_tly} + tt_wr_quad_size - 1'b1;
-assign tile_c0 = tt_wr_quad_tlx[7:4];
-assign tile_r0 = tt_wr_quad_tly[7:4];
-assign tile_c1 = fill_x_end[7:4];
-assign tile_r1 = fill_y_end[7:4];
+assign tile_c0 = tt_wr_quad_tlx[7:TILE_BITS];
+assign tile_r0 = tt_wr_quad_tly[7:TILE_BITS];
+assign tile_c1 = fill_x_end[7:TILE_BITS];
+assign tile_r1 = fill_y_end[7:TILE_BITS];
 
 always_comb begin
-    for (int c = 0; c < 16; c++)
-        tile_col_mask[c] = (c >= tile_c0) && (c <= tile_c1);
-    for (int r = 0; r < 16; r++)
-        tile_row_mask[r] = (r >= tile_r0) && (r <= tile_r1);
-    for (int r = 0; r < 16; r++)
-        for (int c = 0; c < 16; c++)
-            tile_done_mask[r*16 + c] = tile_row_mask[r] & tile_col_mask[c];
+    for (int c = 0; c < TILES_PER_AXIS; c++)
+        tile_col_mask[c] = (c >= int'(tile_c0)) && (c <= int'(tile_c1));
+    for (int r = 0; r < TILES_PER_AXIS; r++)
+        tile_row_mask[r] = (r >= int'(tile_r0)) && (r <= int'(tile_r1));
+    for (int r = 0; r < TILES_PER_AXIS; r++)
+        for (int c = 0; c < TILES_PER_AXIS; c++)
+            tile_done_mask[r*TILES_PER_AXIS + c] = tile_row_mask[r] & tile_col_mask[c];
 end
 
 // One-cycle combinational pulse — per_sixteenth_engine latches it

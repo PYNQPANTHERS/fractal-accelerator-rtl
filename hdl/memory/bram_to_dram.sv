@@ -1,22 +1,24 @@
 // Streams completed tiles from colour_bram to DDR3 via AXI HP
 
-module bram_to_dram (
+module bram_to_dram #(
+    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+)(
     input  logic         clk,
     input  logic         rst,
 
-    input  logic [255:0] tile_done,
-    input  logic         engine_done,
+    input  logic [TOTAL_TILES-1:0] tile_done,
+    input  logic                   engine_done,
 
     // tile_table read (combinational)
-    output logic [7:0]   tt_rd_index,
-    input  logic         tt_is_filled,
-    input  logic [5:0]   tt_fill_colour,
+    output logic [TILE_IDX_W-1:0] tt_rd_index,
+    input  logic                  tt_is_filled,
+    input  logic [5:0]            tt_fill_colour,
 
     // colour_bram Port B
-    output logic [12:0]  b2d_word_addr,
-    output logic         b2d_rd_en,
-    input  logic         b2d_rd_grant,
-    input  logic [63:0]  b2d_rd_data,
+    output logic [BRAM_ADDR_W-1:0] b2d_word_addr,
+    output logic                   b2d_rd_en,
+    input  logic                   b2d_rd_grant,
+    input  logic [63:0]            b2d_rd_data,
 
     // AXI HP write interface
     output logic [31:0]  axi_wr_addr,
@@ -25,14 +27,25 @@ module bram_to_dram (
     input  logic         axi_wr_ready,
 
     // cache valid metadata write
-    output logic         cache_valid_wr_en,
-    output logic [7:0]   cache_valid_index,
-    output logic         cache_valid_value,
+    output logic                  cache_valid_wr_en,
+    output logic [TILE_IDX_W-1:0] cache_valid_index,
+    output logic                  cache_valid_value,
 
     input  logic [31:0]  sixteenth_base_addr,
 
     output logic         sixteenth_complete
 );
+
+    localparam int TILE_BITS      = $clog2(TILE_W);
+    localparam int PIX_PER_TILE   = TILE_W * TILE_W;
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;           // 64-bit words per tile
+    localparam int TILES_PER_AXIS = 256 / TILE_W;
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
+    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES);
+    localparam int BRAM_WORDS     = TOTAL_TILES * WORDS_PER_TILE;
+    localparam int BRAM_ADDR_W    = $clog2(BRAM_WORDS);
+    localparam int WPT_W          = $clog2(WORDS_PER_TILE);     // bits to index word within tile
+    localparam int BYTES_PER_TILE = PIX_PER_TILE;               // 1 byte per pixel
 
     typedef enum logic [1:0] {
         SCAN,
@@ -43,31 +56,31 @@ module bram_to_dram (
 
     state_t state;
 
-    logic [255:0] transferred;
-    logic [7:0]   cur_tile;
-    logic [4:0]   fill_count;
+    logic [TOTAL_TILES-1:0] transferred;
+    logic [TILE_IDX_W-1:0]  cur_tile;
+    logic [WPT_W-1:0]       fill_count;
 
-    logic [5:0]  rd_count;    // next word index to request (0..32)
-    logic [4:0]  rd_addr;     // address of in-flight read
-    logic        rd_inflight;
-    logic        rd_suppress; // suppress re-assert for 1 cycle after issuing new address
+    logic [WPT_W:0]  rd_count;    // next word index to request (0..WORDS_PER_TILE)
+    logic [WPT_W-1:0] rd_addr;    // address of in-flight read
+    logic             rd_inflight;
+    logic             rd_suppress; // suppress re-assert for 1 cycle after issuing new address
 
-    logic [4:0]  wr_count;
+    logic [WPT_W-1:0] wr_count;
 
     // 2-slot FIFO; slot 0 is the AXI head
     logic [63:0] fifo0, fifo1;
     logic        fifo0_v, fifo1_v;
 
-    logic [255:0] pending;
+    logic [TOTAL_TILES-1:0] pending;
     assign pending = tile_done & ~transferred;
 
-    logic [7:0] next_tile;
-    logic       any_pending;
+    logic [TILE_IDX_W-1:0] next_tile;
+    logic                  any_pending;
     always_comb begin
         next_tile   = '0;
         any_pending = 1'b0;
-        for (int i = 255; i >= 0; i--)
-            if (pending[i]) begin next_tile = 8'(i); any_pending = 1'b1; end
+        for (int i = TOTAL_TILES-1; i >= 0; i--)
+            if (pending[i]) begin next_tile = TILE_IDX_W'(i); any_pending = 1'b1; end
     end
 
     assign tt_rd_index        = cur_tile;
@@ -87,12 +100,12 @@ module bram_to_dram (
         case (state)
             GENERATE_FILL: begin
                 axi_wr_en   = 1'b1;
-                axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
+                axi_wr_addr = sixteenth_base_addr + (32'(cur_tile) << $clog2(BYTES_PER_TILE)) + {wr_count, 3'b0};
                 axi_wr_data = fill_word;
             end
             BURST_PIPE: if (fifo0_v) begin
                 axi_wr_en   = 1'b1;
-                axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
+                axi_wr_addr = sixteenth_base_addr + (32'(cur_tile) << $clog2(BYTES_PER_TILE)) + {wr_count, 3'b0};
                 axi_wr_data = fifo0;
             end
             default: ;
@@ -142,9 +155,9 @@ module bram_to_dram (
                         state <= GENERATE_FILL;
                     else begin
                         b2d_rd_en     <= 1'b1;
-                        b2d_word_addr <= {cur_tile, 5'b0};
-                        rd_addr       <= 5'b0;
-                        rd_count      <= 6'd1;
+                        b2d_word_addr <= {cur_tile, {WPT_W{1'b0}}};
+                        rd_addr       <= '0;
+                        rd_count      <= (WPT_W+1)'(1);
                         rd_inflight   <= 1'b1;
                         rd_suppress   <= 1'b1;
                         state         <= BURST_PIPE;
@@ -153,9 +166,9 @@ module bram_to_dram (
 
                 GENERATE_FILL: begin
                     if (axi_wr_ready) begin
-                        fill_count <= fill_count + 1;
-                        wr_count   <= wr_count + 1;
-                        if (fill_count == 5'd31) begin
+                        fill_count <= fill_count + 1'b1;
+                        wr_count   <= wr_count + 1'b1;
+                        if (fill_count == WPT_W'(WORDS_PER_TILE - 1)) begin
                             transferred[cur_tile] <= 1'b1;
                             cache_valid_wr_en     <= 1'b1;
                             cache_valid_index     <= cur_tile;
@@ -171,24 +184,22 @@ module bram_to_dram (
                         fifo0_v <= fifo1_v;
                         fifo1   <= '0;
                         fifo1_v <= 1'b0;
-                        if (wr_count == 5'd31) begin
+                        if (wr_count == WPT_W'(WORDS_PER_TILE - 1)) begin
                             transferred[cur_tile] <= 1'b1;
                             cache_valid_wr_en     <= 1'b1;
                             cache_valid_index     <= cur_tile;
                             cache_valid_value     <= 1'b1;
                             state                 <= SCAN;
                         end else
-                            wr_count <= wr_count + 1;
+                            wr_count <= wr_count + 1'b1;
                     end
 
                     if (rd_inflight) begin
                         if (rd_suppress) begin
-                            // Re-assert rd_en the cycle after issuing a new address
                             b2d_rd_en     <= 1'b1;
                             b2d_word_addr <= {cur_tile, rd_addr};
                             rd_suppress   <= 1'b0;
                         end else if (b2d_rd_grant) begin
-                            // Push into first free FIFO slot; account for AXI pop this same cycle
                             if (fifo0_v && axi_wr_ready) begin
                                 if (!fifo1_v) begin
                                     fifo0   <= b2d_rd_data;
@@ -208,30 +219,27 @@ module bram_to_dram (
                             end
                             rd_inflight <= 1'b0;
 
-                            // Issue next read if FIFO has room
-                            if ((rd_count < 6'd32)
-                                    && !(wr_count == 5'd31 && fifo0_v && axi_wr_ready)
+                            if ((rd_count < (WPT_W+1)'(WORDS_PER_TILE))
+                                    && !(wr_count == WPT_W'(WORDS_PER_TILE-1) && fifo0_v && axi_wr_ready)
                                     && ((fifo0_v && axi_wr_ready) || !fifo1_v)) begin
                                 b2d_rd_en     <= 1'b1;
-                                b2d_word_addr <= {cur_tile, rd_count[4:0]};
-                                rd_addr       <= rd_count[4:0];
-                                rd_count      <= rd_count + 1;
+                                b2d_word_addr <= {cur_tile, rd_count[WPT_W-1:0]};
+                                rd_addr       <= rd_count[WPT_W-1:0];
+                                rd_count      <= rd_count + 1'b1;
                                 rd_inflight   <= 1'b1;
                                 rd_suppress   <= 1'b1;
                             end
                         end else begin
-                            // Grant denied: retry same address
                             b2d_rd_en     <= 1'b1;
                             b2d_word_addr <= {cur_tile, rd_addr};
                         end
-                    end else if ((rd_count < 6'd32)
+                    end else if ((rd_count < (WPT_W+1)'(WORDS_PER_TILE))
                             && !fifo1_v
-                            && !(wr_count == 5'd31 && fifo0_v && axi_wr_ready)) begin
-                        // FIFO now has room; resume reader
+                            && !(wr_count == WPT_W'(WORDS_PER_TILE-1) && fifo0_v && axi_wr_ready)) begin
                         b2d_rd_en     <= 1'b1;
-                        b2d_word_addr <= {cur_tile, rd_count[4:0]};
-                        rd_addr       <= rd_count[4:0];
-                        rd_count      <= rd_count + 1;
+                        b2d_word_addr <= {cur_tile, rd_count[WPT_W-1:0]};
+                        rd_addr       <= rd_count[WPT_W-1:0];
+                        rd_count      <= rd_count + 1'b1;
                         rd_inflight   <= 1'b1;
                         rd_suppress   <= 1'b1;
                     end

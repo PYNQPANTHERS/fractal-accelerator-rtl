@@ -6,7 +6,8 @@ module control_unit #(
     parameter int JOB_DATA_W          = 18,
     parameter int PIXEL_W             = 8,
     parameter int OPCODE_W            = 5,
-    parameter int LOWEST_MAX_ITER_POW = 6
+    parameter int LOWEST_MAX_ITER_POW = 6,
+    parameter int TILE_W              = 16  // tile width/height in pixels (must be power of 2)
 ) (
     input  logic                    clk,
     input  logic                    rst,
@@ -47,10 +48,10 @@ module control_unit #(
 
     // color bram write (full-word RMW, managed internally by bram_read_write)
     output logic                    cu_wr_en,
-    output logic [12:0]             cu_wr_waddr,
+    output logic [BRAM_ADDR_W-1:0]  cu_wr_waddr,
     output logic [63:0]             cu_wr_word,
     // color bram RMW pre-read
-    output logic [12:0]             cu_rmw_rd_addr,
+    output logic [BRAM_ADDR_W-1:0]  cu_rmw_rd_addr,
     output logic                    cu_rmw_rd_en,
     input  logic [63:0]             cu_rmw_rd_data,
 
@@ -65,6 +66,7 @@ module control_unit #(
 
 );
 
+    localparam int BRAM_ADDR_W  = $clog2((256/TILE_W) * (256/TILE_W) * TILE_W * TILE_W / 8);
     localparam int Z_WIDTH      = DATA_WIDTH + 1;
     localparam int Z_WIDE       = Z_WIDTH * 2 - 1;
     localparam int CLUST_ADDR_W = (CLUSTER_COUNT > 1) ? $clog2(CLUSTER_COUNT) : 1;
@@ -158,7 +160,8 @@ module control_unit #(
     logic                    res_fifo_empty;
 
     bram_read_write #(
-        .PIXEL_W (PIXEL_W)
+        .PIXEL_W (PIXEL_W),
+        .TILE_W  (TILE_W)
     ) u_bram_rw (
         .clk             (clk),
         .rst             (rst_i),

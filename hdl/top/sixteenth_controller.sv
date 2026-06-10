@@ -1,6 +1,8 @@
 // Sequences all 16 sixteenths of a 1024x1024 render, row-major
 
-module sixteenth_controller (
+module sixteenth_controller #(
+    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+)(
     input  logic clk,
     input  logic rst,
 

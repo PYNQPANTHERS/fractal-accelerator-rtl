@@ -4,7 +4,7 @@ module border_pixel_generator #(
     input  logic          clk, rst, rst_start,
     input  logic          all_left_flag, all_top_flag,
     input  logic [N-1:0]  top_left_x,    top_left_y,
-    input  logic [8:0]    width_pixels_x,
+    input  logic [8:0]    normal_width,
     output logic [N-1:0]  x_coord, y_coord,
     output logic          valid);
 
@@ -53,8 +53,8 @@ module border_pixel_generator #(
         else begin
             if (rst_start) begin
                 tmp           <= '0;
-                width         <= width_pixels_x + 1'b1;
-                midpoint      <= width_pixels_x + 1'b1;
+                width         <= normal_width + 1'b1;
+                midpoint      <= normal_width + 1'b1;
                 first_round   <= 1'b1;
                 last_cycle    <= 1'b0;
                 // The preload below re-emits the first top pixel that the `top`

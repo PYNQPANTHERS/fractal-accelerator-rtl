@@ -1,7 +1,8 @@
 // Top-level integration for one 256x256 sixteenth
 
 module per_sixteenth_engine #(
-    parameter int COORD_W = 8   // coordinate bit width; matches scheduler and comparator
+    parameter int COORD_W = 8,   // coordinate bit width; matches scheduler and comparator
+    parameter int TILE_W  = 16   // tile width/height in pixels (must be power of 2)
 ) (
     input  logic clk,
     input  logic rst,
@@ -28,6 +29,13 @@ module per_sixteenth_engine #(
     output logic        axi_wr_en,
     input  logic        axi_wr_ready
 );
+
+    localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
+    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES);
+    localparam int BRAM_WORDS     = TOTAL_TILES * (TILE_W * TILE_W / 8);
+    localparam int BRAM_ADDR_W    = $clog2(BRAM_WORDS);
+
     logic [COORD_W-1:0] sched_x, sched_y;
     logic        jqh_sched_push;
     logic        jqh_sched_stall;
@@ -40,7 +48,7 @@ module per_sixteenth_engine #(
     logic [COORD_W-1:0] cqh_iter_y;
     logic [7:0]  cu_iter_colour_raw;
     logic [3:0]  cqh_iter_colour;
-    assign cqh_iter_colour = cu_iter_colour_raw[3:0];  // lower nibble only
+    assign cqh_iter_colour = cu_iter_colour_raw[3:0];
     logic        cqh_comp_pop;
     logic        cqh_comp_valid;
     logic [19:0] cqh_comp_data;
@@ -58,16 +66,16 @@ module per_sixteenth_engine #(
     logic        cbram_ctrl_rd_en;
     logic [7:0]  cbram_ctrl_rd_data;
     logic        cbram_ctrl_wr_en;
-    logic [12:0] cbram_ctrl_wr_waddr;
+    logic [BRAM_ADDR_W-1:0] cbram_ctrl_wr_waddr;
     logic [63:0] cbram_ctrl_wr_word;
-    logic [12:0] cbram_ctrl_rmw_rd_addr;
+    logic [BRAM_ADDR_W-1:0] cbram_ctrl_rmw_rd_addr;
     logic        cbram_ctrl_rmw_rd_en;
     logic [63:0] cbram_ctrl_rmw_rd_data;
-    logic [12:0] cbram_b2d_word_addr;
+    logic [BRAM_ADDR_W-1:0] cbram_b2d_word_addr;
     logic        cbram_b2d_rd_en;
     logic        cbram_b2d_rd_grant;
     logic [63:0] cbram_b2d_rd_data;
-    logic [255:0] cbram_tile_done;
+    logic [TOTAL_TILES-1:0] cbram_tile_done;
     logic [7:0]  sbram_x;
     logic [7:0]  sbram_y;
     logic        sbram_rd;
@@ -84,12 +92,12 @@ module per_sixteenth_engine #(
     logic [COORD_W-1:0] tt_wr_quad_tly;
     logic [COORD_W:0]   tt_wr_quad_size;
     logic [5:0]  tt_wr_quad_colour;
-    logic [7:0]  tt_rd_index;
+    logic [TILE_IDX_W-1:0] tt_rd_index;
     logic        tt_is_filled;
     logic [5:0]  tt_fill_colour;
-    logic [255:0] sched_tile_done_set;
-    logic [255:0] sched_tile_done;
-    logic [255:0] tile_done;
+    logic [TOTAL_TILES-1:0] sched_tile_done_set;
+    logic [TOTAL_TILES-1:0] sched_tile_done;
+    logic [TOTAL_TILES-1:0] tile_done;
     assign tile_done = cbram_tile_done | sched_tile_done;
     logic jqh_queue_empty;
 
@@ -101,7 +109,7 @@ module per_sixteenth_engine #(
     end
     logic sched_engine_done;
 
-    scheduler #(.COORD_W(COORD_W)) u_scheduler (
+    scheduler #(.COORD_W(COORD_W), .TILE_W(TILE_W)) u_scheduler (
         .clk              (clk),
         .rst              (rst),
         .start            (start),
@@ -145,7 +153,7 @@ module per_sixteenth_engine #(
             engine_done <= 1'b1;
     end
 
-    control_unit u_control_unit (
+    control_unit #(.TILE_W(TILE_W)) u_control_unit (
         .clk                (clk),
         .rst                (rst),
         .opcode_reset       (1'b0),
@@ -229,7 +237,7 @@ module per_sixteenth_engine #(
         .full_err   ()
     );
 
-    colour_bram u_colour_bram (
+    colour_bram #(.TILE_W(TILE_W)) u_colour_bram (
         .clk          (clk),
         .rst          (rst),
         .ctrl_rd_x    (cbram_ctrl_rd_x),
@@ -263,8 +271,7 @@ module per_sixteenth_engine #(
         .clear_done(sbram_clear_done)
     );
 
-
-    tile_table u_tile_table (
+    tile_table #(.TILE_W(TILE_W)) u_tile_table (
         .clk             (clk),
         .rst             (rst),
         .wr_quad_en      (tt_wr_quad_en),
@@ -277,7 +284,7 @@ module per_sixteenth_engine #(
         .rd_fill_colour  (tt_fill_colour)
     );
 
-    bram_to_dram u_bram_to_dram (
+    bram_to_dram #(.TILE_W(TILE_W)) u_bram_to_dram (
         .clk                (clk),
         .rst                (rst),
         .tile_done          (tile_done),
