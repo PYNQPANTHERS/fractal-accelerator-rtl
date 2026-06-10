@@ -53,6 +53,7 @@ module scheduler #(
     output logic                    sched_push,
     output logic                    sched_stall_out,  // unused; kept for symmetry
     input  logic                    sched_stall,
+    input  logic                    gen_stall,        // queue almost-full: freeze border generator (1-cycle lookahead)
     output logic                    flush,
     input  logic                    job_queue_empty,
 
@@ -88,6 +89,7 @@ logic [COORD_W-1:0] qbox_x, qbox_y;
 
 border_pixel_generator #(.N(COORD_W)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
+    .advance(!gen_stall),
     .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
     .top_left_x(tlx), .top_left_y(tly),
     .normal_width(normal_width), .x_coord(x_coord_to_queue),
@@ -304,11 +306,12 @@ always_comb begin
     else
         pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;
 
-    // expected_count must match the border_pixel_generator's effective width,
-    // which is normal_width+1 for left/top boxes (all_left/top flag adds +1 internally)
-    // and normal_width for non-left/top boxes (no internal +1).
-    expected_count = ((all_left_quadrants ? pixel_width_x : normal_width) << 1) +
-                     ((all_top_quadrants  ? pixel_width_y : normal_width) << 1) - 11'd4;
+    // expected_count = perimeter of the actual box. The generator's effective
+    // extent equals pixel_width_x/y (it loads normal_width+1 then subtracts the
+    // all_left/all_top flag, so all_left=1 boxes are normal_width wide and
+    // all_left=0 boxes are normal_width+1 wide — exactly pixel_width_x/y).
+    // Perimeter of a W×H box (corners counted once) = 2W + 2H - 4.
+    expected_count = (pixel_width_x << 1) + (pixel_width_y << 1) - 11'd4;
 
 
     case(current_state)

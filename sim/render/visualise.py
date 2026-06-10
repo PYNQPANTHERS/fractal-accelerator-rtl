@@ -97,12 +97,38 @@ def render_bram_csv(path):
     return img, undef
 
 
+def _detect_tile_w(offsets):
+    """Infer TILE_W from the AXI word-offset stream.
+
+    Each tile occupies BYTES_PER_TILE = TILE_W*TILE_W contiguous bytes and is
+    written as WORDS_PER_TILE = TILE_W*TILE_W/8 eight-byte words. A whole
+    sixteenth (256×256) is always 65536 bytes regardless of TILE_W, so the
+    distinguishing signal is the per-tile byte span: the largest in-tile word
+    offset (off & (BYTES_PER_TILE-1)) seen equals BYTES_PER_TILE-8.
+
+    Try the supported tile sizes and pick the smallest whose BYTES_PER_TILE
+    fully contains every observed in-tile offset for that grouping.
+    """
+    for tile_w in (8, 16, 32):
+        bpt = tile_w * tile_w           # bytes per tile
+        # within one sixteenth (65536 bytes), offsets must stay tile-aligned:
+        # every word offset must satisfy (off % bpt) < bpt and the set of
+        # in-tile offsets must be exactly {0,8,...,bpt-8}.
+        in_tile = set((o % 65536) % bpt for o in offsets)
+        expected = set(range(0, bpt, 8))
+        if in_tile <= expected and max(in_tile) == bpt - 8:
+            return tile_w
+    return 16  # fallback to legacy assumption
+
+
 def render_dram_csv(path):
     """write_index,addr_hex,b0..b7  →  reconstruct 256×256 from AXI word stream.
 
-    Address layout (per testbench):
-      addr = base + (tile_idx << 8) + (word_in_tile << 3)
-      tile_idx = tile_row*16 + tile_col   (16×16 pixels per tile)
+    Address layout (per testbench), TILE_W inferred from the data:
+      addr = base + sixteenth*65536 + (tile_idx << log2(TILE_W*TILE_W))
+                  + (word_in_tile << 3)
+      tile_idx     = tile_row*TILES_PER_AXIS + tile_col
+      TILES_PER_AXIS = 256 / TILE_W ;  WORDS_PER_ROW = TILE_W / 8
       each 64-bit word encodes 8 consecutive pixels in one tile row.
     """
     rows = list(csv.DictReader(open(path)))
@@ -111,19 +137,30 @@ def render_dram_csv(path):
     if not rows:
         return img, 0
 
-    base = min(int(r['addr_hex'], 16) for r in rows)
+    base    = min(int(r['addr_hex'], 16) for r in rows)
+    offsets = [int(r['addr_hex'], 16) - base for r in rows]
+    tile_w  = _detect_tile_w(offsets)
+
+    bpt          = tile_w * tile_w            # bytes per tile
+    log2_bpt     = bpt.bit_length() - 1       # log2(BYTES_PER_TILE)
+    tiles_p_axis = 256 // tile_w
+    words_p_row  = tile_w // 8
+    in_tile_mask = (1 << log2_bpt) - 1
+
     undef = 0
-    for r in rows:
-        off          = int(r['addr_hex'], 16) - base
-        tile_idx     = (off >> 8) & 0xFF
-        word_in_tile = (off >> 3) & 0x1F
-        tile_col     = tile_idx & 0xF
-        tile_row     = (tile_idx >> 4) & 0xF
-        row_in_tile  = word_in_tile >> 1
-        col_start    = (word_in_tile & 1) << 3
+    for off, r in zip(offsets, rows):
+        # NOTE: single-sixteenth dumps start at sixteenth 0; for multi-sixteenth
+        # dumps the caller should use the image CSV instead. Here off is within
+        # one sixteenth (single-engine dump), so no sixteenth term.
+        tile_idx     = off >> log2_bpt
+        word_in_tile = (off & in_tile_mask) >> 3
+        tile_col     = tile_idx % tiles_p_axis
+        tile_row     = tile_idx // tiles_p_axis
+        row_in_tile  = word_in_tile // words_p_row
+        col_start    = (word_in_tile % words_p_row) * 8
         for b in range(8):
-            px_x = tile_col * 16 + col_start + b
-            px_y = tile_row * 16 + row_in_tile
+            px_x = tile_col * tile_w + col_start + b
+            px_y = tile_row * tile_w + row_in_tile
             if 0 <= px_x < 256 and 0 <= px_y < 256:
                 rgb = _rgb(r[f'b{b}'])
                 if rgb == MAGENTA:

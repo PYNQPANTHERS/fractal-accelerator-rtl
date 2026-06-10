@@ -1,7 +1,9 @@
 // Top-level integration: sixteenth_controller + per_sixteenth_engine
 // AXI Lite slave and AXI HP master are stubbed pending IP wrapper integration
 
-module top_level (
+module top_level #(
+    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+)(
     input  logic clk,
     input  logic rst,
 
@@ -49,7 +51,7 @@ module top_level (
     wire engine_combined_rst = rst | ctrl_engine_rst;
 
     // sixteenth_controller
-    sixteenth_controller u_sixteenth_controller (
+    sixteenth_controller #(.TILE_W(TILE_W)) u_sixteenth_controller (
         .clk                (clk),
         .rst                (rst),
         .ps_start           (ps_start),
@@ -76,7 +78,7 @@ module top_level (
     );
 
     // per_sixteenth_engine
-    per_sixteenth_engine u_engine (
+    per_sixteenth_engine #(.TILE_W(TILE_W)) u_engine (
         .clk                (clk),
         .rst                (engine_combined_rst),
         .start              (ctrl_start),

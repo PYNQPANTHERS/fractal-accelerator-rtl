@@ -14,6 +14,7 @@ module job_queue (
     output logic [15:0] data_out,
 
     output logic        full,
+    output logic        almost_full,
     output logic        empty
 );
 
@@ -21,15 +22,16 @@ module job_queue (
         .DATA_WIDTH(16),
         .DEPTH(256)
     ) u_fifo (
-        .clk      (clk),
-        .rst      (rst),
-        .flush    (flush),
-        .push     (push),
-        .data_in  (data_in),
-        .pop      (pop),
-        .data_out (data_out),
-        .full     (full),
-        .empty    (empty)
+        .clk        (clk),
+        .rst        (rst),
+        .flush      (flush),
+        .push       (push),
+        .data_in    (data_in),
+        .pop        (pop),
+        .data_out   (data_out),
+        .full       (full),
+        .almost_full(almost_full),
+        .empty      (empty)
     );
 
 endmodule

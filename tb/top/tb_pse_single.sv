@@ -243,19 +243,24 @@ module tb_pse_single;
 
     // ── Direct colour_bram dump (reads mem array after sixteenth_complete) ───────
     task automatic dump_bram_direct_csv(input string path);
+        // word w within a tile: row = w / WORDS_P_ROW, column-group = w % WORDS_P_ROW
+        // WORDS_P_ROW = TILE_W/8 (1 for TILE_W=8, 2 for TILE_W=16)
         integer fd;
         logic [63:0] word;
-        int px, py, tile_col, tile_row;
+        int px, py, tile_col, tile_row, row_in_tile, col_start;
+        localparam int WPR = (TILE_W / 8 > 0) ? TILE_W / 8 : 1;
         fd = $fopen(path, "w");
         $fwrite(fd, "row,col,colour\n");
         for (int tile = 0; tile < TOTAL_TILES; tile++) begin
             tile_col = tile % TILES_P_AXIS;
             tile_row = tile / TILES_P_AXIS;
             for (int w = 0; w < WORDS_P_TILE; w++) begin
-                word = dut.u_colour_bram.mem[tile * WORDS_P_TILE + w];
+                word        = dut.u_colour_bram.mem[tile * WORDS_P_TILE + w];
+                row_in_tile = w / WPR;
+                col_start   = (w % WPR) * 8;
                 for (int b = 0; b < 8; b++) begin
-                    px = tile_col * TILE_W + (w[0] ? 8 : 0) + b;
-                    py = tile_row * TILE_W + (w >> 1);
+                    px = tile_col * TILE_W + col_start + b;
+                    py = tile_row * TILE_W + row_in_tile;
                     $fwrite(fd, "%0d,%0d,%0d\n", py, px, word[b*8 +: 8] & 8'h3F);
                 end
             end

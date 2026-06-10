@@ -100,6 +100,7 @@ module per_sixteenth_engine #(
     logic [TOTAL_TILES-1:0] tile_done;
     assign tile_done = cbram_tile_done | sched_tile_done;
     logic jqh_queue_empty;
+    logic jqh_queue_almost_full;
 
     always_ff @(posedge clk) begin
         if (rst)
@@ -131,6 +132,7 @@ module per_sixteenth_engine #(
         .sched_push       (jqh_sched_push),
         .sched_stall_out  (),
         .sched_stall      (jqh_sched_stall),
+        .gen_stall        (jqh_queue_almost_full),
         .flush            (jqh_flush),
         .job_queue_empty  (jqh_queue_empty),
 
@@ -212,16 +214,17 @@ module per_sixteenth_engine #(
     );
 
     job_queue_handler u_job_queue_handler (
-        .clk         (clk),
-        .rst         (rst),
-        .sched_coord ({sched_y, sched_x}),
-        .sched_push  (jqh_sched_push),
-        .sched_stall (jqh_sched_stall),
-        .flush       (jqh_flush),
-        .wants_job   (jqh_wants_job),
-        .grant       (jqh_grant),
-        .coord_out   (jqh_coord_out),
-        .queue_empty (jqh_queue_empty)
+        .clk              (clk),
+        .rst              (rst),
+        .sched_coord      ({sched_y, sched_x}),
+        .sched_push       (jqh_sched_push),
+        .sched_stall      (jqh_sched_stall),
+        .flush            (jqh_flush),
+        .wants_job        (jqh_wants_job),
+        .grant            (jqh_grant),
+        .coord_out        (jqh_coord_out),
+        .queue_empty      (jqh_queue_empty),
+        .queue_almost_full(jqh_queue_almost_full)
     );
 
     complete_queue_handler u_complete_queue_handler (

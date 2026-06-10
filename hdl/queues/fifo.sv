@@ -16,19 +16,21 @@ module fifo #(
     output logic [DATA_WIDTH-1:0] data_out,
 
     output logic                  full, // asserts when count == DEPTH (writer must stall and retry)
+    output logic                  almost_full, // asserts when count >= DEPTH-1 (1-cycle lookahead)
     output logic                  empty // asserts when count == 0
 );
 
     localparam int PTR_W = $clog2(DEPTH);
- 
+
     logic [DATA_WIDTH-1:0] mem [0:DEPTH-1];
     logic [PTR_W-1:0]      head;
     logic [PTR_W-1:0]      tail;
     logic [PTR_W:0]        count;  // one extra bit to hold value DEPTH
- 
+
     // full/empty are combinational from count
-    assign full  = (count == (PTR_W+1)'(DEPTH));
-    assign empty = (count == '0);
+    assign full        = (count == (PTR_W+1)'(DEPTH));
+    assign almost_full = (count >= (PTR_W+1)'(DEPTH - 1));
+    assign empty       = (count == '0);
  
     // data_out is combinational from tail - always shows current head of queue
     assign data_out = mem[tail];

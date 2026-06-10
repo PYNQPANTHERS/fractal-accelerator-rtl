@@ -3,6 +3,14 @@
 // Run all 16 sixteenths; dump DRAM and image CSVs to sim/render/
 module tb_top_level;
 
+    localparam int TILE_W       = 8;            // tile width/height in pixels (must be power of 2)
+    localparam int TILE_BITS    = $clog2(TILE_W);
+    localparam int TILES_P_AXIS = 256 / TILE_W;
+    localparam int WORDS_P_TILE = TILE_W * TILE_W / 8;
+    localparam int WORDS_P_ROW  = TILE_W / 8;   // 64-bit words per pixel row of a tile
+    localparam int LOG2_BPT     = 2 * TILE_BITS; // log2(BYTES_PER_TILE) = log2(TILE_W*TILE_W)
+    localparam int LOG2_WPR     = $clog2(WORDS_P_ROW > 0 ? WORDS_P_ROW : 1);
+
     localparam CLK_HALF = 5;
     logic clk = 0;
     always #CLK_HALF clk = ~clk;
@@ -16,7 +24,7 @@ module tb_top_level;
     wire         irq_all_done;
     wire         irq_started;
 
-    top_level dut (
+    top_level #(.TILE_W(TILE_W)) dut (
         .clk            (clk),
         .rst            (rst),
         .hp_axi_wr_addr (hp_axi_wr_addr),
@@ -58,12 +66,18 @@ module tb_top_level;
     wire [2:0]  bram_boff_w   = dut.u_engine.u_control_unit.u_bram_rw.wr_boff_q;
     wire [7:0]  bram_col_w    = dut.u_engine.u_control_unit.u_bram_rw.wr_data_q;
 
+    // ta = {y[7:TILE_BITS], x[7:TILE_BITS], y[TILE_BITS-1:0], x[TILE_BITS-1:0]}
+    // x = {ta[ (8-TILE_BITS) + (16-2*TILE_BITS) -1 -: (8-TILE_BITS)], ta[TILE_BITS-1:0] }
+    //   = upper-x field is ta bits [ (16-2*TILE_BITS) + (8-TILE_BITS) -1 : (16-2*TILE_BITS) ]
+    localparam int HI = 8 - TILE_BITS;          // bits of tile col/row index per axis
     always @(posedge clk) begin
         if (bram_wr_en_w && bram_cnt < MAX_BRAM) begin
             logic [15:0] ta;
-            ta = {bram_waddr_w, bram_boff_w};  // ta = {y[7:4], x[7:4], y[3:0], x[3:0]}
-            bram_x  [bram_cnt] = {ta[11:8], ta[3:0]};
-            bram_y  [bram_cnt] = {ta[15:12], ta[7:4]};
+            ta = {bram_waddr_w, bram_boff_w};
+            // x = {x_hi(HI bits), x_lo(TILE_BITS bits)}
+            bram_x  [bram_cnt] = { ta[ (2*TILE_BITS) +: HI ], ta[ 0 +: TILE_BITS ] };
+            // y = {y_hi(HI bits), y_lo(TILE_BITS bits)}
+            bram_y  [bram_cnt] = { ta[ (2*TILE_BITS + HI) +: HI ], ta[ TILE_BITS +: TILE_BITS ] };
             bram_col[bram_cnt] = bram_col_w;
             bram_sxt[bram_cnt] = 4'(dut.u_sixteenth_controller.sixteenth_index);
             bram_cnt++;
@@ -86,8 +100,8 @@ module tb_top_level;
     end
 
     longint cyc = 0;
-    always @(posedge clk) cyc++;
-    always @(posedge clk)
+    always @(posedge clk) begin
+        cyc++;
         if ((cyc % 100_000) == 0)
             $display("  [heartbeat] cyc=%0d  sxt=%0d  transferred=%0d  sched=%0d  seen=%0d  expected=%0d  inject=%0b  rfifo_empty=%0b  brw_state=%0d  cluster_done=%04b",
                      cyc, dut.u_sixteenth_controller.sixteenth_index,
@@ -99,6 +113,89 @@ module tb_top_level;
                      dut.u_engine.u_control_unit.res_fifo_empty,
                      dut.u_engine.u_control_unit.u_bram_rw.current_state,
                      dut.u_engine.u_control_unit.cluster_done);
+    end
+
+    // ── Border-generator emit-count probe ─────────────────────────────────────
+    // Count actual `valid` pulses from border_pixel_generator per box (reset each
+    // time the scheduler re-arms the generator). When the scheduler stalls in WAIT
+    // (no comparator progress for a long window), dump the failing box so we can
+    // compare the generator's real emit count against expected_count.
+    int  gen_emit_cnt = 0;
+    int  gen_emit_latched = 0;   // emit count captured when generator returns to IDLE
+    int  jq_push_cnt = 0;        // actual job_queue pushes for this box
+    int  jq_grant_cnt = 0;       // grants issued (control_unit accepted a coord)
+    int  cq_done_cnt = 0;        // results entering complete_queue (cu done pulses)
+    longint last_seen_cyc = 0;
+    int  last_seen_val = -1;
+    logic stall_reported = 1'b0;
+
+    // SC_WAIT = WAIT state ordinal in the scheduler enum (IDLE,STARTUP,INCREASE_LEVEL,
+    // INCREASE_LEVEL_SECOND,BEGIN_SEARCH_BOX,WAIT,...) → 5
+    localparam int SC_WAIT = 5;
+
+    always @(posedge clk) begin
+        // reset all per-box counters whenever the generator is re-armed for a new box
+        if (dut.u_engine.u_scheduler.pixel_generator_reset) begin
+            gen_emit_cnt <= 0;
+            jq_push_cnt  <= 0;
+            jq_grant_cnt <= 0;
+            cq_done_cnt  <= 0;
+        end else begin
+            if (dut.u_engine.u_scheduler.border_pixel_valid)
+                gen_emit_cnt <= gen_emit_cnt + 1;
+            if (dut.u_engine.u_job_queue_handler.q_push)
+                jq_push_cnt <= jq_push_cnt + 1;
+            if (dut.u_engine.u_job_queue_handler.grant)
+                jq_grant_cnt <= jq_grant_cnt + 1;
+            if (dut.u_engine.cqh_done)
+                cq_done_cnt <= cq_done_cnt + 1;
+        end
+
+        // latch the final emit count when the generator stops (valid falls, back to IDLE)
+        if (dut.u_engine.u_scheduler.pixel_generator.current_state ==
+                dut.u_engine.u_scheduler.pixel_generator.IDLE)
+            gen_emit_latched <= gen_emit_cnt;
+
+        // track comparator progress
+        if (int'(dut.u_engine.u_comparator.seen_count) != last_seen_val) begin
+            last_seen_val  <= int'(dut.u_engine.u_comparator.seen_count);
+            last_seen_cyc  <= cyc;
+            stall_reported <= 1'b0;
+        end
+
+        // stall: in WAIT, no seen progress for 200k cycles, not yet reported
+        if (int'(dut.u_engine.u_scheduler.current_state) == SC_WAIT
+                && (cyc - last_seen_cyc) > 200_000
+                && !stall_reported) begin
+            stall_reported <= 1'b1;
+            $display("  [STALL] cyc=%0d  sxt=%0d  box_id=%0d  zoom=%0d  tlx=%0d tly=%0d",
+                     cyc, dut.u_sixteenth_controller.sixteenth_index,
+                     dut.u_engine.u_scheduler.box_id,
+                     dut.u_engine.u_scheduler.zoom_level,
+                     dut.u_engine.u_scheduler.tlx, dut.u_engine.u_scheduler.tly);
+            $display("          all_left=%0b all_top=%0b  normal_width=%0d  pw_x=%0d pw_y=%0d",
+                     dut.u_engine.u_scheduler.all_left_quadrants,
+                     dut.u_engine.u_scheduler.all_top_quadrants,
+                     dut.u_engine.u_scheduler.normal_width,
+                     dut.u_engine.u_scheduler.pixel_width_x,
+                     dut.u_engine.u_scheduler.pixel_width_y);
+            $display("          expected_count=%0d  seen_count=%0d  gen_emit=%0d  gen_emit_latched=%0d",
+                     dut.u_engine.u_scheduler.expected_count,
+                     dut.u_engine.u_comparator.seen_count,
+                     gen_emit_cnt, gen_emit_latched);
+            $display("          PIPELINE: gen_emit=%0d  jq_push=%0d  jq_grant=%0d  cq_done=%0d  seen=%0d",
+                     gen_emit_cnt, jq_push_cnt, jq_grant_cnt, cq_done_cnt,
+                     dut.u_engine.u_comparator.seen_count);
+            $display("          q_full=%0b q_empty=%0b wants_job=%0b grant=%0b  brw_state=%0d  inject=%0b rfifo_empty=%0b",
+                     dut.u_engine.u_job_queue_handler.q_full,
+                     dut.u_engine.u_job_queue_handler.q_empty,
+                     dut.u_engine.u_job_queue_handler.wants_job,
+                     dut.u_engine.u_job_queue_handler.grant,
+                     dut.u_engine.u_control_unit.u_bram_rw.current_state,
+                     dut.u_engine.u_control_unit.inject_pending,
+                     dut.u_engine.u_control_unit.res_fifo_empty);
+        end
+    end
 
     task automatic dump_full_dram_csv(input string path);
         integer fd;
@@ -132,19 +229,19 @@ module tb_top_level;
                 sxt_base    = CFG_BASE + 32'(sxt_id) * SXT_STRIDE;
                 within_sxt  = dram_addr[i] - sxt_base;
 
-                tile_idx     = within_sxt[15:8];
-                word_in_tile = within_sxt[7:3];
-                tile_col     = tile_idx[3:0];
-                tile_row     = tile_idx[7:4];
-                row_in_tile  = word_in_tile >> 1;
-                col_start    = (word_in_tile & 1) << 3;
+                tile_idx     = within_sxt >> LOG2_BPT;
+                word_in_tile = within_sxt[LOG2_BPT-1:3];
+                tile_col     = tile_idx % TILES_P_AXIS;
+                tile_row     = tile_idx / TILES_P_AXIS;
+                row_in_tile  = word_in_tile >> LOG2_WPR;
+                col_start    = (word_in_tile % WORDS_P_ROW) * 8;
 
                 sxt_col = sxt_id & 3;
                 sxt_row = sxt_id >> 2;
 
                 for (int b = 0; b < 8; b++) begin
-                    px = sxt_col * 256 + tile_col * 16 + col_start + b;
-                    py = sxt_row * 256 + tile_row * 16 + row_in_tile;
+                    px = sxt_col * 256 + tile_col * TILE_W + col_start + b;
+                    py = sxt_row * 256 + tile_row * TILE_W + row_in_tile;
                     if (px < 1024 && py < 1024)
                         image[py][px] = dram_data[i][b*8 +: 8];
                 end
@@ -190,15 +287,15 @@ module tb_top_level;
         for (int i = 0; i < dram_cnt; i++) begin
             if (dram_addr[i] >= sxt_base && dram_addr[i] < sxt_base + SXT_STRIDE) begin
                 within_sxt   = dram_addr[i] - sxt_base;
-                tile_idx     = within_sxt[15:8];
-                word_in_tile = within_sxt[7:3];
-                tile_col     = tile_idx[3:0];
-                tile_row     = tile_idx[7:4];
-                row_in_tile  = word_in_tile >> 1;
-                col_start    = (word_in_tile & 1) << 3;
+                tile_idx     = within_sxt >> LOG2_BPT;
+                word_in_tile = within_sxt[LOG2_BPT-1:3];
+                tile_col     = tile_idx % TILES_P_AXIS;
+                tile_row     = tile_idx / TILES_P_AXIS;
+                row_in_tile  = word_in_tile >> LOG2_WPR;
+                col_start    = (word_in_tile % WORDS_P_ROW) * 8;
                 for (int b = 0; b < 8; b++) begin
-                    px = tile_col * 16 + col_start + b;
-                    py = tile_row * 16 + row_in_tile;
+                    px = tile_col * TILE_W + col_start + b;
+                    py = tile_row * TILE_W + row_in_tile;
                     if (px < 256 && py < 256)
                         image[py][px] = dram_data[i][b*8 +: 8];
                 end

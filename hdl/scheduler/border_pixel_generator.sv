@@ -2,6 +2,7 @@ module border_pixel_generator #(
     parameter int N = 8
 )(
     input  logic          clk, rst, rst_start,
+    input  logic          advance,        // when low, freeze FSM/datapath (queue backpressure)
     input  logic          all_left_flag, all_top_flag,
     input  logic [N-1:0]  top_left_x,    top_left_y,
     input  logic [8:0]    normal_width,
@@ -64,6 +65,11 @@ module border_pixel_generator #(
                 x_coord       <= top_left_x;
                 y_coord       <= top_left_y;
                 current_state <= TOP;
+            end
+            else if (!advance) begin
+                // Queue backpressure: hold state, coords, counters, and drop valid
+                // so no border pixel is emitted (and thus none is lost) this cycle.
+                valid <= 1'b0;
             end
             else begin
                 current_state <= next_state;

@@ -242,6 +242,25 @@ top-full:
 	@echo "           $(RENDER_DIR)/top_full_image.csv"
 	@echo ""
 
+# Tile-size benchmark: renders the full image on TILE_W=16 then TILE_W=8 and
+# reports core-utilisation / scheduler-occupancy metrics for the report.
+.PHONY: tile-bench
+tile-bench:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval TB_NAME := tb_tile_benchmark)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	@echo ""
+	@echo "  Compiling: tb/top/$(TB_NAME).sv  (TILE_W=16 + TILE_W=8 DUTs)"
+	iverilog $(IVFLAGS) -o $(OUT) $(TOP_HDL_SRCS) tb/top/$(TB_NAME).sv
+	@echo "  Running:   $(TB_NAME)"
+	vvp $(OUT)
+	@echo ""
+	@echo "  Rendering PNGs..."
+	-cd $(RENDER_DIR) && python3 visualise.py bench_tile16_image.csv
+	-cd $(RENDER_DIR) && python3 visualise.py bench_tile8_image.csv
+	@echo "  Outputs: $(RENDER_DIR)/bench_tile{8,16}_{dram,image}.csv (+ .png)"
+	@echo ""
+
 # BRAM→DRAM CSV render validation: loads fractal CSV, drives bram_to_dram, checks pixel fidelity
 .PHONY: b2d-csv
 b2d-csv:
