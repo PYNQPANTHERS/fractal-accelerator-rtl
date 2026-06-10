@@ -11,7 +11,8 @@ module comparator #(
     input  logic        sched_reset,      // pulse to reset and load new quad config
     input  logic [COORD_W-1:0] top_left_x,
     input  logic [COORD_W-1:0] top_left_y,
-    input  logic [COORD_W:0]   quad_size, // in pixels - 9 bits to hold root quad size 256
+    input  logic [COORD_W:0]   quad_size_x,
+    input  logic [COORD_W:0]   quad_size_y,
     input  logic [10:0] expected_count,   // total border pixels expected (max 2046)
 
     // Complete queue handler interface
@@ -34,10 +35,10 @@ module comparator #(
 
     // Bounds check
     logic in_bounds;
-    assign in_bounds = (entry_x >= top_left_x) &&
-                       (entry_x <  top_left_x + quad_size) &&
-                       (entry_y >= top_left_y) &&
-                       (entry_y <  top_left_y + quad_size);
+    assign in_bounds = ({1'b0, entry_x} >= {1'b0, top_left_x}) &&
+                       ({1'b0, entry_x} <  {1'b0, top_left_x} + quad_size_x) &&
+                       ({1'b0, entry_y} >= {1'b0, top_left_y}) &&
+                       ({1'b0, entry_y} <  {1'b0, top_left_y} + quad_size_y);
 
     logic [3:0]  ref_colour;
     logic        ref_valid;
@@ -76,8 +77,9 @@ module comparator #(
             // Increment seen counter
             seen_count <= seen_count + 1'b1;
 
-            // Latch complete when we have seen all expected border pixels
-            if (seen_count + 1'b1 >= expected_count)
+            // Latch complete when we have seen all expected border pixels.
+            // ref_valid guard ensures we never fire complete before the first pixel lands.
+            if (ref_valid && (seen_count + 1'b1 >= expected_count))
                 complete <= 1'b1;
         end
         // Out-of-bounds entries: comp_pop still fires (entry consumed) but no state changes 

@@ -89,14 +89,92 @@ module tb_pse_single;
             $display("  [hb] cyc=%0d  eng_done=%0b  sxt_complete=%0b  transferred=%0d  bram=%0d  dram=%0d  sched=%0d",
                      cyc, engine_done, sixteenth_complete,
                      $countones(dut.u_bram_to_dram.transferred),
-                     bram_cnt, dram_cnt, dut.u_scheduler.state);
+                     bram_cnt, dram_cnt, dut.u_scheduler.current_state);
+
+    // ── Box-decision and QUEUE_BOX-complete monitors ─────────────────────────
+    // Track previous scheduler state to detect transitions
+    typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} tb_sched_state_t;
+    tb_sched_state_t prev_sched_state;
+    int qbox_push_count;
+    always @(posedge clk) begin
+        prev_sched_state <= tb_sched_state_t'(dut.u_scheduler.current_state);
+
+        // WAIT→something: print the decision
+        if (prev_sched_state == WAIT && tb_sched_state_t'(dut.u_scheduler.current_state) != WAIT) begin
+            case (tb_sched_state_t'(dut.u_scheduler.current_state))
+                FILL_BOX:      $display("  [decision] cyc=%0d  FILL      box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                DESCEND_LEVEL: $display("  [decision] cyc=%0d  DESCEND   box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                QUEUE_BOX_INIT:$display("  [decision] cyc=%0d  QUEUE_ALL box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                default: ;
+            endcase
+        end
+
+        // Count pushes for the whole QUEUE_BOX sequence (QUEUE_BOX_INIT + QUEUE_BOX); reset on QUEUE_BOX_INIT entry
+        if (prev_sched_state != QUEUE_BOX_INIT && tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT)
+            qbox_push_count <= 0;
+        else if ((tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT ||
+                  tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX) && dut.jqh_sched_push)
+            qbox_push_count <= qbox_push_count + 1;
+
+        // QUEUE_BOX→something: print summary
+        if (prev_sched_state == QUEUE_BOX && tb_sched_state_t'(dut.u_scheduler.current_state) != QUEUE_BOX) begin
+            $display("  [qbox_end] cyc=%0d  box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d  pushed=%0d  expected=%0d",
+                     cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                     dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y,
+                     qbox_push_count,
+                     dut.u_scheduler.pixel_width_x * dut.u_scheduler.pixel_width_y);
+        end
+    end
+
+    // ── Job queue push monitor ────────────────────────────────────────────────
+    always @(posedge clk) begin
+        if (dut.jqh_sched_push) begin
+            $display("  [jq_push] cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tile=(%0d,%0d)  coord=(%0d,%0d)  pw_x=%0d  pw_y=%0d  all_left=%0b  all_top=%0b",
+                     cyc,
+                     dut.u_scheduler.current_state.name(),
+                     dut.u_scheduler.box_id,
+                     dut.u_scheduler.zoom_level,
+                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                     dut.sched_x, dut.sched_y,
+                     dut.u_scheduler.pixel_width_x,
+                     dut.u_scheduler.pixel_width_y,
+                     dut.u_scheduler.all_left_quadrants,
+                     dut.u_scheduler.all_top_quadrants);
+        end
+        if (dut.jqh_flush) begin
+            $display("  [flush]   cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tlx=%0d  tly=%0d  pw_x=%0d  pw_y=%0d",
+                     cyc,
+                     dut.u_scheduler.current_state.name(),
+                     dut.u_scheduler.box_id,
+                     dut.u_scheduler.zoom_level,
+                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                     dut.u_scheduler.pixel_width_x,
+                     dut.u_scheduler.pixel_width_y);
+        end
+    end
 
     // ── Log when tile_done fires for any tile ─────────────────────────────────
+    // Read tile_table one cycle after the rising edge so the registered write
+    // from tt_wr_quad_en has had time to land (avoids tt_filled=0 for fills).
     logic [255:0] tile_done_prev;
+    logic [255:0] tile_done_rose;  // rising-edge mask, held for one cycle
     always @(posedge clk) begin
         tile_done_prev <= dut.tile_done;
+        tile_done_rose <= dut.tile_done & ~tile_done_prev;
+    end
+    always @(posedge clk) begin
         for (int _i = 0; _i < 256; _i++) begin
-            if (dut.tile_done[_i] && !tile_done_prev[_i])
+            if (tile_done_rose[_i])
                 $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
                          cyc, _i,
                          dut.u_colour_bram.active ? dut.u_colour_bram.tile_wr_cnt_b[_i] : dut.u_colour_bram.tile_wr_cnt_a[_i],
@@ -183,6 +261,29 @@ module tb_pse_single;
         $fclose(fd);
         $display("  wrote %s  (256x256 direct)", path);
     endtask
+
+    // ── Engine-done: dump pending/missing tile info ───────────────────────────
+    logic engine_done_prev;
+    always @(posedge clk) begin
+        engine_done_prev <= engine_done;
+        if (engine_done && !engine_done_prev) begin
+            $display("  [eng_done] cyc=%0d  tile_done=%0d  sched_tile_done=%0d  cbram_tile_done=%0d  transferred=%0d",
+                     cyc,
+                     $countones(dut.tile_done),
+                     $countones(dut.sched_tile_done),
+                     $countones(dut.cbram_tile_done),
+                     $countones(dut.u_bram_to_dram.transferred));
+            for (int _i = 0; _i < 256; _i++) begin
+                if (!dut.tile_done[_i])
+                    $display("  [missing_tile_done] tile=%0d  col=%0d  row=%0d  sched_done=%0b  cbram_cnt=%0d",
+                             _i, _i[3:0], _i[7:4],
+                             dut.sched_tile_done[_i],
+                             dut.u_colour_bram.active ?
+                                 dut.u_colour_bram.tile_wr_cnt_b[_i] :
+                                 dut.u_colour_bram.tile_wr_cnt_a[_i]);
+            end
+        end
+    end
 
     // ── Main ─────────────────────────────────────────────────────────────────
     int _t;

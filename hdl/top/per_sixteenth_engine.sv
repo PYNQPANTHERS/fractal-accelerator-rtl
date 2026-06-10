@@ -28,8 +28,7 @@ module per_sixteenth_engine #(
     output logic        axi_wr_en,
     input  logic        axi_wr_ready
 );
-    // Job queue handler wire
-    logic [COORD_W*2-1:0] jqh_sched_coord;
+    logic [COORD_W-1:0] sched_x, sched_y;
     logic        jqh_sched_push;
     logic        jqh_sched_stall;
     logic        jqh_flush;
@@ -48,7 +47,8 @@ module per_sixteenth_engine #(
     logic        comp_sched_reset;
     logic [COORD_W-1:0] comp_top_left_x;
     logic [COORD_W-1:0] comp_top_left_y;
-    logic [COORD_W:0]   comp_quad_size;
+    logic [COORD_W:0]   comp_quad_size_x;
+    logic [COORD_W:0]   comp_quad_size_y;
     logic [10:0] comp_expected_count;
     logic [5:0]  comp_ref_colour_o;
     logic        comp_differ;
@@ -80,18 +80,18 @@ module per_sixteenth_engine #(
     logic        b2d_sixteenth_complete;
     assign sixteenth_complete = b2d_sixteenth_complete && sbram_clear_done;
     logic        tt_wr_quad_en;
-    logic [7:0]  tt_wr_quad_tlx;
-    logic [7:0]  tt_wr_quad_tly;
-    logic [8:0]  tt_wr_quad_size;
+    logic [COORD_W-1:0] tt_wr_quad_tlx;
+    logic [COORD_W-1:0] tt_wr_quad_tly;
+    logic [COORD_W:0]   tt_wr_quad_size;
     logic [5:0]  tt_wr_quad_colour;
     logic [7:0]  tt_rd_index;
     logic        tt_is_filled;
     logic [5:0]  tt_fill_colour;
-    // sched_tile_done_set is a one-cycle pulse from FILL; latch it so it stays sticky
     logic [255:0] sched_tile_done_set;
     logic [255:0] sched_tile_done;
     logic [255:0] tile_done;
     assign tile_done = cbram_tile_done | sched_tile_done;
+    logic jqh_queue_empty;
 
     always_ff @(posedge clk) begin
         if (rst)
@@ -102,38 +102,38 @@ module per_sixteenth_engine #(
     logic sched_engine_done;
 
     scheduler #(.COORD_W(COORD_W)) u_scheduler (
-        .clk                (clk),
-        .rst                (rst),
-        .start              (start),
+        .clk              (clk),
+        .rst              (rst),
+        .start            (start),
 
-        // Job queue push
-        .sched_coord        (jqh_sched_coord),
-        .sched_push         (jqh_sched_push),
-        .sched_stall        (jqh_sched_stall),
-        .flush              (jqh_flush),
+        // comparator
+        .differ           (comp_differ),
+        .complete         (comp_complete),
+        .ref_colour_o     (comp_ref_colour_o),
+        .sched_reset      (comp_sched_reset),
+        .expected_count   (comp_expected_count),
+        .quad_size_x      (comp_quad_size_x),
+        .quad_size_y      (comp_quad_size_y),
+        .top_left_x       (comp_top_left_x),
+        .top_left_y       (comp_top_left_y),
 
-        // Comparator configuration
-        .sched_reset        (comp_sched_reset),
-        .top_left_x         (comp_top_left_x),
-        .top_left_y         (comp_top_left_y),
-        .quad_size          (comp_quad_size),
-        .expected_count     (comp_expected_count),
+        // job queue
+        .sched_x          (sched_x),
+        .sched_y          (sched_y),
+        .sched_push       (jqh_sched_push),
+        .sched_stall_out  (),
+        .sched_stall      (jqh_sched_stall),
+        .flush            (jqh_flush),
+        .job_queue_empty  (jqh_queue_empty),
 
-        // Comparator results
-        .differ             (comp_differ),
-        .complete           (comp_complete),
-        .ref_colour_o       (comp_ref_colour_o),
+        // tile_table
+        .tt_wr_quad_en    (tt_wr_quad_en),
+        .tt_wr_quad_tlx   (tt_wr_quad_tlx),
+        .tt_wr_quad_tly   (tt_wr_quad_tly),
+        .tt_wr_quad_size  (tt_wr_quad_size),
+        .tt_wr_quad_colour(tt_wr_quad_colour),
 
-        // tile_table quad write (flood fill path)
-        .tt_wr_quad_en      (tt_wr_quad_en),
-        .tt_wr_quad_tlx     (tt_wr_quad_tlx),
-        .tt_wr_quad_tly     (tt_wr_quad_tly),
-        .tt_wr_quad_size    (tt_wr_quad_size),
-        .tt_wr_quad_colour  (tt_wr_quad_colour),
-
-        // Tile done (flood fill path)
         .sched_tile_done_set(sched_tile_done_set),
-
         .engine_done        (sched_engine_done)
     );
 
@@ -192,7 +192,8 @@ module per_sixteenth_engine #(
         .sched_reset    (comp_sched_reset),
         .top_left_x     (comp_top_left_x),
         .top_left_y     (comp_top_left_y),
-        .quad_size      (comp_quad_size),
+        .quad_size_x    (comp_quad_size_x),
+        .quad_size_y    (comp_quad_size_y),
         .expected_count (comp_expected_count),
         .comp_valid     (cqh_comp_valid),
         .comp_data      (cqh_comp_data),
@@ -203,15 +204,16 @@ module per_sixteenth_engine #(
     );
 
     job_queue_handler u_job_queue_handler (
-        .clk        (clk),
-        .rst        (rst),
-        .sched_coord(jqh_sched_coord),
-        .sched_push (jqh_sched_push),
-        .sched_stall(jqh_sched_stall),
-        .flush      (jqh_flush),
-        .wants_job  (jqh_wants_job),
-        .grant      (jqh_grant),
-        .coord_out  (jqh_coord_out)
+        .clk         (clk),
+        .rst         (rst),
+        .sched_coord ({sched_y, sched_x}),
+        .sched_push  (jqh_sched_push),
+        .sched_stall (jqh_sched_stall),
+        .flush       (jqh_flush),
+        .wants_job   (jqh_wants_job),
+        .grant       (jqh_grant),
+        .coord_out   (jqh_coord_out),
+        .queue_empty (jqh_queue_empty)
     );
 
     complete_queue_handler u_complete_queue_handler (

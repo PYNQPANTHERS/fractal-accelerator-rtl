@@ -92,7 +92,7 @@ module tb_top_level;
             $display("  [heartbeat] cyc=%0d  sxt=%0d  transferred=%0d  sched=%0d  seen=%0d  expected=%0d  inject=%0b  rfifo_empty=%0b  brw_state=%0d  cluster_done=%04b",
                      cyc, dut.u_sixteenth_controller.sixteenth_index,
                      $countones(dut.u_engine.u_bram_to_dram.transferred),
-                     dut.u_engine.u_scheduler.state,
+                     dut.u_engine.u_scheduler.current_state,
                      dut.u_engine.u_comparator.seen_count,
                      dut.u_engine.u_comparator.expected_count,
                      dut.u_engine.u_control_unit.inject_pending,

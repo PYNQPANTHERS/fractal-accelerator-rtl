@@ -19,7 +19,7 @@ module job_queue (
 
     fifo #(
         .DATA_WIDTH(16),
-        .DEPTH(256)
+        .DEPTH(2048)
     ) u_fifo (
         .clk      (clk),
         .rst      (rst),

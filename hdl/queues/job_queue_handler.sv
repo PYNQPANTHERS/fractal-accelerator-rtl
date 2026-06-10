@@ -16,7 +16,9 @@ module job_queue_handler (
     // Control unit pop interface
     input  logic        wants_job,
     output logic        grant,
-    output logic [15:0] coord_out     // { y[7:0], x[7:0] }, valid same cycle as grant
+    output logic [15:0] coord_out,    // { y[7:0], x[7:0] }, valid same cycle as grant
+
+    output logic        queue_empty
 );
 
     logic        q_push, q_pop;
@@ -39,6 +41,8 @@ module job_queue_handler (
     // Push side
     assign sched_stall = q_full;
     assign q_push      = sched_push && !q_full;
+
+    assign queue_empty = q_empty;
 
     // Pop side - single requester, no arbitration needed
     assign q_pop = wants_job && !q_empty && !grant;
