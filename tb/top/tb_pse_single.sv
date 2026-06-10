@@ -91,7 +91,7 @@ module tb_pse_single;
                      $countones(dut.u_bram_to_dram.transferred),
                      bram_cnt, dram_cnt, dut.u_scheduler.state);
 
-    // ── Log when cu_tile_done_set fires for any tile ───────────────────────────
+    // ── Log when tile_done fires for any tile ─────────────────────────────────
     logic [255:0] tile_done_prev;
     always @(posedge clk) begin
         tile_done_prev <= dut.tile_done;
@@ -99,7 +99,7 @@ module tb_pse_single;
             if (dut.tile_done[_i] && !tile_done_prev[_i])
                 $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
                          cyc, _i,
-                         dut.u_control_unit.tile_pixel_cnt[_i],
+                         dut.u_colour_bram.active ? dut.u_colour_bram.tile_wr_cnt_b[_i] : dut.u_colour_bram.tile_wr_cnt_a[_i],
                          dut.u_tile_table.tile_table[_i][6],
                          bram_cnt);
         end

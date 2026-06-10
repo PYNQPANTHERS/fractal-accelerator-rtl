@@ -1,16 +1,4 @@
-// tb_bram_to_dram.sv
-// Heavy testbench for bram_to_dram.
-//
-// Key concerns:
-//   1. Tiled path: 32 AXI writes per tile, correct addresses, correct data from BRAM stub
-//   2. Flood-fill path: 32 solid-colour writes, no BRAM reads
-//   3. AXI backpressure: writes retry correctly when axi_wr_ready=0
-//   4. BRAM grant denied: module retries correctly
-//   5. Reset: all state clears, no spurious writes
-//   6. sixteenth_complete: only asserts when engine_done AND all 256 tiles transferred
-//   7. Base address: all AXI addresses offset by sixteenth_base_addr
-//   8. Multiple tiles: sequential tile processing, correct per-tile addresses
-//   9. cache_valid_wr_en: pulsed with correct index and value for each tile type
+// Testbench for bram_to_dram
 
 `timescale 1ns/1ps
 
@@ -88,15 +76,10 @@ module tb_bram_to_dram;
         .sixteenth_complete (sixteenth_complete)
     );
 
-    // ── BRAM model ───────────────────────────────────────────────────────────
-    // 256 tiles × 32 words = 8192 words. Each word is 64 bits.
-    // b2d_word_addr format: { tile[7:0], word[4:0] } = 13 bits.
-    // Pattern: byte[i] of word A = (A*8 + i) & 0xFF — deterministic, non-trivial.
+    // BRAM model: 8192 words, byte[i] of word A = (A*8+i)&0xFF
     logic [63:0] bram_model [0:8191];
 
-    // Default BRAM response: registered grant + data, matching real colour_bram
-    // timing (grant and data both arrive 1 cycle after request).
-    // Overridden in BRAM-deny test via force/release on b2d_rd_grant.
+    // Registered grant+data matches real colour_bram timing; overridden in deny tests
     always_ff @(posedge clk) begin
         b2d_rd_grant <= b2d_rd_en;
         if (b2d_rd_en) b2d_rd_data <= bram_model[b2d_word_addr];
@@ -117,8 +100,7 @@ module tb_bram_to_dram;
         end
     end
 
-    // ── AXI write capture ────────────────────────────────────────────────────
-    localparam int MAX_CAP = 8192;   // large enough for all-256-tiles test
+    localparam int MAX_CAP = 8192;
     logic [63:0] cap_data [0:MAX_CAP-1];
     logic [31:0] cap_addr [0:MAX_CAP-1];
     int          cap_count;
@@ -127,7 +109,7 @@ module tb_bram_to_dram;
         cap_count = 0;
     endtask
 
-    // Collect exactly n handshaked writes (axi_wr_en && axi_wr_ready)
+    // Collect n accepted AXI writes into cap_*
     task automatic collect_writes(input int n_writes, input int max_cycles = 10000);
         int collected, cyc;
         collected = 0; cyc = 0;
@@ -147,7 +129,6 @@ module tb_bram_to_dram;
             $display("    WARNING: collect_writes timed out after %0d cycles", max_cycles);
     endtask
 
-    // ── Reset helper ─────────────────────────────────────────────────────────
     task automatic do_reset();
         rst                = 1;
         tile_done          = '0;
@@ -163,15 +144,13 @@ module tb_bram_to_dram;
                   sixteenth_complete, axi_wr_en);
     endtask
 
-    // ── Tile address formula ─────────────────────────────────────────────────
-    // AXI address for tile T, word W = base + T*256 + W*8
+    // AXI address = base + T*256 + W*8
     function automatic logic [31:0] tile_word_addr(
         input logic [31:0] base, input int tile, input int word
     );
         return base + 32'(tile) * 32'd256 + 32'(word) * 32'd8;
     endfunction
 
-    // ── Module-level working variables (Icarus: no automatic inside begin/end) ──
     int          addr_errors, data_errors, writes_seen, wcount;
     int          i, n, cyc, rdy_timer, bp_count, deny_count, post_writes;
     logic [31:0] exp_addr;
@@ -179,7 +158,6 @@ module tb_bram_to_dram;
     logic        got_cache_pulse, got_cache_val, bram_read_seen;
     logic [7:0]  got_cache_idx;
 
-    // ── Tests ────────────────────────────────────────────────────────────────
     initial begin
         $dumpfile("sim/waves/tb_bram_to_dram.vcd");
         $dumpvars(0, tb_bram_to_dram);
@@ -188,7 +166,6 @@ module tb_bram_to_dram;
         axi_wr_ready=1; sixteenth_base_addr=0;
         tick(3);
 
-        // ── RESET BEHAVIOUR ──────────────────────────────────────────────────
         suite("RESET - no spurious outputs immediately after reset");
         do_reset();
         tick(5);
@@ -212,7 +189,6 @@ module tb_bram_to_dram;
         check(cap_count == 1, "module begins processing tile_done after rst deasserts");
         tile_done = '0;
 
-        // ── TILED TILE (colour_bram path) ────────────────────────────────────
         suite("TILED TILE - tile 0: 32 writes, sequential addresses, correct BRAM data");
         do_reset();
         tt_is_filled = 0;
@@ -322,7 +298,6 @@ module tb_bram_to_dram;
         check(got_cache_val == 1'b1,  "cache_valid_value=1 for tiled tile (data in BRAM)");
         check(got_cache_idx == 8'd3,  "cache_valid_index=3 matches tile");
 
-        // ── FLOOD-FILL TILE ──────────────────────────────────────────────────
         suite("FLOOD FILL - tile 0: 32 writes, all bytes = fill colour");
         do_reset();
         tt_is_filled   = 1;
@@ -404,7 +379,6 @@ module tb_bram_to_dram;
         check(got_cache_val == 1'b0,  "cache_valid_value=0 for flood fill (not from BRAM)");
         check(got_cache_idx == 8'd5,  "cache_valid_index=5 matches tile");
 
-        // ── BASE ADDRESS ─────────────────────────────────────────────────────
         suite("BASE ADDRESS - tiled tile respects sixteenth_base_addr");
         do_reset();
         sixteenth_base_addr = 32'h00100000;
@@ -435,7 +409,6 @@ module tb_bram_to_dram;
         check(cap_addr[31] == exp_addr + 32'd248,
             $sformatf("fill tile 1 last at base+256+248 (got 0x%08X)", cap_addr[31]));
 
-        // ── MULTIPLE TILES ───────────────────────────────────────────────────
         suite("MULTIPLE TILES - 3 tiled tiles simultaneously produce 96 writes");
         do_reset();
         tt_is_filled = 0;
@@ -489,7 +462,6 @@ module tb_bram_to_dram;
         $display("    Sequential tiles total writes: %0d (expect 64)", writes_seen);
         check(writes_seen == 64, $sformatf("2 sequential tiles = 64 writes (got %0d)", writes_seen));
 
-        // ── sixteenth_complete ───────────────────────────────────────────────
         suite("sixteenth_complete - stays low with all tiles done but engine_done=0");
         do_reset();
         tt_is_filled = 1; tt_fill_colour = 6'h01;
@@ -530,7 +502,6 @@ module tb_bram_to_dram;
         check(!sixteenth_complete, "sixteenth_complete low with only 128/256 tiles done");
         tile_done = '0;
 
-        // ── BRAM GRANT DENIED ────────────────────────────────────────────────
         suite("BRAM GRANT DENIED - module retries and still produces 32 correct writes");
         do_reset();
         tt_is_filled = 0;
@@ -601,7 +572,6 @@ module tb_bram_to_dram;
         end
         check(addr_errors == 0, "retry on BRAM deny: all 32 addresses correct");
 
-        // ── AXI BACKPRESSURE DURING FLOOD FILL ──────────────────────────────
         // The fill path now also uses combinational AXI outputs, so wr_count only
         // advances when axi_wr_ready=1. Test that stalls during fill produce all
         // 32 correct words rather than repeating or skipping words.
@@ -649,7 +619,6 @@ module tb_bram_to_dram;
         check(addr_errors == 0, "fill backpressure: all 32 addresses sequential (stride 8, no gaps)");
         check(data_errors == 0, "fill backpressure: all 32 data words are correct fill colour");
 
-        // ── BRAM DENY COINCIDING WITH AXI-READY ─────────────────────────────
         // This tests the new re-prime path in BURST_PIPE: when axi_wr_ready=1 (write
         // accepted) but b2d_rd_grant=0 simultaneously, pipe_valid is cleared and the
         // module must re-prime the pipeline from rd_count without losing a word.
@@ -707,7 +676,6 @@ module tb_bram_to_dram;
         check(addr_errors == 0, "coincident deny: all 32 addresses correct");
         check(data_errors == 0, "coincident deny: all 32 data words correct, no word lost on re-prime");
 
-        // ── RESET MID-TRANSFER ───────────────────────────────────────────────
         suite("RESET MID-TRANSFER - rst clears state, no writes after tile_done cleared");
         do_reset();
         tt_is_filled = 0;

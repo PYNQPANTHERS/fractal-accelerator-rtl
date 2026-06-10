@@ -1,9 +1,9 @@
-// Sits between the scheduler (push side) and the control unit (pop side).
-// The control unit sends a single wants_job request per cycle.
+// Sits between the scheduler (push side) and the control unit (pop side)
+// The control unit sends a single wants_job request per cycle 
 
 module job_queue_handler (
     input  logic        clk,
-    input  logic        rst,
+    input  logic        rst,  
 
     // Scheduler push interface 
     input  logic [15:0] sched_coord,  // { y[7:0], x[7:0] }

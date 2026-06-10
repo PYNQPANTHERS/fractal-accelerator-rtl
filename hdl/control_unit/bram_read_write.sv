@@ -2,7 +2,7 @@
 // bram_read_write
 //   Arbitrates colour/state BRAM access between the FSM read path and result writes.
 //   Pixel writes are full-word RMW: PREREAD fetches the 64-bit word, WRITE merges
-//   the new byte and writes the word back — no aliasing between consecutive writes.
+//   the new byte and writes the word back - no aliasing between consecutive writes.
 
 module bram_read_write #(
     parameter int PIXEL_W = 8
@@ -10,7 +10,7 @@ module bram_read_write #(
     input  logic                clk,
     input  logic                rst,
 
-    // read request from frame_fsm — held until decoded
+    // read request from frame_fsm - held until decoded
     input  logic                check_bram,
     input  logic [PIXEL_W-1:0]  a,
     input  logic [PIXEL_W-1:0]  b,
@@ -29,7 +29,7 @@ module bram_read_write #(
     output logic                bram_rmw_rd_en,
     input  logic [63:0]         bram_rmw_rd_data,
 
-    // state BRAM interface — 2-bit: {done, start}
+    // state BRAM interface - 2-bit: {done, start}
     output logic                sb_rd,
     output logic                sb_we,
     output logic [PIXEL_W-1:0]  sb_x,
@@ -39,12 +39,13 @@ module bram_read_write #(
 
     // result write from cluster result FIFO (show-ahead)
     input  logic                res_valid,
+    input  logic                res_reinject,  // re-injected done pixel: skip colour_bram write
     input  logic [PIXEL_W-1:0]  res_a,
     input  logic [PIXEL_W-1:0]  res_b,
     input  logic [7:0]          res_colour,
     output logic                res_rd_en,
 
-    // decoded outputs — registered, hold until next READ
+    // decoded outputs - registered, hold until next READ
     output logic                miss,
     output logic                started,
     output logic                done,
@@ -68,8 +69,12 @@ module bram_read_write #(
     logic started_write_pending;
     logic [PIXEL_W-1:0] a_latch, b_latch;
 
+    // Reinject entries skip colour_bram write entirely - pop them immediately in IDLE.
+    logic res_valid_new;  // result that needs a real colour_bram write
+    assign res_valid_new = res_valid && !res_reinject;
+
     logic any_wr_pending;
-    assign any_wr_pending = started_write_pending || res_valid;
+    assign any_wr_pending = started_write_pending || res_valid_new;
 
     logic go_read, go_write;
     always_comb begin
@@ -87,7 +92,7 @@ module bram_read_write #(
 
     logic serve_started, serve_result;
     assign serve_started = started_write_pending;
-    assign serve_result  = res_valid && !started_write_pending;
+    assign serve_result  = res_valid_new && !started_write_pending;
 
     // Tile address for the result pixel being written
     logic [15:0] res_ta;
@@ -129,9 +134,9 @@ module bram_read_write #(
             started               <= 1'b0;
             done                  <= 1'b0;
             colour                <= 8'b0;
-            wr_waddr_q            <= '0;
-            wr_boff_q             <= '0;
-            wr_data_q             <= '0;
+            wr_waddr_q <= '0;
+            wr_boff_q  <= '0;
+            wr_data_q  <= '0;
         end else begin
             if (bram_action) prev_load <= ~prev_load;
 
@@ -156,12 +161,13 @@ module bram_read_write #(
                 wr_data_q  <= res_colour;
             end
 
+
             if (current_state == WRITE && serve_started)
                 started_write_pending <= 1'b0;
         end
     end
 
-    // Pulse high for the one cycle immediately after READ exits — this is the
+    // Pulse high for the one cycle immediately after READ exits - this is the
     // first cycle where done/miss/started hold fresh values for the current pixel.
     always_ff @(posedge clk) begin
         if (rst) read_done_pulse <= 1'b0;
@@ -187,7 +193,10 @@ module bram_read_write #(
     assign bram_wr_waddr = wr_waddr_q;
     assign bram_wr_word  = merged_word;
 
-    assign res_rd_en = (current_state == WRITE) && serve_result;
+    // Pop reinject entries immediately in IDLE (no write needed).
+    // Pop normal results in WRITE when the colour_bram write fires.
+    assign res_rd_en = ((current_state == IDLE) && res_valid && res_reinject)
+                     || ((current_state == WRITE) && serve_result);
 
     // state BRAM
     assign sb_rd      = (current_state == IDLE) && go_read;

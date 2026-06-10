@@ -61,10 +61,7 @@ module control_unit #(
     output logic                    sb_rd,
     output logic                    sb_we,
     output logic [1:0]              sb_wstate,
-    input  logic [1:0]              sb_rstate,
-
-    // tile table complete
-    output logic [255:0]            cu_tile_done_set
+    input  logic [1:0]              sb_rstate
 
 );
 
@@ -73,7 +70,7 @@ module control_unit #(
     localparam int CLUST_ADDR_W = (CLUSTER_COUNT > 1) ? $clog2(CLUSTER_COUNT) : 1;
     localparam int WORDS_NARROW = 2;
     localparam int WORDS_WIDE   = 4;
-    localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W;
+    localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W + 1; // +1 for reinject flag (MSB)
     localparam int RES_FIFO_D   = (CLUSTER_COUNT < 4) ? 4 : CLUSTER_COUNT * 2;
 
     logic julia, wide;
@@ -125,11 +122,8 @@ module control_unit #(
     logic [PIXEL_W-1:0]      bram_res_data;
 
     // Retrying injector: latch "done" detection (fires once per READ via read_done_pulse)
-    // and retry each cycle until res_fifo has space. The latch also preserves addr/colour
-    // across accept_pulse, which updates coord_a_q/b_q before the injection can fire.
-    // The !inject_pending guard prevents a second simultaneous "done" from overwriting
-    // a pending injection; stall_inject feeds back to frame_fsm so it holds JOB_WAIT
-    // until the latch clears before accepting the next pixel.
+    // and retry each cycle until res_fifo has space. 
+    // While pending, also stall accepting new jobs to avoid overflowing the single-entry latch
     logic inject_pending;
     logic [PIXEL_ADDR_W-1:0] inject_addr;
     logic [PIXEL_W-1:0]      inject_colour;
@@ -186,8 +180,9 @@ module control_unit #(
         .sb_wstate       (sb_wstate),
         .sb_rstate       (sb_rstate),
         .res_valid       (!res_fifo_empty),
-        .res_a           (res_fifo_rd_data[RES_FIFO_DW-1 -: PIXEL_W]),
-        .res_b           (res_fifo_rd_data[RES_FIFO_DW-1-PIXEL_W -: PIXEL_W]),
+        .res_reinject    (res_fifo_rd_data[RES_FIFO_DW-1]),
+        .res_a           (res_fifo_rd_data[RES_FIFO_DW-2 -: PIXEL_W]),
+        .res_b           (res_fifo_rd_data[RES_FIFO_DW-2-PIXEL_W -: PIXEL_W]),
         .res_colour      (res_fifo_rd_data[7:0]),
         .res_rd_en       (res_fifo_rd_en),
         .miss            (bram_miss),
@@ -244,10 +239,10 @@ module control_unit #(
 
         if (bram_res_pending) begin
             res_fifo_wr_en   = !res_fifo_full;
-            res_fifo_wr_data = { bram_res_pixel_addr, bram_res_data };
+            res_fifo_wr_data = { 1'b1, bram_res_pixel_addr, bram_res_data };  // reinject flag set
         end else if (res_arb_any && !res_fifo_full) begin
             res_fifo_wr_en       = 1'b1;
-            res_fifo_wr_data     = { cluster_result_pixel_addr[res_arb_idx],
+            res_fifo_wr_data     = { 1'b0, cluster_result_pixel_addr[res_arb_idx],
                                      cluster_iter_colour[res_arb_idx] };
             cluster_result_ready = res_arb_onehot;
         end
@@ -267,8 +262,10 @@ module control_unit #(
         .empty  (res_fifo_empty)
     );
 
-    assign done                          = res_fifo_wr_en;
-    assign {iter_x, iter_y, iter_colour} = res_fifo_wr_data;
+    assign done       = res_fifo_wr_en;
+    assign iter_x     = res_fifo_wr_data[RES_FIFO_DW-2          -: PIXEL_W];
+    assign iter_y     = res_fifo_wr_data[RES_FIFO_DW-2-PIXEL_W  -: PIXEL_W];
+    assign iter_colour= res_fifo_wr_data[7:0];
 
 
     frame_fsm u_fsm (
@@ -366,29 +363,4 @@ module control_unit #(
     endgenerate
 
 
-logic [7:0] tile_table_addr;
-// 9-bit saturating counter: bit[8] is the "full" latch.
-// Counts to 256 (0x100) and holds there — no wrap, no pulse needed.
-logic [8:0] tile_pixel_cnt [0:255];
-
-// cu_wr_waddr = {tile_y[3:0], tile_x[3:0], row_in_tile[3:0], col_half[0]}
-// waddr[12:5] = {tile_y[3:0], tile_x[3:0]} = tile index
-assign tile_table_addr = cu_wr_waddr[12:5];
-
-// cu_tile_done_set[i] is level-high once tile i has received all 256 pixels
-genvar i;
-generate
-    for (i = 0; i < 256; i++) begin : tile_done_gen
-        assign cu_tile_done_set[i] = tile_pixel_cnt[i][8];
-    end
-endgenerate
-
-always_ff @(posedge clk) begin
-    if (rst_i) begin
-        for (int j = 0; j < 256; j++)
-            tile_pixel_cnt[j] <= 9'h000;
-    end else if (cu_wr_en && !tile_pixel_cnt[tile_table_addr][8]) begin
-        tile_pixel_cnt[tile_table_addr] <= tile_pixel_cnt[tile_table_addr] + 9'h001;
-    end
-end
 endmodule

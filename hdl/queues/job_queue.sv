@@ -1,4 +1,4 @@
-// Thin wrapper around fifo.sv for scheduler -> iterator work distribution.
+// Thin wrapper around fifo.sv for scheduler -> iterator work distribution
 
 module job_queue (
     input  logic        clk,

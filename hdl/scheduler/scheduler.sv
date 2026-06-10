@@ -1,6 +1,4 @@
-// Basic Mariani-Silver scheduler for one 256x256 sixteenth.
-// Recursively subdivides into power-of-2 quadrants, flood-fills uniform regions,
-// and queues all pixels at the 16x16 leaf level when the border is non-uniform.
+// Mariani-Silver quad-tree scheduler for one 256x256 sixteenth
 
 module scheduler #(
     parameter int COORD_W = 8   // coordinate bit width; max coord = 2**COORD_W - 1
@@ -49,7 +47,7 @@ module scheduler #(
     // Current box
     logic [COORD_W-1:0] cur_tlx, cur_tly;
     logic [2:0] cur_depth;
-    logic [COORD_W:0] cur_sz;   // COORD_W+1 bits: holds values 2**COORD_W down to 16
+    logic [COORD_W:0] cur_sz;  
 
     logic [COORD_W-1:0] half_sz;
     assign half_sz = cur_sz[COORD_W:1];
@@ -59,14 +57,12 @@ module scheduler #(
 
     // Border-walk state
     logic [1:0] b_phase;        // 0=top 1=right 2=bottom 3=left
-    logic [COORD_W-1:0] b_cnt;  // position counter along current edge
+    logic [COORD_W-1:0] b_cnt;
 
-    // SPLIT sub-counter: 0→push BR, 1→push BL, 2→push TR, 3→descend TL
+    // SPLIT: 0=push BR, 1=push BL, 2=push TR, 3=descend TL
     logic [1:0] split_cnt;
 
-    // QUEUE_ALL counters (16x16 tile)
     logic [3:0] qa_x, qa_y;
-
 
     // Stack: {depth[2:0], tly[COORD_W-1:0], tlx[COORD_W-1:0]}
     localparam int STACK_W = 3 + COORD_W * 2;
@@ -84,7 +80,7 @@ module scheduler #(
         .empty   (stack_empty)
     );
 
-    // Extract bit-selects to wires — Iverilog doesn't support part-selects in always_*
+    // Iverilog doesn't support non-constant part-selects in always_*
     logic [COORD_W-1:0] cur_sz_lo;
     logic [4:0] tiles_per_side;
     logic [3:0] tile_x0, tile_y0;
@@ -100,8 +96,7 @@ module scheduler #(
     assign popped_tly   = stack_dout[COORD_W*2-1:COORD_W];
     assign popped_tlx   = stack_dout[COORD_W-1:0];
 
-    // ── Border pixel coordinates (combinational) ───────────────────────────
-    // Use COORD_W+1 bits for intermediate arithmetic to handle cur_sz == 2**COORD_W
+    // COORD_W+1 bits for intermediate arithmetic (cur_sz can equal 2**COORD_W)
     logic [COORD_W:0] bpx, bpy;
     always_comb begin
         case (b_phase)
@@ -124,7 +119,6 @@ module scheduler #(
         endcase
     end
 
-    // Phase done: phase 0-2 end at cnt == sz-1; phase 3 ends at cnt == sz-2
     logic b_phase_done;
     always_comb begin
         case (b_phase)
@@ -135,19 +129,14 @@ module scheduler #(
         endcase
     end
 
-    // All border pixels have been pushed when phase 3 is done
     logic b_done;
     assign b_done = (b_phase == 2'b11) && b_phase_done;
 
-    // ── Comparator configuration (combinational, always reflects current box) ──
     assign top_left_x     = cur_tlx;
     assign top_left_y     = cur_tly;
     assign quad_size      = cur_sz;
-    // 4*sz - 4 border pixels total (corners counted once)
-    assign expected_count = (11'(cur_sz) << 2) - 11'd4;
+    assign expected_count = (11'(cur_sz) << 2) - 11'd4;  // 4*sz - 4 border pixels
 
-    // ── Tile-done: combinational, active only during FILL ─────────────────────
-    // tiles_per_side = cur_sz/16 (16,8,4,2,1 for depths 0-4)
     always_comb begin
         sched_tile_done_set = '0;
         if (state == FILL) begin
@@ -164,7 +153,6 @@ module scheduler #(
         end
     end
 
-    // ── Sequential FSM ────────────────────────────────────────────────────────
     always_ff @(posedge clk) begin
         if (rst) begin
             state        <= IDLE;
@@ -191,11 +179,10 @@ module scheduler #(
                     state     <= SEARCH;
                 end
 
-                // Resets comparator and border counter; combinational outputs flush + sched_reset
                 SEARCH: begin
-                    b_phase       <= '0;
-                    b_cnt  <= '0;
-                    state  <= PUSH_BORDER;
+                    b_phase <= '0;
+                    b_cnt   <= '0;
+                    state   <= PUSH_BORDER;
                 end
 
                 PUSH_BORDER: begin
@@ -240,7 +227,7 @@ module scheduler #(
                     if (split_cnt == 2'd3) begin
                         split_cnt <= '0;
                         cur_depth <= child_depth;
-                        cur_sz    <= {1'b0, half_sz};  // half_sz is COORD_W bits, cur_sz is COORD_W+1
+                        cur_sz    <= {1'b0, half_sz};
                         state     <= SEARCH;
                     end else begin
                         split_cnt <= split_cnt + 2'd1;
@@ -281,7 +268,6 @@ module scheduler #(
         end
     end
 
-    // ── Combinational outputs ─────────────────────────────────────────────────
     always_comb begin
         sched_push        = 1'b0;
         sched_coord       = '0;
@@ -299,9 +285,6 @@ module scheduler #(
 
         case (state)
             SEARCH: begin
-                // sched_reset clears the comparator for the new quad.
-                // No job-queue flush: border pixels from parent quads still in the queue are
-                // valid work for the CU; the comparator discards their results via in_bounds.
                 sched_reset = 1'b1;
             end
 
@@ -321,21 +304,12 @@ module scheduler #(
             end
 
             SPLIT: begin
-                // No job-queue flush: parent border pixels drain normally; comparator in_bounds filters them.
+                flush = (split_cnt == 2'd0);  // one-cycle flush when first entering SPLIT
                 case (split_cnt)
-                    2'd0: begin  // push BR child
-                        stack_push = 1'b1;
-                        stack_din  = {child_depth, cur_tly + half_sz, cur_tlx + half_sz};
-                    end
-                    2'd1: begin  // push BL child
-                        stack_push = 1'b1;
-                        stack_din  = {child_depth, cur_tly + half_sz, cur_tlx};
-                    end
-                    2'd2: begin  // push TR child
-                        stack_push = 1'b1;
-                        stack_din  = {child_depth, cur_tly, cur_tlx + half_sz};
-                    end
-                    default: ;  // cnt==3: descend to TL (handled in sequential block)
+                    2'd0: begin stack_push = 1'b1; stack_din = {child_depth, cur_tly + half_sz, cur_tlx + half_sz}; end  // BR
+                    2'd1: begin stack_push = 1'b1; stack_din = {child_depth, cur_tly + half_sz, cur_tlx}; end             // BL
+                    2'd2: begin stack_push = 1'b1; stack_din = {child_depth, cur_tly, cur_tlx + half_sz}; end             // TR
+                    default: ;  // cnt==3: descend to TL
                 endcase
             end
 

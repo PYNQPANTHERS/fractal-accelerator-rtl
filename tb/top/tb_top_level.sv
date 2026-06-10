@@ -1,14 +1,6 @@
 `timescale 1ns/1ps
 
-// tb_top_level — run all 16 sixteenths and dump DRAM/image CSVs.
-// No test infrastructure: just configure, start, wait for irq_all_done.
-//
-// Outputs:
-//   sim/render/top_dram.csv                 — all AXI writes (addr + 8 bytes)
-//   sim/render/top_full_image.csv           — reconstructed 1024×1024 pixel grid
-//   sim/render/top_sixteenth_N_bram.csv     — per-pixel BRAM writes for sixteenth N
-//   sim/render/top_sixteenth_N_image.csv    — 256×256 image from DRAM for sixteenth N
-
+// Run all 16 sixteenths; dump DRAM and image CSVs to sim/render/
 module tb_top_level;
 
     localparam CLK_HALF = 5;
@@ -16,7 +8,6 @@ module tb_top_level;
     always #CLK_HALF clk = ~clk;
     task automatic tick(input int n = 1); repeat(n) @(posedge clk); #1; endtask
 
-    // ── DUT ───────────────────────────────────────────────────────────────────
     logic        rst;
     wire  [31:0] hp_axi_wr_addr;
     wire  [63:0] hp_axi_wr_data;
@@ -36,7 +27,6 @@ module tb_top_level;
         .irq_started    (irq_started)
     );
 
-    // ── PS config ─────────────────────────────────────────────────────────────
     localparam logic [31:0] CFG_PAN_X  = 32'hFFFF_0000;  // -1.0 Q1.16 (top-left real)
     localparam logic [31:0] CFG_PAN_Y  = 32'h0001_0000;  // +1.0 Q1.16 (top-left imag)
     localparam logic [31:0] CFG_ZOOM   = 32'd1;
@@ -44,7 +34,6 @@ module tb_top_level;
     localparam logic [31:0] CFG_BASE   = 32'h0000_0000;
     localparam logic [31:0] SXT_STRIDE = 32'd65536;
 
-    // ── DRAM capture ──────────────────────────────────────────────────────────
     localparam int MAX_DRAM = 131072;  // 16 × 8192
     logic [31:0] dram_addr [0:MAX_DRAM-1];
     logic [63:0] dram_data [0:MAX_DRAM-1];
@@ -57,9 +46,7 @@ module tb_top_level;
             dram_cnt++;
         end
 
-    // ── Per-sixteenth BRAM write capture ─────────────────────────────────────
-    // Captures writes from bram_read_write (one pixel each) tagged by sixteenth.
-    localparam int MAX_BRAM = 1048576;  // 16 × 65536 pixels worst case
+    localparam int MAX_BRAM = 1048576;
     logic [7:0]  bram_x   [0:MAX_BRAM-1];
     logic [7:0]  bram_y   [0:MAX_BRAM-1];
     logic [7:0]  bram_col [0:MAX_BRAM-1];
@@ -74,9 +61,7 @@ module tb_top_level;
     always @(posedge clk) begin
         if (bram_wr_en_w && bram_cnt < MAX_BRAM) begin
             logic [15:0] ta;
-            ta = {bram_waddr_w, bram_boff_w};
-            // ta = {y[7:4], x[7:4], y[3:0], x[3:0]}
-            // bits 15:12 = y[7:4], 11:8 = x[7:4], 7:4 = y[3:0], 3:0 = x[3:0]
+            ta = {bram_waddr_w, bram_boff_w};  // ta = {y[7:4], x[7:4], y[3:0], x[3:0]}
             bram_x  [bram_cnt] = {ta[11:8], ta[3:0]};
             bram_y  [bram_cnt] = {ta[15:12], ta[7:4]};
             bram_col[bram_cnt] = bram_col_w;
@@ -85,20 +70,36 @@ module tb_top_level;
         end
     end
 
-    // ── Cycle counter / heartbeat ─────────────────────────────────────────────
+
+    logic sxt_complete_prev;
+    always @(posedge clk) begin
+        sxt_complete_prev <= dut.u_engine.u_bram_to_dram.sixteenth_complete;
+        if (dut.u_engine.u_bram_to_dram.sixteenth_complete && !sxt_complete_prev)
+            $display("  [sxt_done] cyc=%0d  sxt=%0d  bram=%0d  dram=%0d  transferred=%0d  cbram_tile_done=%0d  sched_tile_done=%0d  tile_done=%0d",
+                     cyc,
+                     dut.u_sixteenth_controller.sixteenth_index,
+                     bram_cnt, dram_cnt,
+                     $countones(dut.u_engine.u_bram_to_dram.transferred),
+                     $countones(dut.u_engine.cbram_tile_done),
+                     $countones(dut.u_engine.sched_tile_done),
+                     $countones(dut.u_engine.tile_done));
+    end
+
     longint cyc = 0;
     always @(posedge clk) cyc++;
     always @(posedge clk)
         if ((cyc % 100_000) == 0)
-            $display("  [heartbeat] cyc=%0d  sxt=%0d  dram=%0d  bram=%0d  irq=%0b  eng_done=%0b  sxt_complete=%0b  transferred=%0d  sched=%0d",
+            $display("  [heartbeat] cyc=%0d  sxt=%0d  transferred=%0d  sched=%0d  seen=%0d  expected=%0d  inject=%0b  rfifo_empty=%0b  brw_state=%0d  cluster_done=%04b",
                      cyc, dut.u_sixteenth_controller.sixteenth_index,
-                     dram_cnt, bram_cnt, irq_all_done,
-                     dut.u_engine.engine_done,
-                     dut.u_engine.u_bram_to_dram.sixteenth_complete,
                      $countones(dut.u_engine.u_bram_to_dram.transferred),
-                     dut.u_engine.u_scheduler.state);
+                     dut.u_engine.u_scheduler.state,
+                     dut.u_engine.u_comparator.seen_count,
+                     dut.u_engine.u_comparator.expected_count,
+                     dut.u_engine.u_control_unit.inject_pending,
+                     dut.u_engine.u_control_unit.res_fifo_empty,
+                     dut.u_engine.u_control_unit.u_bram_rw.current_state,
+                     dut.u_engine.u_control_unit.cluster_done);
 
-    // ── CSV dump tasks ────────────────────────────────────────────────────────
     task automatic dump_full_dram_csv(input string path);
         integer fd;
         fd = $fopen(path, "w");
@@ -213,7 +214,6 @@ module tb_top_level;
         $display("  wrote %s  (256x256)", path);
     endtask
 
-    // ── Main ──────────────────────────────────────────────────────────────────
     initial begin
         $dumpfile("sim/waves/tb_top_level.vcd");
         $dumpvars(0, tb_top_level);
@@ -224,10 +224,8 @@ module tb_top_level;
         $display("PAN_X=0x%08X  PAN_Y=0x%08X  ZOOM=%0d  MAX_I=%0d",
                  CFG_PAN_X, CFG_PAN_Y, CFG_ZOOM, CFG_MAX_I);
 
-        // Reset
         rst = 1; tick(4); rst = 0; tick(2);
 
-        // Apply config and pulse ps_start
         force dut.cfg_fractal_type    = 5'b0_0000;
         force dut.cfg_pan_x           = CFG_PAN_X;
         force dut.cfg_pan_y           = CFG_PAN_Y;
@@ -238,7 +236,6 @@ module tb_top_level;
         tick(1);
         release dut.ps_start;
 
-        // Wait for all 16 sixteenths to complete
         begin : wait_irq
             longint t;
             t = 0;
@@ -279,7 +276,6 @@ module tb_top_level;
         $finish;
     end
 
-    // ── Watchdog ──────────────────────────────────────────────────────────────
     initial begin
         #(CLK_HALF * 2 * 260_000_000);
         $display("\n[WATCHDOG] timeout at cycle %0d  sxt=%0d  dram=%0d",

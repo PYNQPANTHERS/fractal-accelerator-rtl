@@ -1,5 +1,5 @@
 // Consumes entries from the complete_queue_handler, performs bounds checking,
-// colour comparison, and raises differ/complete flags to the scheduler.
+// colour comparison, and raises differ/complete flags to the scheduler
 
 module comparator #(
     parameter int COORD_W = 8   // coordinate bit width; must match scheduler
@@ -11,7 +11,7 @@ module comparator #(
     input  logic        sched_reset,      // pulse to reset and load new quad config
     input  logic [COORD_W-1:0] top_left_x,
     input  logic [COORD_W-1:0] top_left_y,
-    input  logic [COORD_W:0]   quad_size, // in pixels — 9 bits to hold root quad size 256
+    input  logic [COORD_W:0]   quad_size, // in pixels - 9 bits to hold root quad size 256
     input  logic [10:0] expected_count,   // total border pixels expected (max 2046)
 
     // Complete queue handler interface
@@ -63,12 +63,12 @@ module comparator #(
             ref_valid   <= 1'b0;
             seen_count  <= 11'b0;
         end else if (comp_valid && in_bounds) begin
-            // First valid entry after reset — store as reference colour
+            // First valid entry after reset - store as reference colour
             if (!ref_valid) begin
                 ref_colour <= entry_colour;
                 ref_valid  <= 1'b1;
             end else begin
-                // Compare against reference — latch differ if mismatch
+                // Compare against reference - latch differ if mismatch
                 if (entry_colour != ref_colour)
                     differ <= 1'b1;
             end
@@ -81,7 +81,6 @@ module comparator #(
                 complete <= 1'b1;
         end
         // Out-of-bounds entries: comp_pop still fires (entry consumed) but no state changes 
-        // Stale results from previous quads are discarded
     end
 
 endmodule

@@ -1,11 +1,10 @@
-// Flat 256-entry register file — one entry per 16x16 tile in the sixteenth.
-// Stored in flip-flops (not BRAM) — fully combinational read, zero latency.
+// Flat 256-entry register file - one entry per 16x16 tile in the sixteenth
 
 module tile_table (
     input  logic        clk,
-    input  logic        rst,    // synchronous reset — clears all entries
+    input  logic        rst,    // synchronous reset - clears all entries
 
-    // Quad write port (for flood fill decisions — scheduler only)
+    // Quad write port (for flood fill decisions - scheduler only)
     input  logic        wr_quad_en,
     input  logic [7:0]  wr_quad_tlx,       // top-left x pixel (0..255)
     input  logic [7:0]  wr_quad_tly,       // top-left y pixel (0..255)
@@ -18,8 +17,8 @@ module tile_table (
     output logic [5:0]  rd_fill_colour     // fill colour (valid if is_filled)
 );
 
-    // bit[6] = 1 → flood-filled by scheduler; bits[5:0] = fill colour
-    // bit[6] = 0 → tiled (pixels written individually by control_unit via colour_bram)
+    // bit[6] = 1 -> flood-filled by scheduler; bits[5:0] = fill colour
+    // bit[6] = 0 -> tiled (pixels written individually by control_unit via colour_bram)
     logic [6:0] tile_table [0:255];
 
     assign rd_is_filled   = tile_table[rd_index][6];
@@ -27,7 +26,7 @@ module tile_table (
 
     logic [3:0] tile_col_start, tile_row_start;
     logic [4:0] tile_col_end, tile_row_end;
-    logic [4:0] num_cols, num_rows;  // 5-bit: 1..16
+    logic [4:0] num_cols, num_rows;  
 
     assign tile_col_start = wr_quad_tlx[7:4];
     assign tile_row_start = wr_quad_tly[7:4];

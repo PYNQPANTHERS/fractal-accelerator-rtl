@@ -1,4 +1,4 @@
-// Integrates all compute modules for one 256x256 sixteenth
+// Top-level integration for one 256x256 sixteenth
 
 module per_sixteenth_engine #(
     parameter int COORD_W = 8   // coordinate bit width; matches scheduler and comparator
@@ -35,27 +35,24 @@ module per_sixteenth_engine #(
     logic        jqh_flush;
     logic        jqh_wants_job;
     logic        jqh_grant;
-    logic [15:0] jqh_coord_out;    // PIXEL_ADDR_W=16
-    // Complete queue handler wire
+    logic [15:0] jqh_coord_out;
     logic        cqh_done;
     logic [COORD_W-1:0] cqh_iter_x;
     logic [COORD_W-1:0] cqh_iter_y;
     logic [7:0]  cu_iter_colour_raw;
     logic [3:0]  cqh_iter_colour;
-    assign cqh_iter_colour = cu_iter_colour_raw[3:0]; // lower nibble → comparator; iteration counts < 16 are common near boundary
+    assign cqh_iter_colour = cu_iter_colour_raw[3:0];  // lower nibble only
     logic        cqh_comp_pop;
     logic        cqh_comp_valid;
-    logic [19:0] cqh_comp_data;    // { colour[3:0], y[7:0], x[7:0] }
-    // Comparator wires (driven by scheduler, read by comparator
+    logic [19:0] cqh_comp_data;
     logic        comp_sched_reset;
     logic [COORD_W-1:0] comp_top_left_x;
     logic [COORD_W-1:0] comp_top_left_y;
-    logic [COORD_W:0]   comp_quad_size;  // 9 bits to hold root size 256
+    logic [COORD_W:0]   comp_quad_size;
     logic [10:0] comp_expected_count;
     logic [5:0]  comp_ref_colour_o;
     logic        comp_differ;
     logic        comp_complete;
-    // colour_bram wire (ctrl read/write driven by control_unit — 8-bit coords from CU)
     logic [7:0]  cbram_ctrl_rd_x;
     logic [7:0]  cbram_ctrl_rd_y;
     logic        cbram_ctrl_rd_en;
@@ -70,7 +67,7 @@ module per_sixteenth_engine #(
     logic        cbram_b2d_rd_en;
     logic        cbram_b2d_rd_grant;
     logic [63:0] cbram_b2d_rd_data;
-    // state_bram wires (driven by control_unit — 8-bit coords from CU)
+    logic [255:0] cbram_tile_done;
     logic [7:0]  sbram_x;
     logic [7:0]  sbram_y;
     logic        sbram_rd;
@@ -82,31 +79,28 @@ module per_sixteenth_engine #(
     logic        sbram_clear_done;
     logic        b2d_sixteenth_complete;
     assign sixteenth_complete = b2d_sixteenth_complete && sbram_clear_done;
-    // tile_table wire (single write driven directly from cu_tile_done_set/addr)
     logic        tt_wr_quad_en;
     logic [7:0]  tt_wr_quad_tlx;
     logic [7:0]  tt_wr_quad_tly;
-    logic [8:0]  tt_wr_quad_size;  // 9-bit to hold root size 256
+    logic [8:0]  tt_wr_quad_size;
     logic [5:0]  tt_wr_quad_colour;
     logic [7:0]  tt_rd_index;
     logic        tt_is_filled;
     logic [5:0]  tt_fill_colour;
-    // tile_done: sticky OR of flood-fill (scheduler) and tiled (control_unit) path
+    // sched_tile_done_set is a one-cycle pulse from FILL; latch it so it stays sticky
     logic [255:0] sched_tile_done_set;
-    logic [255:0] cu_tile_done_set;
+    logic [255:0] sched_tile_done;
     logic [255:0] tile_done;
+    assign tile_done = cbram_tile_done | sched_tile_done;
 
     always_ff @(posedge clk) begin
         if (rst)
-            tile_done <= '0;
+            sched_tile_done <= '0;
         else
-            tile_done <= tile_done | sched_tile_done_set | cu_tile_done_set;
+            sched_tile_done <= sched_tile_done | sched_tile_done_set;
     end
     logic sched_engine_done;
 
-    // scheduler
-    // Quad-tree FSM (Mariani-Silver). Pushes border pixels to job queue,
-    // receives comparator flags, flood fills or splits
     scheduler #(.COORD_W(COORD_W)) u_scheduler (
         .clk                (clk),
         .rst                (rst),
@@ -143,7 +137,7 @@ module per_sixteenth_engine #(
         .engine_done        (sched_engine_done)
     );
 
-    // Latch engine_done: scheduler fires a one-cycle pulse; bram_to_dram needs level-high
+    // engine_done latched: scheduler fires a one-cycle pulse, bram_to_dram needs level
     always_ff @(posedge clk) begin
         if (rst)
             engine_done <= 1'b0;
@@ -151,14 +145,11 @@ module per_sixteenth_engine #(
             engine_done <= 1'b1;
     end
 
-    // control_unit
-    // Manages iterator pool. Pops jobs, computes pixels, writes colour/state
     control_unit u_control_unit (
         .clk                (clk),
         .rst                (rst),
         .opcode_reset       (1'b0),
 
-        // frame control
         .fractal_type       (fractal_type),
         .pan_x              (pan_x[17:0]),
         .pan_y              (pan_y[17:0]),
@@ -170,45 +161,31 @@ module per_sixteenth_engine #(
         .c_x                ('0),
         .c_y                ('0),
 
-        // Job queue pop
         .wants_job          (jqh_wants_job),
         .grant              (jqh_grant),
         .coord_out          (jqh_coord_out),
-
-        // Complete queue push
         .done               (cqh_done),
         .iter_x             (cqh_iter_x),
         .iter_y             (cqh_iter_y),
         .iter_colour        (cu_iter_colour_raw),
-
-        // colour_bram read
         .cu_rd_x            (cbram_ctrl_rd_x),
         .cu_rd_y            (cbram_ctrl_rd_y),
         .cu_rd_en           (cbram_ctrl_rd_en),
         .cu_rd_data         (cbram_ctrl_rd_data),
-
-        // colour_bram write (full-word RMW)
         .cu_wr_en           (cbram_ctrl_wr_en),
         .cu_wr_waddr        (cbram_ctrl_wr_waddr),
         .cu_wr_word         (cbram_ctrl_wr_word),
         .cu_rmw_rd_en       (cbram_ctrl_rmw_rd_en),
         .cu_rmw_rd_addr     (cbram_ctrl_rmw_rd_addr),
         .cu_rmw_rd_data     (cbram_ctrl_rmw_rd_data),
-
-        // state_bram
         .sb_x               (sbram_x),
         .sb_y               (sbram_y),
         .sb_rd              (sbram_rd),
         .sb_we              (sbram_we),
         .sb_wstate          (sbram_wstate),
-        .sb_rstate          (sbram_rstate),
-
-        // tile done (tiled path) — 256-bit vector, one bit per tile
-        .cu_tile_done_set  (cu_tile_done_set)
+        .sb_rstate          (sbram_rstate)
     );
 
-    // comparator
-    // Drains complete_queue_handler. Checks border colour uniformity
     comparator #(.COORD_W(COORD_W)) u_comparator (
         .clk            (clk),
         .rst            (rst),
@@ -225,8 +202,6 @@ module per_sixteenth_engine #(
         .complete       (comp_complete)
     );
 
-    // job_queue_handler
-    // Buffers pixel coordinates between scheduler (push) and control_unit (pop)
     job_queue_handler u_job_queue_handler (
         .clk        (clk),
         .rst        (rst),
@@ -239,8 +214,6 @@ module per_sixteenth_engine #(
         .coord_out  (jqh_coord_out)
     );
 
-    // complete_queue_handler
-    // Buffers completed pixel results between control_unit (push) and comparator (pop)
     complete_queue_handler u_complete_queue_handler (
         .clk        (clk),
         .rst        (rst),
@@ -254,11 +227,9 @@ module per_sixteenth_engine #(
         .full_err   ()
     );
 
-    // colour_bram
-    // Dual-port: ctrl (Port A, read by bram_to_dram / write by control_unit),
-    //            b2d (Port B, read by control_unit)
     colour_bram u_colour_bram (
         .clk          (clk),
+        .rst          (rst),
         .ctrl_rd_x    (cbram_ctrl_rd_x),
         .ctrl_rd_y    (cbram_ctrl_rd_y),
         .ctrl_rd_en   (cbram_ctrl_rd_en),
@@ -272,11 +243,10 @@ module per_sixteenth_engine #(
         .b2d_word_addr(cbram_b2d_word_addr),
         .b2d_rd_en    (cbram_b2d_rd_en),
         .b2d_rd_grant (cbram_b2d_rd_grant),
-        .b2d_rd_data  (cbram_b2d_rd_data)
+        .b2d_rd_data  (cbram_b2d_rd_data),
+        .tile_done    (cbram_tile_done)
     );
 
-    // state_bram
-    // Per-pixel computation state (uncomputed / in-progress / done)
     state_bram u_state_bram (
         .clk     (clk),
         .rst     (rst),
@@ -292,10 +262,6 @@ module per_sixteenth_engine #(
     );
 
 
-    // tile_table
-    // 256-entry register file: one entry per 16x16 tile.
-    // bit[6]=1 → flood-filled (scheduler quad write); bit[6]=0 → tiled (bram reads colour_bram).
-    // Read combinationally by bram_to_dram
     tile_table u_tile_table (
         .clk             (clk),
         .rst             (rst),
@@ -309,8 +275,6 @@ module per_sixteenth_engine #(
         .rd_fill_colour  (tt_fill_colour)
     );
 
-    // bram_to_dram
-    // Streams completed tiles to DDR3 via AXI HP
     bram_to_dram u_bram_to_dram (
         .clk                (clk),
         .rst                (rst),

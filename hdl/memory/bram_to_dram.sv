@@ -1,5 +1,4 @@
-// Streams completed tiles from colour_bram to DDR3 via AXI HP.
-// Runs concurrently with per_sixteenth_engine.
+// Streams completed tiles from colour_bram to DDR3 via AXI HP
 
 module bram_to_dram (
     input  logic         clk,
@@ -46,36 +45,34 @@ module bram_to_dram (
 
     logic [255:0] transferred;
     logic [7:0]   cur_tile;
-    logic [4:0]   rd_count;      // next BRAM word index to request (0..31)
-    logic [4:0]   wr_count;      // AXI writes accepted (0..31)
-    logic [4:0]   fill_count;    // words accepted in fill path (0..31)
+    logic [4:0]   fill_count;
 
-    // pipeline register — holds the word currently being presented to AXI
-    logic [63:0]  pipe_data;
-    logic         pipe_valid;
+    logic [5:0]  rd_count;    // next word index to request (0..32)
+    logic [4:0]  rd_addr;     // address of in-flight read
+    logic        rd_inflight;
+    logic        rd_suppress; // suppress re-assert for 1 cycle after issuing new address
+
+    logic [4:0]  wr_count;
+
+    // 2-slot FIFO; slot 0 is the AXI head
+    logic [63:0] fifo0, fifo1;
+    logic        fifo0_v, fifo1_v;
 
     logic [255:0] pending;
-    assign pending = (tile_done == '1) ? (tile_done & ~transferred) : '0;
+    assign pending = tile_done & ~transferred;
 
-    // priority encoder — lowest set bit of pending
     logic [7:0] next_tile;
     logic       any_pending;
-
     always_comb begin
         next_tile   = '0;
         any_pending = 1'b0;
-        for (int i = 255; i >= 0; i--) begin
-            if (pending[i]) begin
-                next_tile   = 8'(i);
-                any_pending = 1'b1;
-            end
-        end
+        for (int i = 255; i >= 0; i--)
+            if (pending[i]) begin next_tile = 8'(i); any_pending = 1'b1; end
     end
 
-    assign tt_rd_index       = cur_tile;
+    assign tt_rd_index        = cur_tile;
     assign sixteenth_complete = (transferred == '1) && engine_done;
 
-    // fill word — 8 pixels of same colour packed into 64 bits
     logic [63:0] fill_word;
     always_comb begin
         fill_word = '0;
@@ -83,7 +80,6 @@ module bram_to_dram (
             fill_word[i*8 +: 8] = {2'b00, tt_fill_colour};
     end
 
-    // ── AXI write outputs: combinational so handshake is glitch-free ────────
     always_comb begin
         axi_wr_en   = 1'b0;
         axi_wr_addr = '0;
@@ -94,12 +90,10 @@ module bram_to_dram (
                 axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
                 axi_wr_data = fill_word;
             end
-            BURST_PIPE: begin
-                if (pipe_valid) begin
-                    axi_wr_en   = 1'b1;
-                    axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
-                    axi_wr_data = pipe_data;
-                end
+            BURST_PIPE: if (fifo0_v) begin
+                axi_wr_en   = 1'b1;
+                axi_wr_addr = sixteenth_base_addr + {cur_tile, 8'b0} + {wr_count, 3'b0};
+                axi_wr_data = fifo0;
             end
             default: ;
         endcase
@@ -110,26 +104,33 @@ module bram_to_dram (
             state             <= SCAN;
             transferred       <= '0;
             cur_tile          <= '0;
-            rd_count          <= '0;
-            wr_count          <= '0;
             fill_count        <= '0;
-            pipe_valid        <= 1'b0;
-            pipe_data         <= '0;
+            rd_count          <= '0;
+            rd_addr           <= '0;
+            rd_inflight       <= 1'b0;
+            rd_suppress       <= 1'b0;
+            wr_count          <= '0;
+            fifo0_v           <= 1'b0;
+            fifo1_v           <= 1'b0;
+            fifo0             <= '0;
+            fifo1             <= '0;
             b2d_rd_en         <= 1'b0;
             b2d_word_addr     <= '0;
             cache_valid_wr_en <= 1'b0;
         end else begin
-            // default deasserts
             b2d_rd_en         <= 1'b0;
             cache_valid_wr_en <= 1'b0;
 
             case (state)
 
                 SCAN: begin
-                    pipe_valid <= 1'b0;
-                    rd_count   <= '0;
-                    wr_count   <= '0;
-                    fill_count <= '0;
+                    fifo0_v     <= 1'b0;
+                    fifo1_v     <= 1'b0;
+                    rd_inflight <= 1'b0;
+                    rd_suppress <= 1'b0;
+                    rd_count    <= '0;
+                    wr_count    <= '0;
+                    fill_count  <= '0;
                     if (any_pending) begin
                         cur_tile <= next_tile;
                         state    <= CHECK_TABLE;
@@ -137,20 +138,20 @@ module bram_to_dram (
                 end
 
                 CHECK_TABLE: begin
-                    // tt_is_filled combinational from cur_tile via tt_rd_index
                     if (tt_is_filled)
                         state <= GENERATE_FILL;
                     else begin
-                        // issue first BRAM read immediately
                         b2d_rd_en     <= 1'b1;
-                        b2d_word_addr <= {cur_tile, 5'b0}; // tile*32 + 0
+                        b2d_word_addr <= {cur_tile, 5'b0};
+                        rd_addr       <= 5'b0;
+                        rd_count      <= 6'd1;
+                        rd_inflight   <= 1'b1;
+                        rd_suppress   <= 1'b1;
                         state         <= BURST_PIPE;
                     end
                 end
 
                 GENERATE_FILL: begin
-                    // AXI write is presented combinationally above.
-                    // Only advance counters when AXI accepts (axi_wr_ready=1).
                     if (axi_wr_ready) begin
                         fill_count <= fill_count + 1;
                         wr_count   <= wr_count + 1;
@@ -165,37 +166,76 @@ module bram_to_dram (
                 end
 
                 BURST_PIPE: begin
-                    if (pipe_valid) begin
-                        // Word is ready — present to AXI and wait for acceptance.
-                        // No BRAM activity here: avoids latching the stale grant that
-                        // always trails a BRAM priming cycle by one clock (2-cycle latency).
-                        if (axi_wr_ready) begin
-                            pipe_valid <= 1'b0;
-                            if (wr_count == 5'd31) begin
-                                // Last word accepted — tile complete
-                                transferred[cur_tile] <= 1'b1;
-                                cache_valid_wr_en     <= 1'b1;
-                                cache_valid_index     <= cur_tile;
-                                cache_valid_value     <= 1'b1;
-                                state                 <= SCAN;
-                            end else begin
-                                wr_count      <= wr_count + 1;
-                                // Issue BRAM read for the next word now that AXI consumed this one
-                                b2d_rd_en     <= 1'b1;
-                                b2d_word_addr <= {cur_tile, rd_count};
-                            end
-                        end
-                    end else begin
-                        // Waiting for BRAM grant — retry until granted
-                        if (b2d_rd_grant) begin
-                            pipe_data  <= b2d_rd_data;
-                            pipe_valid <= 1'b1;
-                            rd_count   <= rd_count + 1;
-                        end else begin
-                            b2d_rd_en     <= 1'b1;
-                            b2d_word_addr <= {cur_tile, rd_count};
-                        end
+                    if (fifo0_v && axi_wr_ready) begin
+                        fifo0   <= fifo1;
+                        fifo0_v <= fifo1_v;
+                        fifo1   <= '0;
+                        fifo1_v <= 1'b0;
+                        if (wr_count == 5'd31) begin
+                            transferred[cur_tile] <= 1'b1;
+                            cache_valid_wr_en     <= 1'b1;
+                            cache_valid_index     <= cur_tile;
+                            cache_valid_value     <= 1'b1;
+                            state                 <= SCAN;
+                        end else
+                            wr_count <= wr_count + 1;
                     end
+
+                    if (rd_inflight) begin
+                        if (rd_suppress) begin
+                            // Re-assert rd_en the cycle after issuing a new address
+                            b2d_rd_en     <= 1'b1;
+                            b2d_word_addr <= {cur_tile, rd_addr};
+                            rd_suppress   <= 1'b0;
+                        end else if (b2d_rd_grant) begin
+                            // Push into first free FIFO slot; account for AXI pop this same cycle
+                            if (fifo0_v && axi_wr_ready) begin
+                                if (!fifo1_v) begin
+                                    fifo0   <= b2d_rd_data;
+                                    fifo0_v <= 1'b1;
+                                end else begin
+                                    fifo1   <= b2d_rd_data;
+                                    fifo1_v <= 1'b1;
+                                end
+                            end else begin
+                                if (!fifo0_v) begin
+                                    fifo0   <= b2d_rd_data;
+                                    fifo0_v <= 1'b1;
+                                end else begin
+                                    fifo1   <= b2d_rd_data;
+                                    fifo1_v <= 1'b1;
+                                end
+                            end
+                            rd_inflight <= 1'b0;
+
+                            // Issue next read if FIFO has room
+                            if ((rd_count < 6'd32)
+                                    && !(wr_count == 5'd31 && fifo0_v && axi_wr_ready)
+                                    && ((fifo0_v && axi_wr_ready) || !fifo1_v)) begin
+                                b2d_rd_en     <= 1'b1;
+                                b2d_word_addr <= {cur_tile, rd_count[4:0]};
+                                rd_addr       <= rd_count[4:0];
+                                rd_count      <= rd_count + 1;
+                                rd_inflight   <= 1'b1;
+                                rd_suppress   <= 1'b1;
+                            end
+                        end else begin
+                            // Grant denied: retry same address
+                            b2d_rd_en     <= 1'b1;
+                            b2d_word_addr <= {cur_tile, rd_addr};
+                        end
+                    end else if ((rd_count < 6'd32)
+                            && !fifo1_v
+                            && !(wr_count == 5'd31 && fifo0_v && axi_wr_ready)) begin
+                        // FIFO now has room; resume reader
+                        b2d_rd_en     <= 1'b1;
+                        b2d_word_addr <= {cur_tile, rd_count[4:0]};
+                        rd_addr       <= rd_count[4:0];
+                        rd_count      <= rd_count + 1;
+                        rd_inflight   <= 1'b1;
+                        rd_suppress   <= 1'b1;
+                    end
+
                 end
 
             endcase

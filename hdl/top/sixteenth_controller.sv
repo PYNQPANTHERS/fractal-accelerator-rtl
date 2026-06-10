@@ -1,14 +1,12 @@
-// FSM that sequences all 16 sixteenths of a 1024x1024 render
-// Sixteenth layout: row-major, 4 columns x 4 rows, each 256x256 pixels
+// Sequences all 16 sixteenths of a 1024x1024 render, row-major
 
 module sixteenth_controller (
     input  logic clk,
     input  logic rst,
 
-    // PS start trigger
     input  logic ps_start,
 
-    // Config inputs from PS AXI registers
+    // Config from PS AXI registers
     input  logic [4:0]  cfg_fractal_type,
     input  logic [31:0] cfg_pan_x,
     input  logic [31:0] cfg_pan_y,
@@ -16,13 +14,10 @@ module sixteenth_controller (
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
 
-    // Engine reset (assert in IDLE, LOAD, NEXT; deassert in RENDER)
     output logic engine_rst,
-
-    // Engine control
     output logic start,
 
-    // Registered config outputs to per_sixteenth_engine
+    // Registered outputs to per_sixteenth_engine
     output logic [4:0]  fractal_type,
     output logic [31:0] pan_x,
     output logic [31:0] pan_y,
@@ -33,14 +28,9 @@ module sixteenth_controller (
     output logic [3:0]  sixteenth_id,
     output logic [31:0] sixteenth_base_addr,
 
-    // Engine done signal
     input  logic sixteenth_complete,
-
-    // Interrupt to PS
     output logic all_done,
-
-    // PS handshake: high from first RENDER cycle until IDLE (PS should not re-assert ps_start while high)
-    output logic started
+    output logic started  // high from first RENDER until IDLE; PS must not re-trigger while high
 );
 
     typedef enum logic [1:0] {
@@ -79,9 +69,8 @@ module sixteenth_controller (
             sixteenth_base_addr <= '0;
         end else begin
             all_done <= 1'b0;
-            start    <= 1'b0;  // default: pulse low every cycle
+            start    <= 1'b0;
 
-            // Clear one-shot arm whenever engine_rst is asserted (IDLE/LOAD/NEXT)
             if (engine_rst) start_fired <= 1'b0;
 
             case (state)
@@ -102,7 +91,6 @@ module sixteenth_controller (
 
                 LOAD: begin
                     engine_rst          <= 1'b1;
-                    // started stays high — PS should not send another request mid-render
                     x_offset            <= {sixteenth_col, 8'b0};
                     y_offset            <= {sixteenth_row, 8'b0};
                     sixteenth_id        <= sixteenth_index;
@@ -125,7 +113,7 @@ module sixteenth_controller (
 
                 NEXT: begin
                     engine_rst <= 1'b1;
-                    started    <= 1'b1;  // still busy between sixteenths
+                    started    <= 1'b1;
                     if (sixteenth_index == 4'd15) begin
                         all_done <= 1'b1;
                         state    <= IDLE;
