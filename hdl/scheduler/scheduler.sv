@@ -312,7 +312,8 @@ always_comb begin
     // Perimeter of a W×H box (corners counted once) = 2W + 2H - 4.
     expected_count = (pixel_width_x << 1) + (pixel_width_y << 1) - 11'd4;
 
-    sched_first_time_queued = (current_state == WAIT)? border_first_time_flag : queue_first_time_flag;
+    sched_first_time_queued = (zoom_level == '0) ?
+                                1'b1 : ((current_state == WAIT)? border_first_time_flag : queue_first_time_flag;)
 
     case(current_state)
 
