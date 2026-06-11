@@ -5,8 +5,10 @@ module border_pixel_generator #(
     input  logic          advance,        // when low, freeze FSM/datapath (queue backpressure)
     input  logic          all_left_flag, all_top_flag,
     input  logic [N-1:0]  top_left_x,    top_left_y,
+    input  logic [1:0]    box_id,
     input  logic [8:0]    normal_width,
     output logic [N-1:0]  x_coord, y_coord,
+    output logic          first_time_queued,
     output logic          valid);
 
     typedef enum logic [2:0] {
@@ -49,22 +51,24 @@ module border_pixel_generator #(
             valid         <= 1'b0;
             x_coord       <= '0;
             y_coord       <= '0;
+            first_time_queued <= 1'b0;
             current_state <= IDLE;
         end
         else begin
             if (rst_start) begin
-                tmp           <= '0;
-                width         <= normal_width + 1'b1;
-                midpoint      <= normal_width + 1'b1;
-                first_round   <= 1'b1;
-                last_cycle    <= 1'b0;
+                tmp                 <= '0;
+                width               <= normal_width + 1'b1;
+                midpoint            <= normal_width + 1'b1;
+                first_round         <= 1'b1;
+                last_cycle          <= 1'b0;
                 // The preload below re-emits the first top pixel that the `top`
                 // state produces next cycle, so mark this priming cycle invalid
                 // to avoid a duplicate (top_left_x, top_left_y) push.
-                valid         <= 1'b0;
-                x_coord       <= top_left_x;
-                y_coord       <= top_left_y;
-                current_state <= TOP;
+                valid               <= 1'b0;
+                x_coord             <= top_left_x;
+                y_coord             <= top_left_y;
+                first_time_queued   <= 1'b0;
+                current_state       <= TOP;
             end
             else if (!advance) begin
                 // Queue backpressure: hold state, coords, counters, and drop valid
@@ -80,21 +84,38 @@ module border_pixel_generator #(
                 case (current_state)
 
                     TOP: begin
+                        first_time_queued <= 1'b0;
                         x_coord <= N'(top_left_x + tmp);
                         y_coord <= top_left_y;
                     end
 
                     BOTTOM: begin
+                        if(box_id == 2'b00) begin
+                            first_time_queued <= 1'b1;
+                        end
+                        else if(box_id == 2'b01 && !first_round) begin
+                            first_time_queued <= 1'b1;
+                        end
+                        else begin
+                            first_time_queued <= 1'b0;
+                        end
                         x_coord <= N'(top_left_x + inverse_tmp - {8'b0, all_left_flag});
                         y_coord <= N'(top_left_y + width - {8'b0, all_top_flag} - 1'b1);
                     end
 
                     LEFT: begin
+                        first_time_queued <= 1'b0;
                         x_coord <= top_left_x;
                         y_coord <= N'(top_left_y + inverse_tmp - {8'b0, all_top_flag});
                     end
 
                     RIGHT: begin
+                        if(!box_id[0] && !first_round) begin
+                            first_time_queued <= 1'b1;
+                        end
+                        else begin
+                            first_time_queued <= 1'b0;
+                        end
                         x_coord <= N'(top_left_x + width - {8'b0, all_left_flag} - 1'b1);
                         y_coord <= N'(top_left_y + tmp);
                         
