@@ -306,11 +306,8 @@ always_comb begin
     else
         pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;
 
-    // expected_count = perimeter of the actual box. The generator's effective
-    // extent equals pixel_width_x/y (it loads normal_width+1 then subtracts the
-    // all_left/all_top flag, so all_left=1 boxes are normal_width wide and
-    // all_left=0 boxes are normal_width+1 wide — exactly pixel_width_x/y).
-    // Perimeter of a W×H box (corners counted once) = 2W + 2H - 4.
+    // perimeter of the box (2W + 2H - 4); must match the generator's emit count,
+    // whose effective extent is pixel_width_x/y
     expected_count = (pixel_width_x << 1) + (pixel_width_y << 1) - 11'd4;
 
 
