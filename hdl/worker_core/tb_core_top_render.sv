@@ -23,12 +23,12 @@ module frame_render_tb;
 // ──────────────────────────────────────────────
 // ▸ Customise here
 // ──────────────────────────────────────────────
-localparam int    WIDTH      = 512;          // horizontal pixels
-localparam int    HEIGHT     = 512;          // vertical pixels
-localparam real   RE_MIN     = -0.8;
-localparam real   RE_MAX     = -0.7;
-localparam real   IM_MIN     = 0.1;
-localparam real   IM_MAX     =  0.2;
+localparam int    WIDTH      = 4;          // horizontal pixels
+localparam int    HEIGHT     = 4;          // vertical pixels
+localparam real   RE_MIN     = -2;
+localparam real   RE_MAX     = 2;
+localparam real   IM_MIN     = -2;
+localparam real   IM_MAX     =  2;
 localparam real   JULIA_CX   = -0.700;      // Julia constant real
 localparam real   JULIA_CY   =  0.270;      // Julia constant imag
 localparam logic [4:0] MAX_ITER_FIELD = 5'd3; // 2^(6+field) iterations

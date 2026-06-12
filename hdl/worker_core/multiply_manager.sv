@@ -152,7 +152,7 @@ logic signed [NARROW_WIDTH-1:0] x_low; // still signed needs 0 pad at the MSB
 logic signed [NARROW_WIDTH-1:0] y_high;
 logic signed [NARROW_WIDTH-1:0] y_low;
 
-sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_encoder (
+(* keep_hierarchy = "yes" *) sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_encoder (
     .magnitude_negation_encoding(magnitude_negation_encoding),
     .is_wide(is_wide),
     .sum_x_reg_1(sum_x_reg_1),
@@ -263,7 +263,7 @@ always_comb begin
     endcase
 end
 
-multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
+(* keep_hierarchy = "yes" *) multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
 (
     .clk(clk),
     .mode(left_multiply_mode),
@@ -271,12 +271,11 @@ multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply
     .operand_A(multiply_operand_A_1),
     .operand_B(multiply_operand_B_1),
 
-    .is_wide(is_wide),
 
     .result(left_multiply_result)
 );
 
-multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
+(* keep_hierarchy = "yes" *) multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
 (
     .clk(clk),
     .mode(right_multiply_mode),
@@ -284,7 +283,6 @@ multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply
     .operand_A(multiply_operand_A_2),
     .operand_B(multiply_operand_B_2),
 
-    .is_wide(is_wide),
 
     .result(right_multiply_result)
 );
@@ -425,7 +423,7 @@ always_ff @(posedge clk) begin
                     else begin
                         left_cycle <= ALTER_SUM;
                         sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_1 <= left_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= $signed(left_multiply_result <<< 1) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_1 <= iteration_reg_1 + 1;
                     end
                 end
@@ -438,7 +436,7 @@ always_ff @(posedge clk) begin
                     else begin
                         left_cycle <= ALTER_SUM;
                         sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_1 <= left_multiply_result + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= $signed(left_multiply_result <<< 1) + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_1 <= iteration_reg_1 + 1;
                     end
                 end
@@ -526,7 +524,7 @@ always_ff @(posedge clk) begin
                     else begin
                         right_cycle <= ALTER_SUM;
                         sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_2 <= right_multiply_result + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= $signed(right_multiply_result <<< 1) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_2 <= iteration_reg_2 + 1;                    
                     end
                 end
@@ -538,7 +536,7 @@ always_ff @(posedge clk) begin
                     else begin
                         right_cycle <= ALTER_SUM;
                         sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_2 <= right_multiply_result + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= $signed(right_multiply_result <<< 1) + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_2 <= iteration_reg_2 + 1;
                     end
                 end
@@ -580,11 +578,11 @@ always_ff @(posedge clk) begin
                 wide_partial_2 <= '0;
             end
             else begin // mandelbrot set setup
-                sum_x_reg_1 = '0;
-                sum_x_reg_2 = '0;
+                sum_x_reg_1 <= '0;
+                sum_x_reg_2 <= '0;
 
-                sum_y_reg_1 = '0;
-                sum_y_reg_2 = '0;
+                sum_y_reg_1 <= '0;
+                sum_y_reg_2 <= '0;
 
                 wide_partial_1 <= '0;
                 wide_partial_2 <= '0;
@@ -598,7 +596,7 @@ always_ff @(posedge clk) begin
                     if(sum_x_reg_1_overflow_flag || sum_y_reg_1_overflow_flag) begin 
                         joint_cycle <= W_DONE;
                         // $display("sum overflow");
-                        // $display("[%0t] OVERFLOW FLAGS: sum_x=%b sum_y=%b → jumping to W_DONE",$time,sum_x_reg_1_overflow_flag,sum_y_reg_1_overflow_flag);
+                        // $display("[%0t] OVERFLOW FLAGS: sum_x=%b sum_y=%b ? jumping to W_DONE",$time,sum_x_reg_1_overflow_flag,sum_y_reg_1_overflow_flag);
                         // $display("sum_x_reg_1 = %36b (raw int)", (sum_x_reg_1));
                         // $display("sum_y_reg_1 = %36b (raw int)", ((sum_y_reg_1)));
                         
@@ -641,10 +639,10 @@ always_ff @(posedge clk) begin
                 W_Y_SQUARED : begin
                     
                     {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) 
-                    + $signed({{NARROW_WIDTH-1{left_multiply_result[2*NARROW_WIDTH-1]}}, left_multiply_result, {NARROW_WIDTH+1{1'b0}}}); //now contains x_high_high and x_high_low <<< 1
+                    + $signed({{NARROW_WIDTH-2{left_multiply_result[2*NARROW_WIDTH-1]}}, left_multiply_result, {NARROW_WIDTH+2{1'b0}}}); //now contains x_high_high and x_high_low <<< 1
                     
                     {wide_partial_1, wide_partial_2} <= $signed({wide_partial_1, wide_partial_2}) 
-                    + $signed({{NARROW_WIDTH-1{right_multiply_result[2*NARROW_WIDTH-1]}}, right_multiply_result, {NARROW_WIDTH+1{1'b0}}}); //now contains y_high_high and y_high_low <<< 1
+                    + $signed({{NARROW_WIDTH-2{right_multiply_result[2*NARROW_WIDTH-1]}}, right_multiply_result, {NARROW_WIDTH+2{1'b0}}}); //now contains y_high_high and y_high_low <<< 1
 
                     joint_cycle <= W_Y_SQUARED_2;
                 end
@@ -758,3 +756,4 @@ always_comb begin
 
 end
 endmodule
+
