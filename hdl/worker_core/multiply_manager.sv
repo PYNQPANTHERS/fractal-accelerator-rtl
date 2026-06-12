@@ -174,6 +174,16 @@ logic [1:0] right_multiply_mode;
 
 always_comb begin
 
+
+                    //multiplier 1
+                    multiply_operand_A_1 = x_high;
+                    multiply_operand_B_1 = x_low;
+                    
+                    //multiplier 2
+                    multiply_operand_A_2 = y_high;                    
+                    multiply_operand_B_2 = y_low;
+
+
     case (grouping_status) 
         SPLIT : begin
             is_wide = 1'b0;
@@ -208,13 +218,7 @@ always_comb begin
                     left_multiply_mode = 2'b00;
                     right_multiply_mode = 2'b00;
 
-                    //multiplier 1
-                    multiply_operand_A_1 = x_high;
-                    multiply_operand_B_1 = x_low;
-                    
-                    //multiplier 2
-                    multiply_operand_A_2 = y_high;                    
-                    multiply_operand_B_2 = y_low;
+
 
                 end
                 W_X_SQUARED_2 : begin // x_high_low << 1 & y_high_low << 1
