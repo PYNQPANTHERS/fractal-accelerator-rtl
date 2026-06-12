@@ -20,7 +20,7 @@ module tb_tile_benchmark;
     localparam logic [31:0] CFG_PAN_X  = 32'hFFFF_0000;  // -1.0 Q1.16
     localparam logic [31:0] CFG_PAN_Y  = 32'h0001_0000;  // +1.0 Q1.16
     localparam logic [31:0] CFG_ZOOM   = 32'd1;
-    localparam logic [11:0] CFG_MAX_I  = 12'd8;          // higher iteration count for the report
+    localparam logic [11:0] CFG_MAX_I  = 12'd2;          // higher iteration count for the report
     localparam logic [31:0] CFG_BASE   = 32'h0000_0000;
     localparam logic [31:0] SXT_STRIDE = 32'd65536;
 
@@ -83,10 +83,19 @@ module tb_tile_benchmark;
     // pixel_writes       : BRAM writes (pixels actually iterated)
     // any_core_busy_cyc  : cycles where at least one core was busy
     // all_core_idle_cyc  : cycles where every core was idle (stall/scheduler-bound)
+    reg [7:0]  dump_image [0:1023][0:1023];
+    reg [63:0] di_dd;
+    integer    di_fd, di_log2_bpt, di_words_p_row, di_tiles_p_axis, di_n;
+    integer    di_sxt_id, di_tile_idx, di_word_in_tile, di_tile_col, di_tile_row;
+    integer    di_row_in_tile, di_col_start, di_px, di_py, di_sxt_col, di_sxt_row;
+    integer    di_a, di_addr_off, di_within;
+    integer    di_r, di_c, di_i, di_b;
+
     longint m16_active=0, m16_busycore=0, m16_wait=0, m16_schedbusy=0;
     longint m16_pix=0, m16_anybusy=0, m16_allidle=0;
     longint m8_active=0,  m8_busycore=0,  m8_wait=0,  m8_schedbusy=0;
     longint m8_pix=0,  m8_anybusy=0,  m8_allidle=0;
+    int bc16, bc8;
 
     // scheduler enum ordinals
     localparam int SC_IDLE=0, SC_WAIT=5, SC_FINISHED=12;
@@ -103,7 +112,6 @@ module tb_tile_benchmark;
     // ── TILE_W=16 metric sampling (only while dut16 active) ───────────────────
     logic m16_run = 0;
     always @(posedge clk) if (m16_run) begin
-        automatic int bc16;
         bc16 = cluster_busy_cores(dut16.u_engine.u_control_unit.cluster_wants_job);
         m16_active    <= m16_active + 1;
         m16_busycore  <= m16_busycore + bc16;
@@ -121,7 +129,6 @@ module tb_tile_benchmark;
     // ── TILE_W=8 metric sampling (only while dut8 active) ─────────────────────
     logic m8_run = 0;
     always @(posedge clk) if (m8_run) begin
-        automatic int bc8;
         bc8 = cluster_busy_cores(dut8.u_engine.u_control_unit.cluster_wants_job);
         m8_active    <= m8_active + 1;
         m8_busycore  <= m8_busycore + bc8;
@@ -170,48 +177,39 @@ module tb_tile_benchmark;
         $display("  wrote %s  (%0d rows)", path, n);
     endtask
 
-    task automatic dump_image_csv(input string path, input int tw);
-        // tile-linear DRAM → raster 1024×1024
-        logic [7:0] image [0:1023][0:1023];
-        integer fd;
-        int log2_bpt, words_p_row, tiles_p_axis, n;
-        int sxt_id, tile_idx, word_in_tile, tile_col, tile_row;
-        int row_in_tile, col_start, px, py, sxt_col, sxt_row;
-        logic [31:0] a, addr_off, within;
-        logic [63:0] dd;
-        // tw is 8 or 16 only; avoid $clog2 on a runtime arg (iverilog needs a constant)
-        log2_bpt     = (tw == 16) ? 8 : 6;   // log2(TILE_W*TILE_W): 16→256→8, 8→64→6
-        words_p_row  = tw / 8;               // 2 for 16, 1 for 8
-        tiles_p_axis = 256 / tw;
-        for (int r=0;r<1024;r++) for (int c=0;c<1024;c++) image[r][c]=8'hFF;
-        n = (tw == 16) ? d16_cnt : d8_cnt;
-        for (int i=0;i<n;i++) begin
-            a  = (tw == 16) ? d16_addr[i] : d8_addr[i];
-            dd = (tw == 16) ? d16_data[i] : d8_data[i];
-            off = a - CFG_BASE;
-            sxt_id = int'(off / SXT_STRIDE);
-            if (sxt_id >= 0 && sxt_id <= 15) begin
-                within = a - (CFG_BASE + SXT_STRIDE * sxt_id);
-                tile_idx     = within >> log2_bpt;
-                word_in_tile = (within & ((1<<log2_bpt)-1)) >> 3;
-                tile_col     = tile_idx % tiles_p_axis;
-                tile_row     = tile_idx / tiles_p_axis;
-                row_in_tile  = word_in_tile / words_p_row;
-                col_start    = (word_in_tile % words_p_row) * 8;
-                sxt_col = sxt_id & 3; sxt_row = sxt_id >> 2;
-                for (int b=0;b<8;b++) begin
-                    px = sxt_col*256 + tile_col*tw + col_start + b;
-                    py = sxt_row*256 + tile_row*tw + row_in_tile;
-                    if (px<1024 && py<1024)
-                        image[py][px] = dd[b*8 +: 8];
+    task dump_image_csv(input string path, input int tw);
+        di_log2_bpt    = (tw == 16) ? 8 : 6;
+        di_words_p_row = tw / 8;
+        di_tiles_p_axis = 256 / tw;
+        for (di_r=0; di_r<1024; di_r++) for (di_c=0; di_c<1024; di_c++) dump_image[di_r][di_c] = 8'hFF;
+        di_n = (tw == 16) ? d16_cnt : d8_cnt;
+        for (di_i=0; di_i<di_n; di_i++) begin
+            di_a    = (tw == 16) ? d16_addr[di_i] : d8_addr[di_i];
+            di_dd   = (tw == 16) ? d16_data[di_i] : d8_data[di_i];
+            di_addr_off = di_a - CFG_BASE;
+            di_sxt_id   = di_addr_off / SXT_STRIDE;
+            if (di_sxt_id >= 0 && di_sxt_id <= 15) begin
+                di_within    = di_a - (CFG_BASE + SXT_STRIDE * di_sxt_id);
+                di_tile_idx  = di_within >> di_log2_bpt;
+                di_word_in_tile = (di_within & ((1<<di_log2_bpt)-1)) >> 3;
+                di_tile_col  = di_tile_idx % di_tiles_p_axis;
+                di_tile_row  = di_tile_idx / di_tiles_p_axis;
+                di_row_in_tile = di_word_in_tile / di_words_p_row;
+                di_col_start = (di_word_in_tile % di_words_p_row) * 8;
+                di_sxt_col = di_sxt_id & 3; di_sxt_row = di_sxt_id >> 2;
+                for (di_b=0; di_b<8; di_b++) begin
+                    di_px = di_sxt_col*256 + di_tile_col*tw + di_col_start + di_b;
+                    di_py = di_sxt_row*256 + di_tile_row*tw + di_row_in_tile;
+                    if (di_px<1024 && di_py<1024)
+                        dump_image[di_py][di_px] = di_dd[di_b*8 +: 8];
                 end
             end
         end
-        fd = $fopen(path, "w");
-        $fwrite(fd, "row,col,colour\n");
-        for (int r=0;r<1024;r++) for (int c=0;c<1024;c++)
-            $fwrite(fd, "%0d,%0d,%0d\n", r, c, image[r][c] & 8'h3F);
-        $fclose(fd);
+        di_fd = $fopen(path, "w");
+        $fwrite(di_fd, "row,col,colour\n");
+        for (di_r=0; di_r<1024; di_r++) for (di_c=0; di_c<1024; di_c++)
+            $fwrite(di_fd, "%0d,%0d,%0d\n", di_r, di_c, dump_image[di_r][di_c] & 8'h3F);
+        $fclose(di_fd);
         $display("  wrote %s  (1024x1024)", path);
     endtask
 

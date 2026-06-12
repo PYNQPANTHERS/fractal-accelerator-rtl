@@ -196,6 +196,8 @@ module control_unit #(
         .res_fifo_full       (res_fifo_full)
     );
 
+
+    // this needs to reset on flush from scheduler 
     // Dispatch FIFO — {z_real, z_imag, pixel_addr} entries ready for cluster dispatch
     sync_fifo #(
         .DW    (DISPATCH_DW),
