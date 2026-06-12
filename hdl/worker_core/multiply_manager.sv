@@ -422,8 +422,9 @@ always_ff @(posedge clk) begin
                     end
                     else begin
                         left_cycle <= ALTER_SUM;
+
                         sum_x_reg_1 <= sum_x_reg_1 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_1 <= $signed(left_multiply_result <<< 1) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= $signed({left_multiply_result[2*NARROW_WIDTH-2:0],1'b0}) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_1 <= iteration_reg_1 + 1;
                     end
                 end
@@ -435,8 +436,9 @@ always_ff @(posedge clk) begin
                     if(left_magnitude_flag) left_cycle <= DONE;
                     else begin
                         left_cycle <= ALTER_SUM;
+
                         sum_x_reg_1 <= sum_x_reg_1 + ($signed(starting_x_reg_1) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_1 <= $signed(left_multiply_result <<< 1) + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_1 <= $signed({left_multiply_result[2*NARROW_WIDTH-2:0],1'b0}) + ($signed(starting_y_reg_1) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_1 <= iteration_reg_1 + 1;
                     end
                 end
@@ -523,8 +525,9 @@ always_ff @(posedge clk) begin
                     if(right_magnitude_flag) right_cycle <= DONE;
                     else begin
                         right_cycle <= ALTER_SUM;
+
                         sum_x_reg_2 <= sum_x_reg_2 + ($signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_2 <= $signed(right_multiply_result <<< 1) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= $signed({right_multiply_result[2*NARROW_WIDTH-2:0],1'b0}) + ($signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_2 <= iteration_reg_2 + 1;                    
                     end
                 end
@@ -534,9 +537,11 @@ always_ff @(posedge clk) begin
                     
                     if(right_magnitude_flag) right_cycle <= DONE;
                     else begin
+
                         right_cycle <= ALTER_SUM;
+
                         sum_x_reg_2 <= sum_x_reg_2 + ($signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS);
-                        sum_y_reg_2 <= $signed(right_multiply_result <<< 1) + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
+                        sum_y_reg_2 <= $signed({right_multiply_result[2*NARROW_WIDTH-2:0],1'b0}) + ($signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS);
                         iteration_reg_2 <= iteration_reg_2 + 1;
                     end
                 end

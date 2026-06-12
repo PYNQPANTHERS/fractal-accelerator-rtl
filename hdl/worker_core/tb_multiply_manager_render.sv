@@ -265,11 +265,11 @@ module tb_multiply_manager_render;
         $display("=== NARROW MODE RENDER: %0dx%0d, range [%.2f,%.2f] ===",
                  WIDTH, HEIGHT, N_XMIN, N_XMAX);
         // fixed config for all pixels: standard Mandelbrot
-        julia_type                  = 1'b0;
+        julia_type                  = 1'b1;
         magnitude_negation_encoding = 4'b0000;
         max_iteration               = MAX_ITER;
         julia_c_x                   = to_q216(0);
-        julia_c_y                   = to_q216(0);
+        julia_c_y                   = to_q216(-0.7);
 
         
 
@@ -313,11 +313,11 @@ module tb_multiply_manager_render;
         // julia_c_x/y remain at Q2.16 in both modes — the Julia constant always
         // uses narrow precision, zero-padded.  No change needed from the narrow
         // pass setup; the DUT ignores them here since julia_type=0.
-        julia_type                   = 1'b0;
+        julia_type                   = 1'b1;
         magnitude_negation_encoding  = 4'b0000;
         max_iteration                = MAX_ITER;
         julia_c_x                    = to_q216(0);
-        julia_c_y                    = to_q216(0);
+        julia_c_y                    = to_q216(-0.7);
 
         fd = $fopen("sim/render/frame_wide.csv", "w");
         if (!fd) begin $display("ERROR: cannot open frame_wide.csv"); $finish; end
