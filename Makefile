@@ -287,5 +287,5 @@ b2d-csv:
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(SIM_DIR)
-	find $(RENDER_DIR) -type f ! -name '*.py' -delete 2>/dev/null || true
-	@echo "Cleaned build, wave, and render outputs (kept .py scripts)"
+	find $(RENDER_DIR) -type f ! -name '*.py' ! -name 'bench_metrics.csv' ! -name 'bench_tile*.png' -delete 2>/dev/null || true
+	@echo "Cleaned build, wave, and render outputs (kept .py scripts + benchmark report/PNGs)"

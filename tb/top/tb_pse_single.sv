@@ -34,7 +34,7 @@ module tb_pse_single;
     localparam logic [31:0] PAN_X = 32'hFFFF_0000;
     localparam logic [31:0] PAN_Y = 32'h0001_0000;
     localparam logic [31:0] ZOOM  = 32'd1;
-    localparam logic [11:0] MAX_I = 12'd3;
+    localparam logic [11:0] MAX_I = 12'd5;   // match benchmark; raise to isolate compute vs drain
     localparam logic [31:0] BASE  = 32'h0000_0000;
 
     per_sixteenth_engine #(.TILE_W(TILE_W)) dut (
@@ -202,7 +202,119 @@ module tb_pse_single;
             $display("  [hb] cyc=%0d  eng_done=%0b  sxt_complete=%0b  transferred=%0d  bram=%0d  dram=%0d  events=%0d",
                      cyc, engine_done, sixteenth_complete,
                      $countones(dut.u_bram_to_dram.transferred),
-                     bram_cnt, dram_cnt, ev_cnt);
+                     bram_cnt, dram_cnt, dut.u_scheduler.current_state);
+
+    // ── Drain-tail + b2d-occupancy metrics (engine_done → sixteenth_complete) ──
+    longint edone_cyc = 0;      // cycle engine_done first rose
+    longint scomplete_cyc = 0;  // cycle sixteenth_complete rose
+    logic   edone_prev = 0, scomp_prev = 0;
+    longint b2d_active_cyc = 0; // cycles bram_to_dram actively draining (not SCAN)
+    longint b2d_scan_busy  = 0; // SCAN cycles WHILE tiles pending (true per-tile overhead)
+    longint b2d_scan_idle  = 0; // SCAN cycles with NO tiles pending (starved/waiting)
+    // drain-tail-specific (between engine_done and sixteenth_complete):
+    longint tail_active = 0;    // b2d actively draining during the tail
+    longint tail_scan_busy = 0; // b2d in SCAN with work pending during the tail
+    longint tail_scan_idle = 0; // b2d in SCAN starved during the tail
+    logic   in_tail = 0;
+    logic   b2d_is_scan, b2d_pend;   // per-cycle temps
+    // bram_to_dram state enum: SCAN=0, CHECK_TABLE=1, GENERATE_FILL=2, BURST_PIPE=3
+    always @(posedge clk) begin
+        edone_prev <= engine_done;
+        scomp_prev <= sixteenth_complete;
+        if (engine_done && !edone_prev) begin edone_cyc <= cyc; in_tail <= 1'b1; end
+        if (sixteenth_complete && !scomp_prev) begin scomplete_cyc <= cyc; in_tail <= 1'b0; end
+        if (!sixteenth_complete) begin
+            b2d_is_scan = (int'(dut.u_bram_to_dram.state) == 0);
+            b2d_pend    = dut.u_bram_to_dram.any_pending;
+            if (!b2d_is_scan)        b2d_active_cyc <= b2d_active_cyc + 1;
+            else if (b2d_pend)       b2d_scan_busy  <= b2d_scan_busy + 1;
+            else                     b2d_scan_idle  <= b2d_scan_idle + 1;
+            if (in_tail) begin
+                if (!b2d_is_scan)    tail_active    <= tail_active + 1;
+                else if (b2d_pend)   tail_scan_busy <= tail_scan_busy + 1;
+                else                 tail_scan_idle <= tail_scan_idle + 1;
+            end
+        end
+    end
+
+    // ── Box-decision and QUEUE_BOX-complete monitors ─────────────────────────
+    // Track previous scheduler state to detect transitions
+    typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} tb_sched_state_t;
+    tb_sched_state_t prev_sched_state;
+    int qbox_push_count;
+    always @(posedge clk) begin
+        prev_sched_state <= tb_sched_state_t'(dut.u_scheduler.current_state);
+
+        // WAIT→something: print the decision
+        if (prev_sched_state == WAIT && tb_sched_state_t'(dut.u_scheduler.current_state) != WAIT) begin
+            case (tb_sched_state_t'(dut.u_scheduler.current_state))
+                FILL_BOX:      $display("  [decision] cyc=%0d  FILL      box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                DESCEND_LEVEL: $display("  [decision] cyc=%0d  DESCEND   box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                QUEUE_BOX_INIT:$display("  [decision] cyc=%0d  QUEUE_ALL box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
+                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
+                default: ;
+            endcase
+        end
+
+        // Count pushes for the whole QUEUE_BOX sequence (QUEUE_BOX_INIT + QUEUE_BOX); reset on QUEUE_BOX_INIT entry
+        if (prev_sched_state != QUEUE_BOX_INIT && tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT)
+            qbox_push_count <= 0;
+        else if ((tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT ||
+                  tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX) && dut.jqh_sched_push)
+            qbox_push_count <= qbox_push_count + 1;
+
+        // QUEUE_BOX→something: print summary
+        if (prev_sched_state == QUEUE_BOX && tb_sched_state_t'(dut.u_scheduler.current_state) != QUEUE_BOX) begin
+            $display("  [qbox_end] cyc=%0d  box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d  pushed=%0d  expected=%0d",
+                     cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
+                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                     dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y,
+                     qbox_push_count,
+                     dut.u_scheduler.pixel_width_x * dut.u_scheduler.pixel_width_y);
+        end
+    end
+
+    // ── Job queue push monitor ────────────────────────────────────────────────
+    always @(posedge clk) begin
+        if (dut.jqh_flush) begin
+            $display("  [flush]   cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tlx=%0d  tly=%0d  pw_x=%0d  pw_y=%0d",
+                     cyc,
+                     dut.u_scheduler.current_state.name(),
+                     dut.u_scheduler.box_id,
+                     dut.u_scheduler.zoom_level,
+                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
+                     dut.u_scheduler.pixel_width_x,
+                     dut.u_scheduler.pixel_width_y);
+        end
+    end
+
+    // ── Log when tile_done fires for any tile ─────────────────────────────────
+    // Read tile_table one cycle after the rising edge so the registered write
+    // from tt_wr_quad_en has had time to land (avoids tt_filled=0 for fills).
+    logic [TOTAL_TILES-1:0] tile_done_prev;
+    logic [TOTAL_TILES-1:0] tile_done_rose;
+    always @(posedge clk) begin
+        tile_done_prev <= dut.tile_done;
+        tile_done_rose <= dut.tile_done & ~tile_done_prev;
+    end
+    always @(posedge clk) begin
+        for (int _i = 0; _i < TOTAL_TILES; _i++) begin
+            if (tile_done_rose[_i])
+                $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
+                         cyc, _i,
+                         dut.u_colour_bram.active ? dut.u_colour_bram.tile_wr_cnt_b[_i] : dut.u_colour_bram.tile_wr_cnt_a[_i],
+                         dut.u_tile_table.tile_table[_i][6],
+                         bram_cnt);
+        end
+    end
 
     // ── CSV tasks ─────────────────────────────────────────────────────────────
     task automatic dump_bram_csv(input string path);
@@ -339,6 +451,26 @@ module tb_pse_single;
                      cyc, bram_cnt, dram_cnt, ev_cnt);
         else
             $display("\n  [TIMEOUT] not complete after %0d cycles", _t);
+
+        $display("\n  ===== B2D DRAIN METRICS (max_iter=%0d, TILE_W=%0d) =====", MAX_I, TILE_W);
+        $display("  total cycles to complete     : %0d", cyc);
+        $display("  engine_done at cycle         : %0d", edone_cyc);
+        $display("  drain tail (edone->complete) : %0d cycles", cyc - edone_cyc);
+        $display("  DRAM words written           : %0d", dram_cnt);
+        $display("  --- whole-run b2d occupancy ---");
+        $display("  active (draining)            : %0d cyc", b2d_active_cyc);
+        $display("  SCAN while tiles pending     : %0d cyc  (true per-tile overhead)", b2d_scan_busy);
+        $display("  SCAN while starved (no work) : %0d cyc  (waiting on compute pipeline)", b2d_scan_idle);
+        $display("  cyc per DRAM word (active)   : %0.3f",
+                 (dram_cnt>0) ? real'(b2d_active_cyc)/real'(dram_cnt) : 0.0);
+        $display("  --- DRAIN TAIL breakdown (edone -> complete) ---");
+        $display("  tail active (draining)       : %0d cyc", tail_active);
+        $display("  tail SCAN pending (overhead) : %0d cyc", tail_scan_busy);
+        $display("  tail SCAN starved (waiting)  : %0d cyc", tail_scan_idle);
+        $display("  >>> tail is %s",
+                 (tail_active > (tail_scan_busy+tail_scan_idle)) ?
+                 "B2D-BOUND (b2d slow to drain)" : "STARVED (waiting for tiles/clear)");
+        $display("  ============================================\n");
 
         $display("\n  Writing CSVs...");
 `ifdef RUN_ORIG

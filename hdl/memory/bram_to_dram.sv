@@ -74,17 +74,22 @@ module bram_to_dram #(
     logic [TOTAL_TILES-1:0] pending;
     assign pending = tile_done & ~transferred;
 
+    // lowest pending tile via balanced tree (log-depth, Fmax-friendly) instead
+    // of a TOTAL_TILES-deep priority chain
     logic [TILE_IDX_W-1:0] next_tile;
     logic                  any_pending;
-    always_comb begin
-        next_tile   = '0;
-        any_pending = 1'b0;
-        for (int i = TOTAL_TILES-1; i >= 0; i--)
-            if (pending[i]) begin next_tile = TILE_IDX_W'(i); any_pending = 1'b1; end
-    end
+    lowest_set_tree #(.WIDTH(TOTAL_TILES)) u_next_tile (
+        .bits  (pending),
+        .any   (any_pending),
+        .index (next_tile)
+    );
+
+    // count of transferred tiles; replaces the wide (transferred == '1) reduction
+    logic [TILE_IDX_W:0] transferred_count;
 
     assign tt_rd_index        = cur_tile;
-    assign sixteenth_complete = (transferred == '1) && engine_done;
+    assign sixteenth_complete = (transferred_count == (TILE_IDX_W+1)'(TOTAL_TILES))
+                                && engine_done;
 
     logic [63:0] fill_word;
     always_comb begin
@@ -116,6 +121,7 @@ module bram_to_dram #(
         if (rst) begin
             state             <= SCAN;
             transferred       <= '0;
+            transferred_count <= '0;
             cur_tile          <= '0;
             fill_count        <= '0;
             rd_count          <= '0;
@@ -170,6 +176,7 @@ module bram_to_dram #(
                         wr_count   <= wr_count + 1'b1;
                         if (fill_count == WPT_W'(WORDS_PER_TILE - 1)) begin
                             transferred[cur_tile] <= 1'b1;
+                            transferred_count     <= transferred_count + 1'b1;
                             cache_valid_wr_en     <= 1'b1;
                             cache_valid_index     <= cur_tile;
                             cache_valid_value     <= 1'b0;
@@ -186,6 +193,7 @@ module bram_to_dram #(
                         fifo1_v <= 1'b0;
                         if (wr_count == WPT_W'(WORDS_PER_TILE - 1)) begin
                             transferred[cur_tile] <= 1'b1;
+                            transferred_count     <= transferred_count + 1'b1;
                             cache_valid_wr_en     <= 1'b1;
                             cache_valid_index     <= cur_tile;
                             cache_valid_value     <= 1'b1;
