@@ -96,6 +96,8 @@ always_ff @(posedge clk) begin
                                 julia_type <= data_in[9];
                                 magnitude_negation_encoding <= data_in[8:5];
                                 max_iteration <= data_in[4:0];
+
+
                                 if(data_in[9]) begin
                                     core_state <= LOADING_JULIA;
                                     general_counter <= 2'b00;
@@ -137,11 +139,11 @@ always_ff @(posedge clk) begin
                                                 general_counter <= 2'b01;
                                                 end
                                         2'b01 : begin 
-                                                starting_y_reg_2 <= data_in;
+                                                starting_x_reg_1 <= data_in;
                                                 general_counter <= 2'b10;
                                                 end
                                         2'b10 : begin 
-                                                starting_x_reg_1 <= data_in;
+                                                starting_y_reg_2 <= data_in;
                                                 general_counter <= 2'b11;
                                                 end
                                         2'b11 : begin
