@@ -181,7 +181,9 @@ module per_sixteenth_engine #(
 
         .wants_job          (jqh_wants_job),
         .grant              (jqh_grant),
+        .coord_skip         (jqh_first_time_out),    
         .coord_out          (jqh_coord_out),
+        .flush              (jqh_flush),
         .done               (cqh_done),
         .iter_x             (cqh_iter_x),
         .iter_y             (cqh_iter_y),

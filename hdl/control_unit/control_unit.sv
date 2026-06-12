@@ -34,6 +34,9 @@ module control_unit #(
     input  logic                    coord_skip,  // 1 = bottom-level quadtree tile, bypass BRAM check
     input  logic [PIXEL_ADDR_W-1:0] coord_out,
 
+    // dispatch queue flush reset
+    input logic                     flush,
+
     // result output handshake (independent of dispatch-side FSM)
     output logic                    done,
     output logic [PIXEL_W-1:0]      iter_x,
@@ -102,6 +105,9 @@ module control_unit #(
     logic                    dispatch_rd_en;
     logic [DISPATCH_DW-1:0]  dispatch_rd_data;
     logic                    dispatch_empty;
+
+    logic                    dispatch_queue_clear;
+    assign dispatch_queue_clear = rst | flush;
 
     assign cu_rd_x = pf_coord_a;
     assign cu_rd_y = pf_coord_b;
