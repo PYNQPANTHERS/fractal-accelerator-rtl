@@ -14,8 +14,7 @@
 //     format: col,row,iters  (matches render_frames.py)
 //   Run: python3 hdl/worker_core/render_frames.py --max-iter 128
 //
-//   Results collected via cu_wr_en/cu_wr_x/cu_wr_y/cu_wr_data (colour BRAM
-//   write path), which fires exactly once per computed pixel.
+//   Results collected via done/iter_x/iter_y/iter_colour (result output path).
 // ─────────────────────────────────────────────────────────────────────────────
 `timescale 1ns/1ps
 
@@ -33,18 +32,23 @@ module tb_cu_render;
 
     localparam time CLK_PERIOD = 10ns;
 
+    // ── BRAM layout (must match control_unit parameters) ─────────────────────
+    localparam int TILE_W         = 16;
+    localparam int TILE_BITS      = 4;   // $clog2(TILE_W)
+    localparam int PIX_PER_TILE   = TILE_W * TILE_W;
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;
+    localparam int TILES_PER_AXIS = IMAGE_SIZE / TILE_W;
+    localparam int BRAM_WORDS     = TILES_PER_AXIS * TILES_PER_AXIS * WORDS_PER_TILE;
+    localparam int BRAM_ADDR_W    = 13;  // $clog2(8192)
+
     // ── view ──────────────────────────────────────────────────────────────────
-    // zoom=0 → scale=512/pixel. 256 pixels × 512 = 131072 ≈ 2.0 span.
-    // pan_x = -1.0 = -65536, pan_y ≈ +1.0 = 65024
     localparam logic signed [DATA_WIDTH-1:0] PAN_X = 17'($signed(-65536));
     localparam logic signed [DATA_WIDTH-1:0] PAN_Y = 17'(65024);
     localparam logic [3:0] ZOOM = 4'd0;
 
-    // max_iter field 5'd1 → 2^(6+1) = 128 iterations
     localparam logic [4:0] MAX_ITER_FIELD = 5'd1;
     localparam int          MAX_ITER       = 128;
 
-    // Julia c = -0.7 + 0.27i
     localparam logic signed [DATA_WIDTH-1:0] JULIA_CX = 17'($signed(-45875));
     localparam logic signed [DATA_WIDTH-1:0] JULIA_CY = 17'(17695);
 
@@ -59,34 +63,37 @@ module tb_cu_render;
     logic [3:0]              zoom_level;
     logic [DATA_WIDTH-1:0]   c_x, c_y;
 
-    // scheduler handshake — coord_out packs {y[7:0], x[7:0]}
+    // scheduler handshake
     logic                    wants_job;
     logic                    grant;
     logic [PIXEL_ADDR_W-1:0] coord_out;
 
     // result path
     logic                    done;
-    logic [PIXEL_W:0]        iter_x;
-    logic [PIXEL_W:0]        iter_y;
+    logic [PIXEL_W-1:0]      iter_x;
+    logic [PIXEL_W-1:0]      iter_y;
     logic [7:0]              iter_colour;
 
-    // colour BRAM read (driven by control_unit)
+    // colour BRAM byte-read interface (check path)
     logic [PIXEL_W-1:0]      cu_rd_x, cu_rd_y;
     logic                    cu_rd_en;
     logic [7:0]              cu_rd_data;
 
-    // colour BRAM write (driven by control_unit — one pulse per computed pixel)
+    // colour BRAM full-word write (RMW result path)
     logic                    cu_wr_en;
-    logic [PIXEL_W-1:0]      cu_wr_x, cu_wr_y;
-    logic [7:0]              cu_wr_data;
+    logic [BRAM_ADDR_W-1:0]  cu_wr_waddr;
+    logic [63:0]             cu_wr_word;
 
-    // state BRAM (driven by control_unit)
+    // colour BRAM word-read for RMW pre-read
+    logic [BRAM_ADDR_W-1:0]  cu_rmw_rd_addr;
+    logic                    cu_rmw_rd_en;
+    logic [63:0]             cu_rmw_rd_data;
+
+    // state BRAM
     logic [PIXEL_W-1:0]      sb_x, sb_y;
     logic                    sb_rd, sb_we;
     logic [1:0]              sb_wstate;
     logic [1:0]              sb_rstate;
-
-    logic                    cu_tile_done_set;
 
     // ── DUT ──────────────────────────────────────────────────────────────────
     control_unit #(
@@ -123,33 +130,47 @@ module tb_cu_render;
         .cu_rd_en         (cu_rd_en),
         .cu_rd_data       (cu_rd_data),
         .cu_wr_en         (cu_wr_en),
-        .cu_wr_x          (cu_wr_x),
-        .cu_wr_y          (cu_wr_y),
-        .cu_wr_data       (cu_wr_data),
+        .cu_wr_waddr      (cu_wr_waddr),
+        .cu_wr_word       (cu_wr_word),
+        .cu_rmw_rd_addr   (cu_rmw_rd_addr),
+        .cu_rmw_rd_en     (cu_rmw_rd_en),
+        .cu_rmw_rd_data   (cu_rmw_rd_data),
         .sb_x             (sb_x),
         .sb_y             (sb_y),
         .sb_rd            (sb_rd),
         .sb_we            (sb_we),
         .sb_wstate        (sb_wstate),
-        .sb_rstate        (sb_rstate),
-        .cu_tile_done_set (cu_tile_done_set)
+        .sb_rstate        (sb_rstate)
     );
 
     // ── clock ─────────────────────────────────────────────────────────────────
     initial clk = 0;
     always #(CLK_PERIOD/2) clk = ~clk;
 
-    // ── colour BRAM model ─────────────────────────────────────────────────────
-    logic [7:0] cbram [0:IMAGE_SIZE-1][0:IMAGE_SIZE-1];
-    logic [7:0] cbram_rd_q;
+    // ── colour BRAM model (tile-major, 64-bit words) ──────────────────────────
+    // Layout: tile_addr = {y[7:4], x[7:4], y[3:0], x[3:0]}
+    //         word_addr = tile_addr[15:3],  byte_off = tile_addr[2:0]
+    logic [63:0] cbram_words [0:BRAM_WORDS-1];
+    logic [7:0]  cbram_rd_q;
+    logic [63:0] cu_rmw_rd_q;
+
+    // tile address for byte-read check path
+    logic [15:0] rd_ta;
+    assign rd_ta = {cu_rd_y[7:4], cu_rd_x[7:4], cu_rd_y[3:0], cu_rd_x[3:0]};
 
     always_ff @(posedge clk) begin
+        // byte-read for check path
         if (cu_rd_en)
-            cbram_rd_q <= cbram[cu_rd_x][cu_rd_y];
+            cbram_rd_q <= cbram_words[rd_ta[15:3]][rd_ta[2:0]*8 +: 8];
+        // word-read for RMW pre-read
+        if (cu_rmw_rd_en)
+            cu_rmw_rd_q <= cbram_words[cu_rmw_rd_addr];
+        // word-write (RMW result)
         if (cu_wr_en)
-            cbram[cu_wr_x][cu_wr_y] <= cu_wr_data;
+            cbram_words[cu_wr_waddr] <= cu_wr_word;
     end
-    assign cu_rd_data = cbram_rd_q;
+    assign cu_rd_data    = cbram_rd_q;
+    assign cu_rmw_rd_data = cu_rmw_rd_q;
 
     // ── state BRAM model (1-cycle read latency) ───────────────────────────────
     logic [1:0] sbram [0:IMAGE_SIZE-1][0:IMAGE_SIZE-1];
@@ -164,8 +185,7 @@ module tb_cu_render;
     assign sb_rstate = sbram_rd_q;
 
     // ── frame buffers ─────────────────────────────────────────────────────────
-    // Results collected via colour BRAM writes (cu_wr_en), which fire exactly
-    // once per computed pixel and carry the full pixel address.
+    // Results collected via done/iter_x/iter_y/iter_colour
     logic [PIXEL_W-1:0] frame_buf [0:2][0:IMAGE_SIZE*IMAGE_SIZE-1];
     int                 collected [3];
     int                 active_frame;
@@ -182,35 +202,31 @@ module tb_cu_render;
     initial begin : collector
         forever begin
             @(posedge clk);
-            if (cu_wr_en) begin
-                frame_buf[active_frame][cu_wr_y * IMAGE_SIZE + cu_wr_x] = cu_wr_data;
+            if (done) begin
+                frame_buf[active_frame][iter_y * IMAGE_SIZE + iter_x] = iter_colour;
                 collected[active_frame]++;
             end
         end
     end
 
     // ── tile tracking ─────────────────────────────────────────────────────────
-    // tile_done_addr: {col[7:4], row[7:4]} — stable while cu_tile_done_set high
     localparam int TILE_SZ    = 16;
-    localparam int TILE_COLS  = IMAGE_SIZE / TILE_SZ;   // 16
-    localparam int TILE_COUNT = TILE_COLS * TILE_COLS;  // 256
+    localparam int TILE_COLS  = IMAGE_SIZE / TILE_SZ;
+    localparam int TILE_COUNT = TILE_COLS * TILE_COLS;
 
-    wire [7:0] tile_done_addr = {cu_wr_x[7:4], cu_wr_y[7:4]};
-
-    int tile_done_count;
-    int tile_fired   [256];
-
-    always_ff @(posedge clk) begin
-        if (cu_tile_done_set) begin
-            tile_fired[tile_done_addr] <= tile_fired[tile_done_addr] + 1;
-            tile_done_count            <= tile_done_count + 1;
-        end
-    end
+    int tile_pixel_count [256];  // pixels received per tile
 
     task automatic reset_tile_tracking();
-        tile_done_count = 0;
-        for (int i = 0; i < 256; i++) tile_fired[i] = 0;
+        for (int i = 0; i < 256; i++) tile_pixel_count[i] = 0;
     endtask
+
+    logic [7:0] done_tile_addr;
+    assign done_tile_addr = {iter_x[7:4], iter_y[7:4]};
+
+    always_ff @(posedge clk) begin
+        if (done)
+            tile_pixel_count[done_tile_addr] <= tile_pixel_count[done_tile_addr] + 1;
+    end
 
     task automatic verify_tiles(input int fid, input string name);
         int fails;
@@ -218,30 +234,20 @@ module tb_cu_render;
         for (int tc = 0; tc < TILE_COLS; tc++) begin
             for (int tr = 0; tr < TILE_COLS; tr++) begin
                 automatic int ta = (tc << 4) | tr;
-                if (tile_fired[ta] != 1) begin
-                    $display("  FAIL frame%0d tile %02h (col=%0d row=%0d): fired %0d times",
-                             fid, ta, tc, tr, tile_fired[ta]);
+                if (tile_pixel_count[ta] != TILE_SZ * TILE_SZ) begin
+                    $display("  FAIL frame%0d tile %02h: got %0d pixels (expected %0d)",
+                             fid, ta, tile_pixel_count[ta], TILE_SZ * TILE_SZ);
                     fails++;
                 end
             end
         end
-        if (tile_done_count != TILE_COUNT) begin
-            $display("  FAIL frame%0d tile_done_count=%0d (expected %0d)",
-                     fid, tile_done_count, TILE_COUNT);
-            fails++;
-        end
         if (fails == 0)
-            $display("  tile check PASS: %0d/%0d tiles done for %s", TILE_COUNT, TILE_COUNT, name);
+            $display("  tile check PASS: all %0d tiles complete for %s", TILE_COUNT, name);
         else
-            $display("  tile check FAIL: %0d error(s) for %s", fails, name);
+            $display("  tile check FAIL: %0d tile(s) incomplete for %s", fails, name);
     endtask
 
     // ── scheduler model ───────────────────────────────────────────────────────
-    // Holds pixel coords {y[7:0], x[7:0]}.
-    // Responds on the RISING EDGE of wants_job: grant fires 1 cycle later.
-    // Level-based pop would double-consume on the accept cycle because
-    // frame_fsm.job_ready (= wants_job) is still high from the registered
-    // current_state on the same edge that accept fires.
     logic [PIXEL_ADDR_W-1:0] sched_queue [$];
     logic wants_job_q;
 
@@ -269,11 +275,11 @@ module tb_cu_render;
         c_x          = '0;
         c_y          = '0;
         sched_queue.delete();
+        for (int i = 0; i < BRAM_WORDS; i++)
+            cbram_words[i] = 64'h0;
         for (int i = 0; i < IMAGE_SIZE; i++)
-            for (int j = 0; j < IMAGE_SIZE; j++) begin
-                cbram[i][j] = 8'h00;
+            for (int j = 0; j < IMAGE_SIZE; j++)
                 sbram[i][j] = 2'b00;
-            end
         repeat (4) @(posedge clk);
         rst = 0;
         @(posedge clk);
@@ -287,8 +293,8 @@ module tb_cu_render;
                && timeout < 10_000_000) begin
             @(posedge clk);
             timeout++;
-            if (cu_wr_en) quiet = 0;
-            else          quiet = quiet + 1;
+            if (done) quiet = 0;
+            else      quiet = quiet + 1;
         end
         if (collected[fid] < IMAGE_SIZE * IMAGE_SIZE)
             $error("[%0t] drain timeout: got %0d / %0d",
@@ -319,7 +325,6 @@ module tb_cu_render;
         @(posedge clk);
         opcode_reset = 0;
 
-        // queue all pixel coords packed as {y[7:0], x[7:0]}
         for (int row = 0; row < IMAGE_SIZE; row++)
             for (int col = 0; col < IMAGE_SIZE; col++)
                 sched_queue.push_back({PIXEL_W'(row), PIXEL_W'(col)});
@@ -364,8 +369,6 @@ module tb_cu_render;
         frame_cycles[0] = 0;
         frame_cycles[1] = 0;
         frame_cycles[2] = 0;
-        tile_done_count = 0;
-        for (int i = 0; i < 256; i++) tile_fired[i] = 0;
 
         render_frame(0, 5'b00000, '0,       '0,       "Mandelbrot");
         render_frame(1, 5'b01100, '0,       '0,       "Burning Ship");

@@ -2,7 +2,10 @@
 // Write port is full-word; caller does RMW to merge a single byte
 
 module colour_bram #(
-    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+    parameter  int TILE_W        = 16,
+    localparam int TILES_PER_AXIS = 256 / TILE_W,
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS,
+    localparam int BRAM_ADDR_W    = $clog2(256 * 256 / 8)
 )(
     input  logic        clk,
     input  logic        rst,   // resets tile_wr_cnt only; mem is untouched
@@ -31,15 +34,12 @@ module colour_bram #(
     output logic [TOTAL_TILES-1:0] tile_done
 );
 
-    localparam int TILE_BITS       = $clog2(TILE_W);           // bits per axis within tile (4 for 16, 3 for 8)
-    localparam int PIX_PER_TILE    = TILE_W * TILE_W;          // pixels per tile (256 for 16, 64 for 8)
-    localparam int WORDS_PER_TILE  = PIX_PER_TILE / 8;         // 64-bit words per tile
-    localparam int TILES_PER_AXIS  = 256 / TILE_W;             // tiles per row/col
-    localparam int TOTAL_TILES     = TILES_PER_AXIS * TILES_PER_AXIS;
-    localparam int BRAM_WORDS      = TOTAL_TILES * WORDS_PER_TILE;
-    localparam int BRAM_ADDR_W     = $clog2(BRAM_WORDS);
-    localparam int TILE_IDX_W      = $clog2(TOTAL_TILES);      // bits for tile index
-    localparam int CNT_W           = $clog2(PIX_PER_TILE) + 1; // counter width; saturates at bit[CNT_W-1]
+    localparam int TILE_BITS      = $clog2(TILE_W);
+    localparam int PIX_PER_TILE   = TILE_W * TILE_W;
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;
+    localparam int BRAM_WORDS     = 256 * 256 / 8;
+    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES);
+    localparam int CNT_W          = $clog2(PIX_PER_TILE) + 1;
 
     (* ram_style = "block" *)
     logic [63:0] mem [0:BRAM_WORDS-1];

@@ -81,13 +81,15 @@ def render_image_csv(path):
 
 
 def render_bram_csv(path):
-    """write_index,x,y,colour  →  scatter on 256×256 (grey = never written)."""
+    """[write_index,]x,y,colour  →  scatter on 256×256 (grey = never written)."""
     rows = list(csv.DictReader(open(path)))
     img  = Image.new('RGB', (256, 256), GREY)
     px   = img.load()
     undef = 0
     for r in rows:
-        x, y  = int(r['x']), int(r['y'])
+        x_key = 'x' if 'x' in r else list(r.keys())[1]
+        y_key = 'y' if 'y' in r else list(r.keys())[2]
+        x, y  = int(r[x_key]), int(r[y_key])
         col_v = r['colour'].strip()
         rgb   = _rgb(col_v)
         if rgb == MAGENTA:
@@ -171,15 +173,27 @@ def render_dram_csv(path):
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
+def _sniff_format(path):
+    """Return 'bram', 'dram', or 'image' by inspecting CSV headers."""
+    with open(path) as f:
+        header = f.readline().strip().lower()
+    fields = [h.strip() for h in header.split(',')]
+    if 'addr_hex' in fields:
+        return 'dram'
+    if 'x' in fields and 'y' in fields:
+        return 'bram'
+    return 'image'
+
+
 def render_one(in_path, out_path=None):
     in_path  = Path(in_path)
     out_path = Path(out_path) if out_path else in_path.with_suffix('.png')
-    stem = in_path.stem.lower()
 
-    if 'bram' in stem and 'image' not in stem:
+    fmt = _sniff_format(in_path)
+    if fmt == 'bram':
         img, undef = render_bram_csv(in_path)
         kind = 'bram-scatter'
-    elif 'dram' in stem and 'image' not in stem:
+    elif fmt == 'dram':
         img, undef = render_dram_csv(in_path)
         kind = 'dram-reconstruct'
     else:

@@ -98,7 +98,12 @@ module per_sixteenth_engine #(
     logic [TOTAL_TILES-1:0] sched_tile_done_set;
     logic [TOTAL_TILES-1:0] sched_tile_done;
     logic [TOTAL_TILES-1:0] tile_done;
-    assign tile_done = cbram_tile_done | sched_tile_done;
+    logic [TOTAL_TILES-1:0] tile_filled_vec;
+    // sched_tile_done is safe only for flood-filled tiles: bram_to_dram takes the
+    // GENERATE_FILL path for those and never reads colour BRAM, so no race.
+    // Dispatched (non-filled) tiles must wait for cbram_tile_done, which fires only
+    // after bram_read_write completes all RMW writes for that tile.
+    assign tile_done = cbram_tile_done | (sched_tile_done & tile_filled_vec);
     logic jqh_queue_empty;
     logic jqh_queue_almost_full;
 
@@ -284,7 +289,8 @@ module per_sixteenth_engine #(
         .wr_quad_colour  (tt_wr_quad_colour),
         .rd_index        (tt_rd_index),
         .rd_is_filled    (tt_is_filled),
-        .rd_fill_colour  (tt_fill_colour)
+        .rd_fill_colour  (tt_fill_colour),
+        .rd_filled_vec   (tile_filled_vec)
     );
 
     bram_to_dram #(.TILE_W(TILE_W)) u_bram_to_dram (

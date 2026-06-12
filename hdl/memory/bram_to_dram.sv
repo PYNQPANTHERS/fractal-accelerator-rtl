@@ -1,7 +1,11 @@
 // Streams completed tiles from colour_bram to DDR3 via AXI HP
 
 module bram_to_dram #(
-    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+    parameter  int TILE_W        = 16,
+    localparam int TILES_PER_AXIS = 256 / TILE_W,
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS,
+    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES),
+    localparam int BRAM_ADDR_W    = $clog2(256 * 256 / 8)
 )(
     input  logic         clk,
     input  logic         rst,
@@ -38,12 +42,8 @@ module bram_to_dram #(
 
     localparam int TILE_BITS      = $clog2(TILE_W);
     localparam int PIX_PER_TILE   = TILE_W * TILE_W;
-    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;           // 64-bit words per tile
-    localparam int TILES_PER_AXIS = 256 / TILE_W;
-    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
-    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES);
-    localparam int BRAM_WORDS     = TOTAL_TILES * WORDS_PER_TILE;
-    localparam int BRAM_ADDR_W    = $clog2(BRAM_WORDS);
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;
+    localparam int BRAM_WORDS     = 256 * 256 / 8;
     localparam int WPT_W          = $clog2(WORDS_PER_TILE);     // bits to index word within tile
     localparam int BYTES_PER_TILE = PIX_PER_TILE;               // 1 byte per pixel
 

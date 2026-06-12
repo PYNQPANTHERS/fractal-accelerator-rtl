@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// sync_fifo
+//   Synchronous FIFO.
+//   - DEPTH must be a power of 2 for the wrap-around counter to work simply might need higher incase of jobs finishing before emptying 
+//   - Standard "show-ahead"
+// ─────────────────────────────────────────────────────────────────────────────
 module sync_fifo #(
     parameter  int DW    = 32,
     parameter  int DEPTH = 8,

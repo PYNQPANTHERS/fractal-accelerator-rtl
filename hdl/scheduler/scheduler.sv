@@ -25,10 +25,12 @@
 
 
 module scheduler #(
-    parameter int COORD_W      = 8,  // coordinate bit width (image = 2**COORD_W pixels per axis)
-    parameter int ZOOM_WIDTH   = 3,  // max zoom level bit width
-    parameter int COLOUR_WIDTH = 6,  // width of colour
-    parameter int TILE_W       = 16  // tile width/height in pixels (must be power of 2)
+    parameter  int COORD_W       = 8,
+    parameter  int ZOOM_WIDTH    = 3,
+    parameter  int COLOUR_WIDTH  = 6,
+    parameter  int TILE_W        = 16,
+    localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W,
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS
 )(
     // general logic
     input  logic                    clk,
@@ -69,8 +71,6 @@ module scheduler #(
 );
 
     localparam int TILE_BITS      = $clog2(TILE_W);
-    localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
-    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
 
 
 typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} my_states;
@@ -84,6 +84,7 @@ logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 logic border_pixel_valid;
+logic [COORD_W:0] normal_width;
 // Internal counter registers (only used by QUEUE_BOX)
 logic [COORD_W-1:0] qbox_x, qbox_y;
 
@@ -103,25 +104,22 @@ localparam int STACK_W    = 2*COORD_W + ZOOM_WIDTH + 2 + 2;
 logic [STACK_W-1:0] stack_data_in;
 logic [STACK_W-1:0] stack_data_out;
 
+logic [COORD_W-1:0]     popped_top_left_x, popped_top_left_y;
+logic [ZOOM_WIDTH-1:0]  popped_zoom;
+logic [1:0]             popped_box_id;
+logic                   popped_all_left, popped_all_top;
+
 // pack
-// Store the descended box's id, position and ancestor flags. On
-// INCREASE_LEVEL the entry is restored and routed through NEXT_BOX, which
-// advances to box_id+1 and computes the sibling's position.
 assign stack_data_in = {popped_all_top, popped_all_left,
                         box_id, zoom_level,
                         tly, tlx};
 
-// unpack: split via concatenation to avoid parameterized bit-select bounds
+// unpack
 logic [COORD_W-1:0]     _stk_tlx, _stk_tly;
 logic [ZOOM_WIDTH-1:0]  _stk_zoom;
 logic [1:0]             _stk_box;
 logic                   _stk_all_left, _stk_all_top;
 assign {_stk_all_top, _stk_all_left, _stk_box, _stk_zoom, _stk_tly, _stk_tlx} = stack_data_out;
-
-logic [COORD_W-1:0]     popped_top_left_x, popped_top_left_y;
-logic [ZOOM_WIDTH-1:0]  popped_zoom;
-logic [1:0]             popped_box_id;
-logic                   popped_all_left, popped_all_top;
 
 // popped_all_left/top are registered in always_ff, not continuous assigns
 assign popped_top_left_x  = _stk_tlx;
@@ -238,9 +236,6 @@ always_ff @ (posedge clk or posedge rst) begin
     end
 end
 
-
-// pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
-logic [COORD_W:0] normal_width;
 
 always_comb begin
 

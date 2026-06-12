@@ -85,6 +85,9 @@ module tb_top_level;
     end
 
 
+    longint cyc = 0;
+    always @(posedge clk) cyc++;
+
     logic sxt_complete_prev;
     always @(posedge clk) begin
         sxt_complete_prev <= dut.u_engine.u_bram_to_dram.sixteenth_complete;
@@ -99,9 +102,7 @@ module tb_top_level;
                      $countones(dut.u_engine.tile_done));
     end
 
-    longint cyc = 0;
     always @(posedge clk) begin
-        cyc++;
         if ((cyc % 100_000) == 0)
             $display("  [heartbeat] cyc=%0d  sxt=%0d  transferred=%0d  sched=%0d  seen=%0d  expected=%0d  inject=%0b  rfifo_empty=%0b  brw_state=%0d  cluster_done=%04b",
                      cyc, dut.u_sixteenth_controller.sixteenth_index,
@@ -312,8 +313,8 @@ module tb_top_level;
     endtask
 
     initial begin
-        $dumpfile("sim/waves/tb_top_level.vcd");
-        $dumpvars(0, tb_top_level);
+        //$dumpfile("sim/waves/tb_top_level.vcd");
+        //$dumpvars(0, tb_top_level);
 
         hp_axi_wr_ready = 1'b1;
 

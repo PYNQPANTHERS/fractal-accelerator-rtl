@@ -1,3 +1,8 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// cluster
+//   Pool of CLUSTER_SIZE core_top instances with local arbitration,
+//   pixel-address bookkeeping, and result buffering.
+// ─────────────────────────────────────────────────────────────────────────────
 module cluster #(
     parameter  int CLUSTER_SIZE        = 8,
     parameter  int PIXEL_ADDR_W        = 16,

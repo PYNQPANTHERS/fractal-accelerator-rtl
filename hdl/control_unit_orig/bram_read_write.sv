@@ -1,8 +1,19 @@
 
+// bram_read_write
+//   Arbitrates colour/state BRAM access between the FSM read path and result writes.
+//   Pixel writes are full-word RMW: PREREAD fetches the 64-bit word, WRITE merges
+//   the new byte and writes the word back - no aliasing between consecutive writes.
+
 module bram_read_write #(
-    parameter  int PIXEL_W    = 8,
-    parameter  int TILE_W     = 16,  // tile width/height in pixels (must be power of 2)
-    localparam int BRAM_ADDR_W = 13
+    parameter int PIXEL_W         = 8,
+    parameter int TILE_W          = 16,
+    localparam int TILE_BITS      = $clog2(TILE_W),
+    localparam int PIX_PER_TILE   = TILE_W * TILE_W,
+    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8,
+    localparam int TILES_PER_AXIS = 256 / TILE_W,
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS,
+    localparam int BRAM_WORDS     = TOTAL_TILES * WORDS_PER_TILE,
+    localparam int BRAM_ADDR_W    = $clog2(BRAM_WORDS)
 ) (
     input  logic                clk,
     input  logic                rst,
@@ -53,13 +64,6 @@ module bram_read_write #(
     output logic                read_done_pulse
 );
 
-    localparam int TILE_BITS      = $clog2(TILE_W);
-    localparam int PIX_PER_TILE   = TILE_W * TILE_W;
-    localparam int WORDS_PER_TILE = PIX_PER_TILE / 8;
-    localparam int TILES_PER_AXIS = 256 / TILE_W;
-    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
-    localparam int BRAM_WORDS     = TOTAL_TILES * WORDS_PER_TILE;
-
     typedef enum logic [2:0] {
         IDLE,
         READ,
@@ -69,26 +73,37 @@ module bram_read_write #(
 
     state_t current_state, next_state;
 
+    logic prev_load;
     logic started_write_pending;
     logic [PIXEL_W-1:0] a_latch, b_latch;
 
     // Reinject entries skip colour_bram write entirely - pop them immediately in IDLE.
-    logic res_valid_new;
+    logic res_valid_new;  // result that needs a real colour_bram write
     assign res_valid_new = res_valid && !res_reinject;
 
-    // Mask check_bram for one cycle after READ completes to prevent a spurious
-    // second READ while job_prefetch is still combinatorially in CHECKING state.
-    logic check_bram_gated;
-    assign check_bram_gated = check_bram && !read_done_pulse;
+    logic any_wr_pending;
+    assign any_wr_pending = started_write_pending || res_valid_new;
 
-    // "started" state is written immediately in IDLE (not via PREREAD→WRITE), so
-    // go_read is blocked while that write is pending to keep state BRAM address clean.
-    // PREREAD→WRITE is now used only for cluster results (colour BRAM RMW + "done" state).
     logic go_read, go_write;
-    assign go_read  = check_bram_gated && !started_write_pending;
-    assign go_write = res_valid_new    && !check_bram_gated;
+    always_comb begin
+        if (check_bram && any_wr_pending) begin
+            go_read  = ~prev_load;
+            go_write =  prev_load;
+        end else begin
+            go_read  =  check_bram;
+            go_write =  any_wr_pending && !check_bram;
+        end
+    end
+
+    logic bram_action;
+    assign bram_action = (current_state == IDLE) && (go_read || go_write);
+
+    logic serve_started, serve_result;
+    assign serve_started = started_write_pending;
+    assign serve_result  = res_valid_new && !started_write_pending;
 
     // Tile address encoding: {y[7:TILE_BITS], x[7:TILE_BITS], y[TILE_BITS-1:0], x[TILE_BITS-1:0]}
+    // Total = 2*(8-TILE_BITS) + 2*TILE_BITS = 16 bits; word addr = ta[15:3]
     logic [15:0]          res_ta;
     logic [BRAM_ADDR_W-1:0] res_waddr;
     logic [2:0]           res_boff;
@@ -121,6 +136,7 @@ module bram_read_write #(
 
     always_ff @(posedge clk) begin
         if (rst) begin
+            prev_load             <= 1'b0;
             started_write_pending <= 1'b0;
             a_latch               <= '0;
             b_latch               <= '0;
@@ -128,11 +144,13 @@ module bram_read_write #(
             started               <= 1'b0;
             done                  <= 1'b0;
             colour                <= 8'b0;
-            wr_waddr_q            <= '0;
-            wr_boff_q             <= '0;
-            wr_data_q             <= '0;
+            wr_waddr_q <= '0;
+            wr_boff_q  <= '0;
+            wr_data_q  <= '0;
         end else begin
-            if ((current_state == IDLE) && go_read) begin
+            if (bram_action) prev_load <= ~prev_load;
+
+            if (bram_action && go_read) begin
                 a_latch <= a;
                 b_latch <= b;
             end
@@ -146,20 +164,21 @@ module bram_read_write #(
                     started_write_pending <= 1'b1;
             end
 
-            // "started" write fires in the very next IDLE cycle after READ detects a miss.
-            // This keeps the state BRAM accurate with minimum latency, preventing the
-            // scheduler from seeing a stale "miss" on the next check of the same pixel.
-            if ((current_state == IDLE) && started_write_pending)
-                started_write_pending <= 1'b0;
-
+            // Latch write target on entry to PREREAD
             if (current_state == PREREAD) begin
                 wr_waddr_q <= res_waddr;
                 wr_boff_q  <= res_boff;
                 wr_data_q  <= res_colour;
             end
+
+
+            if (current_state == WRITE && serve_started)
+                started_write_pending <= 1'b0;
         end
     end
 
+    // Pulse high for the one cycle immediately after READ exits - this is the
+    // first cycle where done/miss/started hold fresh values for the current pixel.
     always_ff @(posedge clk) begin
         if (rst) read_done_pulse <= 1'b0;
         else     read_done_pulse <= (current_state == READ);
@@ -172,37 +191,28 @@ module bram_read_write #(
         merged_word[wr_boff_q*8 +: 8] = wr_data_q;
     end
 
-    // colour BRAM byte-read (check path)
+    // colour BRAM byte-read (frame_fsm check)
     assign bram_rd_en = (current_state == IDLE) && go_read;
 
     // colour BRAM RMW pre-read
     assign bram_rmw_rd_en   = (current_state == PREREAD);
-    assign bram_rmw_rd_addr = res_waddr;
+    assign bram_rmw_rd_addr = res_waddr;  // combinational from current res pixel
 
-    // colour BRAM full-word write — skip if pixel already done (sb_rstate[1]=1).
-    // sb_rstate during WRITE holds the state read in the preceding PREREAD cycle
-    // (sb_x/y = res_a/b), reflecting the pixel's state before this WRITE.
-    // Guards against any residual duplicate results inflating tile_wr_cnt.
-    assign bram_wr_en    = (current_state == WRITE) && !sb_rstate[1];
+    // colour BRAM full-word write
+    assign bram_wr_en    = (current_state == WRITE) && serve_result;
     assign bram_wr_waddr = wr_waddr_q;
     assign bram_wr_word  = merged_word;
 
-    // Pop reinject entries immediately in IDLE; pop normal results in WRITE.
-    assign res_rd_en = ((current_state == IDLE)  && res_valid && res_reinject)
-                     || (current_state == WRITE);
+    // Pop reinject entries immediately in IDLE (no write needed).
+    // Pop normal results in WRITE when the colour_bram write fires.
+    assign res_rd_en = ((current_state == IDLE) && res_valid && res_reinject)
+                     || ((current_state == WRITE) && serve_result);
 
     // state BRAM
-    // "started" (01) written immediately in IDLE when started_write_pending.
-    // "done"    (11) written in WRITE when cluster result is processed.
-    // Both are separate from colour BRAM and need no PREREAD.
-    assign sb_rd     = (current_state == IDLE) && go_read;
-    assign sb_we     = ((current_state == IDLE)  && started_write_pending)
-                     || (current_state == WRITE);
-    // Priority: check-READ uses current a/b; "started" write uses latched coords; "done" write uses res_a/b
-    assign sb_x      = sb_rd                                             ? a       :
-                       (current_state == IDLE && started_write_pending)  ? a_latch : res_a;
-    assign sb_y      = sb_rd                                             ? b       :
-                       (current_state == IDLE && started_write_pending)  ? b_latch : res_b;
-    assign sb_wstate = (started_write_pending && current_state == IDLE) ? 2'b01 : 2'b11;
+    assign sb_rd      = (current_state == IDLE) && go_read;
+    assign sb_we      = (current_state == WRITE);
+    assign sb_x       = sb_rd ? a : (serve_started ? a_latch : res_a);
+    assign sb_y       = sb_rd ? b : (serve_started ? b_latch : res_b);
+    assign sb_wstate  = serve_started ? 2'b01 : 2'b11;
 
 endmodule

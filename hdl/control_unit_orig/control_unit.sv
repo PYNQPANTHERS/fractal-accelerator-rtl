@@ -6,9 +6,9 @@ module control_unit #(
     parameter int JOB_DATA_W          = 18,
     parameter int PIXEL_W             = 8,
     parameter int OPCODE_W            = 5,
-    parameter  int LOWEST_MAX_ITER_POW = 6,
-    parameter  int TILE_W              = 16,  // tile width/height in pixels (must be power of 2)
-    localparam int BRAM_ADDR_W         = 13
+    parameter int LOWEST_MAX_ITER_POW = 6,
+    parameter int TILE_W              = 16, // tile width/height in pixels (must be power of 2)
+    localparam int BRAM_ADDR_W        = $clog2((256/TILE_W) * (256/TILE_W) * TILE_W * TILE_W / 8)
 ) (
     input  logic                    clk,
     input  logic                    rst,
@@ -27,12 +27,13 @@ module control_unit #(
     // julia c in full precision
     input  logic [DATA_WIDTH-1:0]   c_x,
     input  logic [DATA_WIDTH-1:0]   c_y,
+    
 
     // scheduler handshake (pixel coords in)
     output logic                    wants_job,
     input  logic                    grant,
-    input  logic                    coord_skip,  // 1 = bottom-level quadtree tile, bypass BRAM check
     input  logic [PIXEL_ADDR_W-1:0] coord_out,
+
 
     // result output handshake (independent of dispatch-side FSM)
     output logic                    done,
@@ -55,6 +56,7 @@ module control_unit #(
     output logic                    cu_rmw_rd_en,
     input  logic [63:0]             cu_rmw_rd_data,
 
+
     // state_bram
     output logic [PIXEL_W-1:0]      sb_x,
     output logic [PIXEL_W-1:0]      sb_y,
@@ -65,15 +67,14 @@ module control_unit #(
 
 );
 
+
     localparam int Z_WIDTH      = DATA_WIDTH + 1;
     localparam int Z_WIDE       = Z_WIDTH * 2 - 1;
+    localparam int CLUST_ADDR_W = (CLUSTER_COUNT > 1) ? $clog2(CLUSTER_COUNT) : 1;
     localparam int WORDS_NARROW = 2;
     localparam int WORDS_WIDE   = 4;
     localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W + 1; // +1 for reinject flag (MSB)
-    localparam int RES_FIFO_D   = CLUSTER_COUNT * 2;
-    // Dispatch FIFO: {z_real, z_imag, pixel_addr} — CLUSTER_COUNT must be a power of 2
-    localparam int DISPATCH_DW  = PIXEL_ADDR_W + Z_WIDE * 2;
-    localparam int DISPATCH_D   = CLUSTER_COUNT * 2;
+    localparam int RES_FIFO_D   = (CLUSTER_COUNT < 4) ? 4 : CLUSTER_COUNT * 2;
 
     logic julia, wide;
     assign julia = fractal_type[4];
@@ -82,29 +83,24 @@ module control_unit #(
     logic rst_i;
     assign rst_i = rst | opcode_reset;
 
-    logic opcode_broadcast_en, load_c_en;
-    logic start_load_pulse;
+    // forward-declare strobes so coord latch block can reference accept_pulse
+    logic opcode_broadcast_en, load_c_en, load_z_en;
+    logic start_load_pulse, accept_pulse, capture_winner;
+    logic check_bram;
+
+    logic [PIXEL_W-1:0] coord_a_q, coord_b_q;
+
+    always_ff @(posedge clk) begin
+        if (rst_i) begin
+            coord_a_q <= '0;
+            coord_b_q <= '0;
+        end else if (accept_pulse) begin
+            coord_a_q <= coord_out[7:0];
+            coord_b_q <= coord_out[15:8];
+        end
+    end
 
     logic [Z_WIDE-1:0] z_real, z_imag;
-
-    logic [PIXEL_W-1:0]      pf_coord_a, pf_coord_b;
-    logic                    pf_check_bram;
-    logic                    pf_inject_pending;
-    logic [PIXEL_ADDR_W-1:0] pf_inject_addr;
-    logic [PIXEL_W-1:0]      pf_inject_colour;
-    // TB-visible alias so both old and new CU share the same probe path
-    logic                    inject_pending;
-    assign inject_pending = pf_inject_pending;
-
-    logic                    dispatch_wr_en;
-    logic [DISPATCH_DW-1:0]  dispatch_wr_data;
-    logic                    dispatch_full;
-    logic                    dispatch_rd_en;
-    logic [DISPATCH_DW-1:0]  dispatch_rd_data;
-    logic                    dispatch_empty;
-
-    assign cu_rd_x = pf_coord_a;
-    assign cu_rd_y = pf_coord_b;
 
     translate #(
         .DATA_WIDTH (Z_WIDE),
@@ -112,8 +108,8 @@ module control_unit #(
     ) cheezy_translator (
         .pan_x     ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
         .pan_y     ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
-        .a         (pf_coord_a),
-        .b         (pf_coord_b),
+        .a         (coord_a_q),
+        .b         (coord_b_q),
         .zoom      (zoom_level),
         .sixteenth (sixteenth),
         .z_real    (z_real),
@@ -124,6 +120,11 @@ module control_unit #(
     logic [7:0] bram_colour;
     logic bram_read_done_pulse;
 
+    logic                    bram_res_pending;
+    logic [PIXEL_ADDR_W-1:0] bram_res_pixel_addr;
+    logic [PIXEL_W-1:0]      bram_res_data;
+
+    // declared early so the inject always_ff and res_fifo instantiation can both reference them
     logic                    res_fifo_wr_en;
     logic [RES_FIFO_DW-1:0]  res_fifo_wr_data;
     logic                    res_fifo_full;
@@ -131,13 +132,40 @@ module control_unit #(
     logic [RES_FIFO_DW-1:0]  res_fifo_rd_data;
     logic                    res_fifo_empty;
 
+    // Retrying injector: latch "done" detection (fires once per READ via read_done_pulse)
+    // and retry each cycle until res_fifo has space.
+    logic inject_pending;
+    logic [PIXEL_ADDR_W-1:0] inject_addr;
+    logic [PIXEL_W-1:0]      inject_colour;
+
+    always_ff @(posedge clk) begin
+        if (rst_i) begin
+            inject_pending <= 1'b0;
+            inject_addr    <= '0;
+            inject_colour  <= '0;
+        end else if (bram_read_done_pulse && bram_done && check_bram && !inject_pending) begin
+            inject_pending <= 1'b1;
+            inject_addr    <= {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
+            inject_colour  <= bram_colour;
+        end else if (inject_pending && !res_fifo_full) begin
+            inject_pending <= 1'b0;
+        end
+    end
+
+    assign bram_res_pending    = inject_pending;
+    assign bram_res_pixel_addr = inject_addr;
+    assign bram_res_data       = inject_colour;
+
+    assign cu_rd_x = coord_a_q[PIXEL_W-1:0];
+    assign cu_rd_y = coord_b_q[PIXEL_W-1:0];
+
     bram_read_write #(
         .PIXEL_W (PIXEL_W),
         .TILE_W  (TILE_W)
     ) u_bram_rw (
         .clk             (clk),
         .rst             (rst_i),
-        .check_bram      (pf_check_bram),
+        .check_bram      (check_bram),
         .a               (cu_rd_x),
         .b               (cu_rd_y),
         .bram_rd_en      (cu_rd_en),
@@ -167,58 +195,34 @@ module control_unit #(
         .read_done_pulse (bram_read_done_pulse)
     );
 
-    job_prefetch #(
-        .PIXEL_ADDR_W (PIXEL_ADDR_W),
-        .PIXEL_W      (PIXEL_W),
-        .Z_WIDE       (Z_WIDE)
-    ) u_prefetch (
-        .clk                 (clk),
-        .rst                 (rst_i),
-        .wants_job           (wants_job),
-        .grant               (grant),
-        .skip                (coord_skip),
-        .coord_out           (coord_out),
-        .coord_a             (pf_coord_a),
-        .coord_b             (pf_coord_b),
-        .z_real              (z_real),
-        .z_imag              (z_imag),
-        .check_bram          (pf_check_bram),
-        .bram_miss           (bram_miss),
-        .bram_done           (bram_done),
-        .bram_colour         (bram_colour),
-        .bram_read_done_pulse(bram_read_done_pulse),
-        .dispatch_wr_en      (dispatch_wr_en),
-        .dispatch_wr_data    (dispatch_wr_data),
-        .dispatch_full       (dispatch_full),
-        .inject_pending      (pf_inject_pending),
-        .inject_addr         (pf_inject_addr),
-        .inject_colour       (pf_inject_colour),
-        .res_fifo_full       (res_fifo_full)
-    );
+    logic [CLUSTER_COUNT-1:0] chosen_onehot;
+    logic [CLUST_ADDR_W-1:0]  chosen_idx;
+    logic                     chosen_valid;
+    logic                     any_cluster_free;
 
-    // Dispatch FIFO — {z_real, z_imag, pixel_addr} entries ready for cluster dispatch
-    sync_fifo #(
-        .DW    (DISPATCH_DW),
-        .DEPTH (DISPATCH_D)
-    ) u_dispatch_fifo (
-        .clk    (clk),
-        .rst    (rst_i),
-        .wr_en  (dispatch_wr_en),
-        .wr_data(dispatch_wr_data),
-        .full   (dispatch_full),
-        .rd_en  (dispatch_rd_en),
-        .rd_data(dispatch_rd_data),
-        .empty  (dispatch_empty)
-    );
+    localparam int SEQ_CNT_W = $clog2(WORDS_WIDE + 1 + 1);
+    logic [SEQ_CNT_W-1:0] word_idx;
+    logic                 load_active, load_last;
+    logic [SEQ_CNT_W-1:0] n_words;
+    assign n_words = wide ? WORDS_WIDE[SEQ_CNT_W-1:0] : WORDS_NARROW[SEQ_CNT_W-1:0];
 
+    logic [JOB_DATA_W-1:0] disp_job_data;
 
-    localparam int CLUST_ADDR_W = (CLUSTER_COUNT > 1) ? $clog2(CLUSTER_COUNT) : 1;
+    logic [CLUSTER_COUNT-1:0]  cluster_wants_job;
+    logic [CLUSTER_COUNT-1:0]  cluster_disp_valid;
+    logic [PIXEL_ADDR_W-1:0]   disp_pixel_addr;
+    logic [CLUSTER_COUNT-1:0]  cluster_done;
+    logic [CLUSTER_COUNT-1:0]  cluster_result_ready;
+    logic [PIXEL_ADDR_W-1:0]   cluster_result_pixel_addr [CLUSTER_COUNT];
+    logic [PIXEL_W-1:0]        cluster_iter_colour       [CLUSTER_COUNT];
 
-    logic [CLUSTER_COUNT-1:0] cluster_wants_job;
-    logic [CLUSTER_COUNT-1:0] cluster_done;
-    logic [CLUSTER_COUNT-1:0] cluster_result_ready;
-    logic [PIXEL_ADDR_W-1:0]  cluster_result_pixel_addr [CLUSTER_COUNT];
-    logic [PIXEL_W-1:0]       cluster_iter_colour       [CLUSTER_COUNT];
+    assign disp_pixel_addr   = {coord_a_q[PIXEL_W-1:0], coord_b_q[PIXEL_W-1:0]};
+    assign cluster_disp_valid = load_z_en ? chosen_onehot : '0;
+
+    
+                               
+    logic opcode_reset_i;
+    assign opcode_reset_i = opcode_broadcast_en | opcode_reset;
 
     logic [CLUSTER_COUNT-1:0] res_arb_onehot;
     logic [CLUST_ADDR_W-1:0]  res_arb_idx;
@@ -234,14 +238,16 @@ module control_unit #(
     always_comb begin
         res_fifo_wr_en       = 1'b0;
         res_fifo_wr_data     = '0;
+        cluster_result_ready = '0;
 
-        if (pf_inject_pending) begin
+        if (bram_res_pending) begin
             res_fifo_wr_en   = !res_fifo_full;
-            res_fifo_wr_data = { 1'b1, pf_inject_addr, pf_inject_colour };
+            res_fifo_wr_data = { 1'b1, bram_res_pixel_addr, bram_res_data };  // reinject flag set
         end else if (res_arb_any && !res_fifo_full) begin
-            res_fifo_wr_en   = 1'b1;
-            res_fifo_wr_data = { 1'b0, cluster_result_pixel_addr[res_arb_idx],
-                                 cluster_iter_colour[res_arb_idx] };
+            res_fifo_wr_en       = 1'b1;
+            res_fifo_wr_data     = { 1'b0, cluster_result_pixel_addr[res_arb_idx],
+                                     cluster_iter_colour[res_arb_idx] };
+            cluster_result_ready = res_arb_onehot;
         end
     end
 
@@ -264,11 +270,6 @@ module control_unit #(
     assign iter_y     = res_fifo_wr_data[RES_FIFO_DW-2-PIXEL_W  -: PIXEL_W];
     assign iter_colour= res_fifo_wr_data[7:0];
 
-    localparam int SEQ_CNT_W = $clog2(WORDS_WIDE + 1 + 1);
-    logic [SEQ_CNT_W-1:0] word_idx;
-    logic                 load_active, load_last;
-    logic [SEQ_CNT_W-1:0] n_words;
-    assign n_words = wide ? WORDS_WIDE[SEQ_CNT_W-1:0] : WORDS_NARROW[SEQ_CNT_W-1:0];
 
     frame_fsm u_fsm (
         .clk                 (clk),
@@ -276,10 +277,23 @@ module control_unit #(
         .start_flag          (start_flag),
         .julia               (julia),
         .wide                (wide),
+        .job_valid           (grant),
+        .job_ready           (wants_job),
         .load_last           (load_last),
+        .any_cluster_free    (any_cluster_free),
+        .bram_result_valid   (bram_read_done_pulse),
+        .inject_stall        (inject_pending),
+        .bram_miss           (bram_miss),
+        .bram_started        (bram_started),
+        .bram_done           (bram_done),
+        .check_bram          (check_bram),
+        .pixel_skip          (),
         .opcode_broadcast_en (opcode_broadcast_en),
         .load_c_en           (load_c_en),
-        .start_load_pulse    (start_load_pulse)
+        .load_z_en           (load_z_en),
+        .start_load_pulse    (start_load_pulse),
+        .accept_pulse        (accept_pulse),
+        .capture_winner      (capture_winner)
     );
 
     load_sequencer #(
@@ -294,63 +308,37 @@ module control_unit #(
         .load_last   (load_last)
     );
 
-    logic opcode_reset_i;
-    assign opcode_reset_i = opcode_broadcast_en | opcode_reset;
-
-    always_comb begin
-        cluster_result_ready = '0;
-        if (res_arb_any && !res_fifo_full && !pf_inject_pending)
-            cluster_result_ready = res_arb_onehot;
-    end
-
-    logic [CLUSTER_COUNT-1:0]  dispatch_req_per;
-    logic [CLUSTER_COUNT-1:0]  dispatch_grant_per;
-    logic                      dispatch_any_req;
-    logic [CLUSTER_COUNT-1:0]  disp_valid_per;
-    logic [PIXEL_ADDR_W-1:0]   disp_pixel_addr_per [CLUSTER_COUNT];
-    logic [JOB_DATA_W-1:0]     disp_job_data_per   [CLUSTER_COUNT];
-
-    // Priority-encoded FIFO arbiter: one pop per cycle, lowest index wins ties
-    // cant think of better way tbh there is a writing bottle neck
-    priority_encoder #(.BUS_WIDTH(CLUSTER_COUNT)) u_dispatch_arb (
-        .core_bus    (dispatch_req_per),
-        .core_select (dispatch_grant_per),
-        .core_address(),
-        .any_valid   (dispatch_any_req)
+    cluster_arbiter #(
+        .CLUSTER_COUNT (CLUSTER_COUNT)
+    ) u_arb (
+        .clk               (clk),
+        .rst               (rst_i),
+        .cluster_wants_job (cluster_wants_job),
+        .capture           (capture_winner),
+        .hold              (load_z_en),
+        .chosen_onehot     (chosen_onehot),
+        .chosen_idx        (chosen_idx),
+        .chosen_valid      (chosen_valid),
+        .any_free          (any_cluster_free)
     );
-    assign dispatch_rd_en = dispatch_any_req;
 
-    generate
-        for (genvar g = 0; g < CLUSTER_COUNT; g++) begin : gen_dispatch_paths
-            cluster_dispatch_path #(
-                .DATA_WIDTH   (DATA_WIDTH),
-                .JOB_DATA_W   (JOB_DATA_W),
-                .OPCODE_W     (OPCODE_W),
-                .PIXEL_ADDR_W (PIXEL_ADDR_W),
-                .Z_WIDE       (Z_WIDE),
-                .MAX_WORDS    (WORDS_WIDE + 1)
-            ) u_disp (
-                .clk               (clk),
-                .rst               (rst_i),
-                .wide              (wide),
-                .opcode_broadcast_en(opcode_broadcast_en),
-                .load_c_en         (load_c_en),
-                .shared_word_idx   (word_idx[1:0]),
-                .c_real            (c_x),
-                .c_imag            (c_y),
-                .fractal_type      (fractal_type),
-                .max_iter          (max_iter),
-                .dispatch_empty    (dispatch_empty),
-                .dispatch_rd_data  (dispatch_rd_data),
-                .dispatch_req      (dispatch_req_per[g]),
-                .dispatch_grant    (dispatch_grant_per[g]),
-                .cluster_wants_job (cluster_wants_job[g]),
-                .disp_valid        (disp_valid_per[g]),
-                .disp_pixel_addr   (disp_pixel_addr_per[g]),
-                .disp_job_data     (disp_job_data_per[g])
-            );
-        end
-    endgenerate
+    job_datapath #(
+        .DATA_WIDTH      (DATA_WIDTH),
+        .JOB_DATA_W      (JOB_DATA_W),
+        .OPCODE_W        (OPCODE_W)
+    ) u_dp (
+        .z_real          (z_real),
+        .z_imag          (z_imag),
+        .wide            (wide),
+        .word_idx        (word_idx[1:0]),
+        .opcode_en       (opcode_broadcast_en),
+        .load_c_en       (load_c_en),
+        .c_real          (c_x),
+        .c_imag          (c_y),
+        .fractal_type    (fractal_type),
+        .max_iter        (max_iter),
+        .disp_job_data   (disp_job_data)
+    );
 
     generate
         for (genvar g = 0; g < CLUSTER_COUNT; g++) begin : gen_clusters
@@ -365,9 +353,9 @@ module control_unit #(
                 .rst               (rst_i),
                 .wide              (wide),
                 .opcode_reset      (opcode_reset_i),
-                .disp_valid        (disp_valid_per[g]),
-                .disp_pixel_addr   (disp_pixel_addr_per[g]),
-                .disp_job_data     (disp_job_data_per[g]),
+                .disp_valid        (cluster_disp_valid[g]),
+                .disp_pixel_addr   (disp_pixel_addr),
+                .disp_job_data     (disp_job_data),
                 .cluster_wants_job (cluster_wants_job[g]),
                 .result_valid      (cluster_done[g]),
                 .result_pixel_addr (cluster_result_pixel_addr[g]),
@@ -376,4 +364,6 @@ module control_unit #(
             );
         end
     endgenerate
+
+
 endmodule

@@ -1,9 +1,9 @@
 `timescale 1ns/1ps
 
 // Single-run per_sixteenth_engine testbench.
-// Uses top-full config (pan=-2.0/+2.0, zoom=0, max_iter=3).
-// Runs exactly once — no resets, no reruns.
-// Waits for sixteenth_complete then dumps bram/dram/image CSVs.
+// Compile with -DRUN_ORIG to use orig_single_* output files (pse-single-orig target).
+// Logs pixel events (ACCEPT/BRAM-HIT/MISS/STARTED/INJECT/CLUSTER/BRAMWR/DRAMWR)
+// to *_events.csv for post-sim pixel-trace analysis.
 
 module tb_pse_single;
 
@@ -31,9 +31,8 @@ module tb_pse_single;
     wire         axi_wr_en;
     logic        axi_wr_ready;
 
-    // Match top-full config exactly
-    localparam logic [31:0] PAN_X = 32'hFFFF_0000;  // -1.0 Q1.16
-    localparam logic [31:0] PAN_Y = 32'h0001_0000;  // +1.0 Q1.16
+    localparam logic [31:0] PAN_X = 32'hFFFF_0000;
+    localparam logic [31:0] PAN_Y = 32'h0001_0000;
     localparam logic [31:0] ZOOM  = 32'd1;
     localparam logic [11:0] MAX_I = 12'd3;
     localparam logic [31:0] BASE  = 32'h0000_0000;
@@ -59,7 +58,7 @@ module tb_pse_single;
         .axi_wr_ready       (axi_wr_ready)
     );
 
-    // ── Capture arrays ───────────────────────────────────────────────────────
+    // ── Capture arrays (BRAM writes, DRAM writes) ─────────────────────────────
     localparam int MAX_BRAM = 65536;
     localparam int MAX_DRAM = 8192;
 
@@ -86,94 +85,124 @@ module tb_pse_single;
         end
     end
 
-    // ── Heartbeat ─────────────────────────────────────────────────────────────
+    // ── Pixel event log ──────────────────────────────────────────────────────
+    // kind codes (stored as integer in CSV, decoded by compare_pixels.py):
+    //   65='A' ACCEPT    - coord accepted from scheduler
+    //   72='H' BRAM_HIT  - BRAM check: pixel already done  (inject will fire)
+    //   83='S' BRAM_STA  - BRAM check: pixel started (in-flight)
+    //   77='M' BRAM_MIS  - BRAM check: pixel fresh miss
+    //   73='I' INJECT    - inject fires into res_fifo (reused done colour)
+    //   67='C' CLUSTER   - cluster result fires into res_fifo
+    //   66='B' BRAMWR    - colour BRAM RMW write completes
+    //   68='D' DRAMWR    - AXI pixel write to DRAM
+    localparam int MAX_EV = 500_000;
+
+    longint      ev_cyc  [0:MAX_EV-1];
+    logic [7:0]  ev_px   [0:MAX_EV-1];
+    logic [7:0]  ev_py   [0:MAX_EV-1];
+    logic [7:0]  ev_col  [0:MAX_EV-1];
+    logic [7:0]  ev_kind [0:MAX_EV-1]; // ASCII kind code
+    int          ev_cnt = 0;
+
+    task automatic log_ev(input longint c, input logic [7:0] x, y, col, k);
+        if (ev_cnt < MAX_EV) begin
+            ev_cyc [ev_cnt] = c;
+            ev_px  [ev_cnt] = x;
+            ev_py  [ev_cnt] = y;
+            ev_col [ev_cnt] = col;
+            ev_kind[ev_cnt] = k;
+            ev_cnt++;
+        end
+    endtask
+
     longint cyc = 0;
     always @(posedge clk) cyc++;
+
+    // Intermediate wires to avoid local-var-in-always-block issues in Icarus
+    logic [7:0] bram_check_x, bram_check_y;
+    assign bram_check_x = dut.u_control_unit.u_bram_rw.a_latch;
+    assign bram_check_y = dut.u_control_unit.u_bram_rw.b_latch;
+
+    // ── Event monitors (common to both CU versions) ───────────────────────────
+
+    // ACCEPT: coord granted to CU
+    always @(posedge clk)
+        if (dut.u_control_unit.wants_job && dut.u_control_unit.grant)
+            log_ev(cyc,
+                   dut.u_control_unit.coord_out[7:0],
+                   dut.u_control_unit.coord_out[15:8],
+                   8'h00, 8'd65); // 'A'
+
+    // BRAM check result (read_done_pulse fires one cycle after READ state exits)
+    always @(posedge clk)
+        if (dut.u_control_unit.u_bram_rw.read_done_pulse) begin
+            if (dut.u_control_unit.u_bram_rw.done)
+                log_ev(cyc, bram_check_x, bram_check_y,
+                       dut.u_control_unit.u_bram_rw.colour, 8'd72); // 'H'
+            else if (dut.u_control_unit.u_bram_rw.started)
+                log_ev(cyc, bram_check_x, bram_check_y, 8'h00, 8'd83); // 'S'
+            else
+                log_ev(cyc, bram_check_x, bram_check_y, 8'h00, 8'd77); // 'M'
+        end
+
+    // INJECT: pixel reused from BRAM (reinject flag set in res_fifo_wr_data MSB)
+    always @(posedge clk)
+        if (dut.u_control_unit.res_fifo_wr_en &&
+                dut.u_control_unit.res_fifo_wr_data[dut.u_control_unit.RES_FIFO_DW-1])
+            log_ev(cyc,
+                   dut.u_control_unit.iter_x,
+                   dut.u_control_unit.iter_y,
+                   dut.u_control_unit.iter_colour, 8'd73); // 'I'
+
+    // CLUSTER: fresh cluster result
+    always @(posedge clk)
+        if (dut.u_control_unit.res_fifo_wr_en &&
+                !dut.u_control_unit.res_fifo_wr_data[dut.u_control_unit.RES_FIFO_DW-1])
+            log_ev(cyc,
+                   dut.u_control_unit.iter_x,
+                   dut.u_control_unit.iter_y,
+                   dut.u_control_unit.iter_colour, 8'd67); // 'C'
+
+    // BRAMWR: colour BRAM write completes
+    always @(posedge clk)
+        if (dut.u_control_unit.u_bram_rw.bram_wr_en)
+            log_ev(cyc,
+                   dut.u_control_unit.u_bram_rw.res_a,
+                   dut.u_control_unit.u_bram_rw.res_b,
+                   dut.u_control_unit.u_bram_rw.wr_data_q, 8'd66); // 'B'
+
+    // DRAMWR: decode AXI 64-bit word into 8 pixel events
+    logic [31:0] dram_ev_off;
+    int          dram_ev_tile, dram_ev_wt, dram_ev_tc, dram_ev_tr;
+    int          dram_ev_rit, dram_ev_cs, dram_ev_px, dram_ev_py;
+    localparam int LOG2_BPT_EV = $clog2(TILE_W * TILE_W);
+    localparam int WPR_EV      = TILE_W / 8;
+
+    always @(posedge clk)
+        if (axi_wr_en && axi_wr_ready) begin
+            dram_ev_off  = axi_wr_addr - BASE;
+            dram_ev_tile = dram_ev_off >> LOG2_BPT_EV;
+            dram_ev_wt   = dram_ev_off[LOG2_BPT_EV-1:3];
+            dram_ev_tc   = dram_ev_tile % TILES_P_AXIS;
+            dram_ev_tr   = dram_ev_tile / TILES_P_AXIS;
+            dram_ev_rit  = dram_ev_wt / WPR_EV;
+            dram_ev_cs   = (dram_ev_wt % WPR_EV) * 8;
+            for (int b = 0; b < 8; b++) begin
+                dram_ev_px = dram_ev_tc * TILE_W + dram_ev_cs + b;
+                dram_ev_py = dram_ev_tr * TILE_W + dram_ev_rit;
+                if (dram_ev_px < 256 && dram_ev_py < 256)
+                    log_ev(cyc, dram_ev_px[7:0], dram_ev_py[7:0],
+                           axi_wr_data[b*8 +: 8], 8'd68); // 'D'
+            end
+        end
+
+    // ── Heartbeat ─────────────────────────────────────────────────────────────
     always @(posedge clk)
         if ((cyc % 100_000) == 0)
-            $display("  [hb] cyc=%0d  eng_done=%0b  sxt_complete=%0b  transferred=%0d  bram=%0d  dram=%0d  sched=%0d",
+            $display("  [hb] cyc=%0d  eng_done=%0b  sxt_complete=%0b  transferred=%0d  bram=%0d  dram=%0d  events=%0d",
                      cyc, engine_done, sixteenth_complete,
                      $countones(dut.u_bram_to_dram.transferred),
-                     bram_cnt, dram_cnt, dut.u_scheduler.current_state);
-
-    // ── Box-decision and QUEUE_BOX-complete monitors ─────────────────────────
-    // Track previous scheduler state to detect transitions
-    typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} tb_sched_state_t;
-    tb_sched_state_t prev_sched_state;
-    int qbox_push_count;
-    always @(posedge clk) begin
-        prev_sched_state <= tb_sched_state_t'(dut.u_scheduler.current_state);
-
-        // WAIT→something: print the decision
-        if (prev_sched_state == WAIT && tb_sched_state_t'(dut.u_scheduler.current_state) != WAIT) begin
-            case (tb_sched_state_t'(dut.u_scheduler.current_state))
-                FILL_BOX:      $display("  [decision] cyc=%0d  FILL      box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
-                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
-                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
-                DESCEND_LEVEL: $display("  [decision] cyc=%0d  DESCEND   box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
-                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
-                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
-                QUEUE_BOX_INIT:$display("  [decision] cyc=%0d  QUEUE_ALL box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d",
-                                        cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
-                                        dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                                        dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y);
-                default: ;
-            endcase
-        end
-
-        // Count pushes for the whole QUEUE_BOX sequence (QUEUE_BOX_INIT + QUEUE_BOX); reset on QUEUE_BOX_INIT entry
-        if (prev_sched_state != QUEUE_BOX_INIT && tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT)
-            qbox_push_count <= 0;
-        else if ((tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX_INIT ||
-                  tb_sched_state_t'(dut.u_scheduler.current_state) == QUEUE_BOX) && dut.jqh_sched_push)
-            qbox_push_count <= qbox_push_count + 1;
-
-        // QUEUE_BOX→something: print summary
-        if (prev_sched_state == QUEUE_BOX && tb_sched_state_t'(dut.u_scheduler.current_state) != QUEUE_BOX) begin
-            $display("  [qbox_end] cyc=%0d  box_id=%0b  zoom=%0d  tile=(%0d,%0d)  pw_x=%0d  pw_y=%0d  pushed=%0d  expected=%0d",
-                     cyc, dut.u_scheduler.box_id, dut.u_scheduler.zoom_level,
-                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                     dut.u_scheduler.pixel_width_x, dut.u_scheduler.pixel_width_y,
-                     qbox_push_count,
-                     dut.u_scheduler.pixel_width_x * dut.u_scheduler.pixel_width_y);
-        end
-    end
-
-    // ── Job queue push monitor ────────────────────────────────────────────────
-    always @(posedge clk) begin
-        if (dut.jqh_flush) begin
-            $display("  [flush]   cyc=%0d  state=%s  box_id=%0b  zoom=%0d  tlx=%0d  tly=%0d  pw_x=%0d  pw_y=%0d",
-                     cyc,
-                     dut.u_scheduler.current_state.name(),
-                     dut.u_scheduler.box_id,
-                     dut.u_scheduler.zoom_level,
-                     dut.u_scheduler.tlx, dut.u_scheduler.tly,
-                     dut.u_scheduler.pixel_width_x,
-                     dut.u_scheduler.pixel_width_y);
-        end
-    end
-
-    // ── Log when tile_done fires for any tile ─────────────────────────────────
-    // Read tile_table one cycle after the rising edge so the registered write
-    // from tt_wr_quad_en has had time to land (avoids tt_filled=0 for fills).
-    logic [TOTAL_TILES-1:0] tile_done_prev;
-    logic [TOTAL_TILES-1:0] tile_done_rose;
-    always @(posedge clk) begin
-        tile_done_prev <= dut.tile_done;
-        tile_done_rose <= dut.tile_done & ~tile_done_prev;
-    end
-    always @(posedge clk) begin
-        for (int _i = 0; _i < TOTAL_TILES; _i++) begin
-            if (tile_done_rose[_i])
-                $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
-                         cyc, _i,
-                         dut.u_colour_bram.active ? dut.u_colour_bram.tile_wr_cnt_b[_i] : dut.u_colour_bram.tile_wr_cnt_a[_i],
-                         dut.u_tile_table.tile_table[_i][6],
-                         bram_cnt);
-        end
-    end
+                     bram_cnt, dram_cnt, ev_cnt);
 
     // ── CSV tasks ─────────────────────────────────────────────────────────────
     task automatic dump_bram_csv(input string path);
@@ -201,34 +230,26 @@ module tb_pse_single;
         $display("  wrote %s  (%0d rows)", path, dram_cnt);
     endtask
 
-    task automatic dump_image_csv(input string path, input logic [31:0] base);
-        // Address layout from bram_to_dram:
-        //   offset = (tile_idx << log2(BYTES_PER_TILE)) + (word_in_tile << 3)
-        // BYTES_PER_TILE = TILE_W*TILE_W, log2 = 2*log2(TILE_W)
-        // word_in_tile selects row/col within tile:
-        //   words_per_row = TILE_W/8
-        //   row_in_tile   = word_in_tile / words_per_row
-        //   col_word      = word_in_tile % words_per_row  (which group of 8 px in the row)
-        localparam int BYTES_PER_TILE_L = TILE_W * TILE_W;
-        localparam int LOG2_BPT         = $clog2(BYTES_PER_TILE_L);  // tile offset shift
-        localparam int WORDS_PER_ROW    = TILE_W / 8;                 // 1 for TW=8, 2 for TW=16
-        localparam int LOG2_WPR         = $clog2(WORDS_PER_ROW > 0 ? WORDS_PER_ROW : 1);
+    task automatic dump_image_csv(input string path);
+        localparam int LOG2_BPT  = $clog2(TILE_W * TILE_W);
+        localparam int WPR       = TILE_W / 8;
         logic [7:0] image [0:255][0:255];
         integer fd;
-        int tile_idx, word_in_tile, tile_col, tile_row, row_in_tile, col_start, px, py;
+        int tile_idx, wt, tc, tr, rit, cs, px, py;
         logic [31:0] off;
-        for (int r = 0; r < 256; r++) for (int c = 0; c < 256; c++) image[r][c] = 8'hFF;
+        for (int r = 0; r < 256; r++)
+            for (int c = 0; c < 256; c++) image[r][c] = 8'hFF;
         for (int i = 0; i < dram_cnt; i++) begin
-            off          = dram_addr[i] - base;
-            tile_idx     = off >> LOG2_BPT;
-            word_in_tile = off[LOG2_BPT-1:3];
-            tile_col     = tile_idx % TILES_P_AXIS;
-            tile_row     = tile_idx / TILES_P_AXIS;
-            row_in_tile  = word_in_tile >> LOG2_WPR;
-            col_start    = (word_in_tile % WORDS_PER_ROW) * 8;
+            off      = dram_addr[i] - BASE;
+            tile_idx = off >> LOG2_BPT;
+            wt       = off[LOG2_BPT-1:3];
+            tc       = tile_idx % TILES_P_AXIS;
+            tr       = tile_idx / TILES_P_AXIS;
+            rit      = wt / WPR;
+            cs       = (wt % WPR) * 8;
             for (int b = 0; b < 8; b++) begin
-                px = tile_col * TILE_W + col_start + b;
-                py = tile_row * TILE_W + row_in_tile;
+                px = tc * TILE_W + cs + b;
+                py = tr * TILE_W + rit;
                 if (px < 256 && py < 256) image[py][px] = dram_data[i][b*8 +: 8];
             end
         end
@@ -241,26 +262,23 @@ module tb_pse_single;
         $display("  wrote %s  (256x256)", path);
     endtask
 
-    // ── Direct colour_bram dump (reads mem array after sixteenth_complete) ───────
     task automatic dump_bram_direct_csv(input string path);
-        // word w within a tile: row = w / WORDS_P_ROW, column-group = w % WORDS_P_ROW
-        // WORDS_P_ROW = TILE_W/8 (1 for TILE_W=8, 2 for TILE_W=16)
+        localparam int WPR = (TILE_W / 8 > 0) ? TILE_W / 8 : 1;
         integer fd;
         logic [63:0] word;
-        int px, py, tile_col, tile_row, row_in_tile, col_start;
-        localparam int WPR = (TILE_W / 8 > 0) ? TILE_W / 8 : 1;
+        int px, py, tc, tr, rit, cs;
         fd = $fopen(path, "w");
         $fwrite(fd, "row,col,colour\n");
         for (int tile = 0; tile < TOTAL_TILES; tile++) begin
-            tile_col = tile % TILES_P_AXIS;
-            tile_row = tile / TILES_P_AXIS;
+            tc = tile % TILES_P_AXIS;
+            tr = tile / TILES_P_AXIS;
             for (int w = 0; w < WORDS_P_TILE; w++) begin
-                word        = dut.u_colour_bram.mem[tile * WORDS_P_TILE + w];
-                row_in_tile = w / WPR;
-                col_start   = (w % WPR) * 8;
+                word = dut.u_colour_bram.mem[tile * WORDS_P_TILE + w];
+                rit  = w / WPR;
+                cs   = (w % WPR) * 8;
                 for (int b = 0; b < 8; b++) begin
-                    px = tile_col * TILE_W + col_start + b;
-                    py = tile_row * TILE_W + row_in_tile;
+                    px = tc * TILE_W + cs + b;
+                    py = tr * TILE_W + rit;
                     $fwrite(fd, "%0d,%0d,%0d\n", py, px, word[b*8 +: 8] & 8'h3F);
                 end
             end
@@ -269,35 +287,35 @@ module tb_pse_single;
         $display("  wrote %s  (256x256 direct)", path);
     endtask
 
-    // ── Engine-done: dump pending/missing tile info ───────────────────────────
+    task automatic dump_events_csv(input string path);
+        integer fd;
+        fd = $fopen(path, "w");
+        $fwrite(fd, "cyc,kind,px,py,colour\n");
+        for (int i = 0; i < ev_cnt; i++)
+            // kind written as integer (ASCII): A=65 H=72 S=83 M=77 I=73 C=67 B=66 D=68
+            $fwrite(fd, "%0d,%0d,%0d,%0d,%0d\n",
+                    ev_cyc[i], ev_kind[i],
+                    ev_px[i], ev_py[i], ev_col[i] & 8'h3F);
+        $fclose(fd);
+        $display("  wrote %s  (%0d events)", path, ev_cnt);
+    endtask
+
+    // ── Engine-done diagnostics ───────────────────────────────────────────────
     logic engine_done_prev;
     always @(posedge clk) begin
         engine_done_prev <= engine_done;
-        if (engine_done && !engine_done_prev) begin
+        if (engine_done && !engine_done_prev)
             $display("  [eng_done] cyc=%0d  tile_done=%0d  sched_tile_done=%0d  cbram_tile_done=%0d  transferred=%0d",
                      cyc,
                      $countones(dut.tile_done),
                      $countones(dut.sched_tile_done),
                      $countones(dut.cbram_tile_done),
                      $countones(dut.u_bram_to_dram.transferred));
-            for (int _i = 0; _i < TOTAL_TILES; _i++) begin
-                if (!dut.tile_done[_i])
-                    $display("  [missing_tile_done] tile=%0d  col=%0d  row=%0d  sched_done=%0b  cbram_cnt=%0d",
-                             _i, _i % TILES_P_AXIS, _i / TILES_P_AXIS,
-                             dut.sched_tile_done[_i],
-                             dut.u_colour_bram.active ?
-                                 dut.u_colour_bram.tile_wr_cnt_b[_i] :
-                                 dut.u_colour_bram.tile_wr_cnt_a[_i]);
-            end
-        end
     end
 
     // ── Main ─────────────────────────────────────────────────────────────────
     int _t;
     initial begin
-        $dumpfile("sim/waves/tb_pse_single.vcd");
-        $dumpvars(0, tb_pse_single);
-
         fractal_type        = 5'b0_0000;
         pan_x               = PAN_X;
         pan_y               = PAN_Y;
@@ -310,26 +328,32 @@ module tb_pse_single;
         axi_wr_ready        = 1'b1;
         start               = 1'b0;
 
-        // Reset
         rst = 1; tick(4); rst = 0; tick(2);
-
-        // One-shot start
         start = 1; tick(1); start = 0;
 
-        // Wait for sixteenth_complete
         _t = 0;
         while (!sixteenth_complete && _t < 20_000_000) begin tick(1); _t++; end
 
         if (sixteenth_complete)
-            $display("\n  sixteenth_complete at cyc=%0d  bram=%0d  dram=%0d", cyc, bram_cnt, dram_cnt);
+            $display("\n  sixteenth_complete at cyc=%0d  bram=%0d  dram=%0d  events=%0d",
+                     cyc, bram_cnt, dram_cnt, ev_cnt);
         else
-            $display("\n  [TIMEOUT] sixteenth_complete not seen after %0d cycles", _t);
+            $display("\n  [TIMEOUT] not complete after %0d cycles", _t);
 
         $display("\n  Writing CSVs...");
+`ifdef RUN_ORIG
+        dump_bram_csv("sim/render/orig_single_bram.csv");
+        dump_bram_direct_csv("sim/render/orig_single_bram_direct.csv");
+        dump_dram_csv("sim/render/orig_single_dram.csv");
+        dump_image_csv("sim/render/orig_single_image.csv");
+        dump_events_csv("sim/render/orig_single_events.csv");
+`else
         dump_bram_csv("sim/render/single_bram.csv");
         dump_bram_direct_csv("sim/render/single_bram_direct.csv");
         dump_dram_csv("sim/render/single_dram.csv");
-        dump_image_csv("sim/render/single_image.csv", BASE);
+        dump_image_csv("sim/render/single_image.csv");
+        dump_events_csv("sim/render/single_events.csv");
+`endif
 
         $finish;
     end
