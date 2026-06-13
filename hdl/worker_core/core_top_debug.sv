@@ -72,6 +72,15 @@ always_ff @(posedge clk) begin
         start_wide <= 1'b0;
         received_during_live_signal <= 1'b0;
         kill <= 1'b0;
+        // Reset the load-sequencing/config regs too: out of reset the core
+        // advertises ready=1 (BOTH_IDLE), so an unreset general_counter or
+        // width_mode (X on silicon) can misload the first job and wedge the
+        // dispatch→compute→result handshake — a deterministic silicon-only lock.
+        general_counter <= 2'b0;
+        width_mode <= NARROW;
+        julia_type <= 1'b0;
+        max_iteration <= 5'b0;
+        magnitude_negation_encoding <= 4'b0;
     end
     else begin
         if(opcode_reset) begin

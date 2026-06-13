@@ -33,12 +33,12 @@ ENGINE_HDL_SRCS  := $(wildcard hdl/queues/*.sv) \
                     $(wildcard hdl/control_unit/*.sv) \
                     $(wildcard hdl/control_unit/cluster/*.sv) \
                     $(_ENGINE_WC_SRCS) \
-                    hdl/top/per_sixteenth_engine.sv
+                    hdl/top/per_sixteenth_engine_debug.sv
 
 # Sources for top_level testbench (engine sources + controller + top)
 TOP_HDL_SRCS     := $(ENGINE_HDL_SRCS) \
                     hdl/top/sixteenth_controller.sv \
-                    hdl/top/top_level.sv
+                    hdl/top/top_level_debug.sv
 
 # Collect all HDL sources automatically
 _TB_IN_HDL := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/tb_*.sv))
