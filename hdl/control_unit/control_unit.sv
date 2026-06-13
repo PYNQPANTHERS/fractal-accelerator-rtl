@@ -16,17 +16,17 @@ module control_unit #(
 
     // frame control
     input  logic [4:0]              fractal_type,
-    input  logic [DATA_WIDTH-1:0]   pan_x,
-    input  logic [DATA_WIDTH-1:0]   pan_y,
-    input  logic [3:0]              zoom_level,
+    input  logic [34:0]   pan_x,
+    input  logic [34:0]   pan_y,
+    input  logic [15:0]              zoom_level,
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
     input  logic                    width_flag,
     input  logic [3:0]              sixteenth,
 
     // julia c in full precision
-    input  logic [DATA_WIDTH-1:0]   c_x,
-    input  logic [DATA_WIDTH-1:0]   c_y,
+    input  logic [34:0]   c_x,
+    input  logic [34:0]   c_y,
 
     // scheduler handshake (pixel coords in)
     output logic                    wants_job,

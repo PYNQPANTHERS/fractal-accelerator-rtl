@@ -37,7 +37,8 @@ module tb_top_level;
 
     localparam logic [31:0] CFG_PAN_X  = 32'hFFFF_0000;  // -1.0 Q1.16 (top-left real)
     localparam logic [31:0] CFG_PAN_Y  = 32'h0001_0000;  // +1.0 Q1.16 (top-left imag)
-    localparam logic [31:0] CFG_ZOOM   = 32'd1;
+    localparam logic [15:0] CFG_ZOOM   = 16'd1;
+    localparam logic [34:0] CFG_JULIA  = 35'b0;
     localparam logic [11:0] CFG_MAX_I  = 12'd0;
     localparam logic [31:0] CFG_BASE   = 32'h0000_0000;
     localparam logic [31:0] SXT_STRIDE = 32'd65536;
@@ -330,6 +331,8 @@ module tb_top_level;
         force dut.cfg_zoom_level      = CFG_ZOOM;
         force dut.cfg_max_iter        = CFG_MAX_I;
         force dut.cfg_image_base_addr = CFG_BASE;
+        force dut.cfg_julia_real       = CFG_JULIA;
+        force dut.cfg_julia_imag       = CFG_JULIA;
         force dut.ps_start            = 1'b1;
         tick(1);
         release dut.ps_start;
@@ -354,6 +357,8 @@ module tb_top_level;
         release dut.cfg_zoom_level;
         release dut.cfg_max_iter;
         release dut.cfg_image_base_addr;
+        release dut.cfg_julia_real;
+        release dut.cfg_julia_imag;
 
         tick(10);
 

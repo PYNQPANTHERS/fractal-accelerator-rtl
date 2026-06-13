@@ -96,11 +96,13 @@ module bram_to_dram_top #(
     // =========================================================================
     logic        ps_start;
     logic [4:0]  cfg_fractal_type;
-    logic [31:0] cfg_pan_x;
-    logic [31:0] cfg_pan_y;
-    logic [31:0] cfg_zoom_level;
+    logic [34:0] cfg_pan_x;
+    logic [34:0] cfg_pan_y;
+    logic [15:0] cfg_zoom_level;
     logic [11:0] cfg_max_iter;
     logic [31:0] cfg_image_base_addr;
+    logic [34:0] cfg_julia_real;
+    logic [34:0] cfg_julia_imag;
 
     // =========================================================================
     // top_level status → axi_lite_slave
@@ -156,6 +158,8 @@ module bram_to_dram_top #(
         // Config outputs → top_level
         .ps_start            (ps_start),
         .cfg_fractal_type    (cfg_fractal_type),
+        .cfg_julia_real      (cfg_julia_real),
+        .cfg_julia_imag      (cfg_julia_imag),
         .cfg_pan_x           (cfg_pan_x),
         .cfg_pan_y           (cfg_pan_y),
         .cfg_zoom_level      (cfg_zoom_level),
@@ -195,6 +199,8 @@ module bram_to_dram_top #(
         // Config inputs ← axi_lite_slave
         .ps_start            (ps_start),
         .cfg_fractal_type    (cfg_fractal_type),
+        .cfg_julia_real      (cfg_julia_real),
+        .cfg_julia_imag      (cfg_julia_imag),
         .cfg_pan_x           (cfg_pan_x),
         .cfg_pan_y           (cfg_pan_y),
         .cfg_zoom_level      (cfg_zoom_level),

@@ -14,12 +14,12 @@ module per_sixteenth_engine #(
 
     // Config from sixteenth_controller
     input  logic [4:0]  fractal_type,
-    input  logic [31:0] pan_x,
-    input  logic [31:0] pan_y,
-    input  logic [31:0] zoom_level,
+    input  logic [34:0] julia_real,
+    input  logic [34:0] julia_imag,
+    input  logic [34:0] pan_x,
+    input  logic [34:0] pan_y,
+    input  logic [15:0] zoom_level,
     input  logic [11:0] max_iter,
-    input  logic [9:0]  x_offset,
-    input  logic [9:0]  y_offset,
     input  logic [3:0]  sixteenth_id,
     input  logic [31:0] sixteenth_base_addr,
 
@@ -169,15 +169,15 @@ module per_sixteenth_engine #(
         .opcode_reset       (1'b0),
 
         .fractal_type       (fractal_type),
-        .pan_x              (pan_x[17:0]),
-        .pan_y              (pan_y[17:0]),
-        .zoom_level         (zoom_level[3:0]),
+        .pan_x              (pan_x),
+        .pan_y              (pan_y),
+        .zoom_level         (zoom_level),
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
         .start_flag         (start),
         .width_flag         (1'b0),
-        .c_x                ('0),
-        .c_y                ('0),
+        .c_x                (julia_real),
+        .c_y                (julia_imag),
 
         .wants_job          (jqh_wants_job),
         .grant              (jqh_grant),
