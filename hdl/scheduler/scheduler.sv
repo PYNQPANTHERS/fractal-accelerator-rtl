@@ -50,6 +50,7 @@ module scheduler #(
     // job queue logic
     output logic [COORD_W-1:0]      sched_x,
     output logic [COORD_W-1:0]      sched_y,
+    output logic                    sched_first_time_queued,
     output logic                    sched_push,
     output logic                    sched_stall_out,  // unused; kept for symmetry
     input  logic                    sched_stall,
@@ -77,6 +78,7 @@ typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH
 my_states current_state, next_state;
 
 logic [COORD_W-1:0] tlx, tly, x_coord_to_queue, y_coord_to_queue;
+logic border_first_time_flag, queue_first_time_flag;
 logic [1:0] box_id;
 logic [COORD_W:0] pixel_width_x, pixel_width_y;
 logic [ZOOM_WIDTH-1:0] zoom_level;
@@ -91,11 +93,10 @@ border_pixel_generator #(.N(COORD_W)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
     .advance(!gen_stall),
     .all_left_flag(all_left_quadrants), .all_top_flag(all_top_quadrants),
-    .top_left_x(tlx), .top_left_y(tly),
+    .top_left_x(tlx), .top_left_y(tly), .box_id(box_id),
     .normal_width(normal_width), .x_coord(x_coord_to_queue),
-    .y_coord(y_coord_to_queue), .valid(border_pixel_valid));
-
-
+    .y_coord(y_coord_to_queue), .first_time_queued(border_first_time_flag),
+    .valid(border_pixel_valid));
 
 // STACK LOGIC
 localparam int STACK_W    = 2*COORD_W + ZOOM_WIDTH + 2 + 2;
@@ -140,9 +141,6 @@ scheduler_stack #(.WIDTH(STACK_W), .DEPTH(10)) my_stack (
     .data_in(stack_data_in), .data_out(stack_data_out),
     .full(stack_full), .empty(stack_empty)
 );
-
-
-
 
 // a box is a left quadrant if it's 2'b00 or 2'b10 i.e. if box_id[0] == 1'b0
 assign current_is_left = (box_id[0] == 1'b0);
@@ -245,25 +243,26 @@ logic [COORD_W:0] normal_width;
 always_comb begin
 
     // defaults
-    next_state            = current_state;
-    stack_push            = 1'b0;
-    stack_pop             = 1'b0;
-    pixel_generator_reset = 1'b0;
-    engine_done           = 1'b0;
-    flush                 = 1'b0;
-    sched_push            = 1'b0;
-    sched_reset           = 1'b0;
-    sched_stall_out       = 1'b0;
-    tt_wr_quad_en         = 1'b0;
-    tt_wr_quad_tlx        = '0;
-    tt_wr_quad_tly        = '0;
-    tt_wr_quad_size       = '0;
-    tt_wr_quad_colour     = '0;
-    pixel_width_x_left    = pixel_width_x;
-    quad_size_x           = pixel_width_x;
-    quad_size_y           = pixel_width_y;
-    top_left_x            = tlx;
-    top_left_y            = tly;
+    next_state              = current_state;
+    stack_push              = 1'b0;
+    stack_pop               = 1'b0;
+    pixel_generator_reset   = 1'b0;
+    engine_done             = 1'b0;
+    flush                   = 1'b0;
+    sched_push              = 1'b0;
+    queue_first_time_flag = 1'b0;
+    sched_reset             = 1'b0;
+    sched_stall_out         = 1'b0;
+    tt_wr_quad_en           = 1'b0;
+    tt_wr_quad_tlx          = '0;
+    tt_wr_quad_tly          = '0;
+    tt_wr_quad_size         = '0;
+    tt_wr_quad_colour       = '0;
+    pixel_width_x_left      = pixel_width_x;
+    quad_size_x             = pixel_width_x;
+    quad_size_y             = pixel_width_y;
+    top_left_x              = tlx;
+    top_left_y              = tly;
 
     // calculate standard width based on zoom level (standard for a left or topmost box)
     normal_width = 9'd256 >> (zoom_level);
@@ -310,6 +309,8 @@ always_comb begin
     // whose effective extent is pixel_width_x/y
     expected_count = (pixel_width_x << 1) + (pixel_width_y << 1) - 11'd4;
 
+    sched_first_time_queued = (zoom_level == '0) ?
+                                1'b1 : ((current_state == WAIT)? border_first_time_flag : queue_first_time_flag;)
 
     case(current_state)
 
@@ -370,8 +371,6 @@ always_comb begin
             end
         end
 
-
-
         QUEUE_BOX_INIT: begin
             next_state = QUEUE_BOX;
         end
@@ -379,6 +378,12 @@ always_comb begin
         QUEUE_BOX: begin
             if (!sched_stall) begin
                 sched_push = 1'b1;
+                // flag interior pixels (not on the perimeter of this box)
+                if ((qbox_x != tlx) &&
+                    ({1'b0, qbox_x} != {1'b0, tlx} + pixel_width_x - 1'b1) &&
+                    (qbox_y != tly) &&
+                    ({1'b0, qbox_y} != {1'b0, tly} + pixel_width_y - 1'b1))
+                    queue_first_time_flag = 1'b1;
                 if ((sched_x == tlx + pixel_width_x[COORD_W-1:0] - 1'b1) &&
                     (sched_y == tly + pixel_width_y[COORD_W-1:0] - 1'b1)) begin
                     // if (box_id == 2'b11) next_state = INCREASE_LEVEL;
