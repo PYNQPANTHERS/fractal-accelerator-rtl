@@ -24,20 +24,39 @@ module tb_top_level;
     wire         irq_all_done;
     wire         irq_started;
 
+    logic        ps_start         = 1'b0;
+    logic [4:0]  cfg_fractal_type = 5'b0;
+    logic [34:0] cfg_julia_real   = 35'b0;
+    logic [34:0] cfg_julia_imag   = 35'b0;
+    logic [34:0] cfg_pan_x        = 35'h4_0000_0000; // -2.0 in Q2.33
+    logic [34:0] cfg_pan_y        = 35'h3_FFFF_FFFF; // ~+2.0 in Q2.33
+    logic [15:0] cfg_zoom_level   = 16'b0;
+    logic [11:0] cfg_max_iter     = 12'b0;
+    logic [31:0] cfg_image_base_addr = 32'b0;
+
     top_level #(.TILE_W(TILE_W)) dut (
-        .clk            (clk),
-        .rst            (rst),
-        .hp_axi_wr_addr (hp_axi_wr_addr),
-        .hp_axi_wr_data (hp_axi_wr_data),
-        .hp_axi_wr_en   (hp_axi_wr_en),
-        .hp_axi_wr_ready(hp_axi_wr_ready),
-        .irq_all_done   (irq_all_done),
-        .irq_started    (irq_started)
+        .clk                (clk),
+        .rst                (rst),
+        .hp_axi_wr_addr     (hp_axi_wr_addr),
+        .hp_axi_wr_data     (hp_axi_wr_data),
+        .hp_axi_wr_en       (hp_axi_wr_en),
+        .hp_axi_wr_ready    (hp_axi_wr_ready),
+        .irq_all_done       (irq_all_done),
+        .irq_started        (irq_started),
+        .ps_start           (ps_start),
+        .cfg_fractal_type   (cfg_fractal_type),
+        .cfg_julia_real     (cfg_julia_real),
+        .cfg_julia_imag     (cfg_julia_imag),
+        .cfg_pan_x          (cfg_pan_x),
+        .cfg_pan_y          (cfg_pan_y),
+        .cfg_zoom_level     (cfg_zoom_level),
+        .cfg_max_iter       (cfg_max_iter),
+        .cfg_image_base_addr(cfg_image_base_addr)
     );
 
-    localparam logic [31:0] CFG_PAN_X  = 32'hFFFF_0000;  // -1.0 Q1.16 (top-left real)
-    localparam logic [31:0] CFG_PAN_Y  = 32'h0001_0000;  // +1.0 Q1.16 (top-left imag)
-    localparam logic [15:0] CFG_ZOOM   = 16'd1;
+    localparam logic [34:0] CFG_PAN_X  = 35'h4_0000_0000; // -2.0 in Q2.33 (top-left real)
+    localparam logic [34:0] CFG_PAN_Y  = 35'h3_FFFF_FFFF; // ~+2.0 in Q2.33 (top-left imag)
+    localparam logic [15:0] CFG_ZOOM   = 16'd0;
     localparam logic [34:0] CFG_JULIA  = 35'b0;
     localparam logic [11:0] CFG_MAX_I  = 12'd0;
     localparam logic [31:0] CFG_BASE   = 32'h0000_0000;

@@ -68,8 +68,7 @@ module control_unit #(
 
 );
 
-    localparam int Z_WIDTH      = DATA_WIDTH + 1;
-    localparam int Z_WIDE       = Z_WIDTH * 2 - 1;
+    localparam int Z_WIDE       = 35;
     localparam int WORDS_NARROW = 2;
     localparam int WORDS_WIDE   = 4;
     localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W + 1; // +1 for reinject flag (MSB)
@@ -113,11 +112,11 @@ module control_unit #(
     assign cu_rd_y = pf_coord_b;
 
     translate #(
-        .DATA_WIDTH (Z_WIDE),
+        .DATA_WIDTH (35),
         .RESOLUTION (PIXEL_W)
     ) cheezy_translator (
-        .pan_x     ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
-        .pan_y     ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
+        .pan_x     (pan_x),
+        .pan_y     (pan_y),
         .a         (pf_coord_a),
         .b         (pf_coord_b),
         .zoom      (zoom_level),

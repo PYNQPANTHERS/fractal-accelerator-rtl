@@ -2,8 +2,7 @@ module job_datapath #(
     parameter  int DATA_WIDTH = 18,
     parameter  int JOB_DATA_W = 18,
     parameter  int OPCODE_W   = 5,
-    localparam int Z_WIDTH    = DATA_WIDTH + 1,
-    localparam int Z_WIDE     = Z_WIDTH * 2 - 1
+    parameter  int Z_WIDE     = 35
 ) (
     input  logic [Z_WIDE-1:0]      z_real,
     input  logic [Z_WIDE-1:0]      z_imag,
@@ -11,8 +10,8 @@ module job_datapath #(
     input  logic [1:0]             word_idx,          // 0123
     input  logic                   opcode_en,         // from FSM OPCODE_BROADCAST
     input  logic                   load_c_en,         // from FSM LOAD_C_NARROW/WIDE
-    input  logic [DATA_WIDTH-1:0]  c_real,
-    input  logic [DATA_WIDTH-1:0]  c_imag,
+    input  logic [34:0]            c_real,
+    input  logic [34:0]            c_imag,
     input  logic [OPCODE_W-1:0]    fractal_type,
     input  logic [OPCODE_W-1:0]    max_iter,
     output logic [JOB_DATA_W-1:0]  disp_job_data
@@ -50,10 +49,10 @@ module job_datapath #(
                             fractal_type,
                             max_iter};
         end else if (load_c_en) begin
-            // Julia c broadcast — word 0 = c_real, word 1 = c_imag (narrow, sign-extended)
+            // Julia c in narrow mode: top 18 bits = Q2.16 representation
             case (word_idx)
-                2'd0:    disp_job_data = {{(JOB_DATA_W-DATA_WIDTH){c_real[DATA_WIDTH-1]}}, c_real};
-                2'd1:    disp_job_data = {{(JOB_DATA_W-DATA_WIDTH){c_imag[DATA_WIDTH-1]}}, c_imag};
+                2'd0:    disp_job_data = c_real[34:17];
+                2'd1:    disp_job_data = c_imag[34:17];
                 default: disp_job_data = '0;
             endcase
         end else if (wide) begin
@@ -65,9 +64,10 @@ module job_datapath #(
                 default: disp_job_data = '0;
             endcase
         end else begin
+            // narrow mode: top 18 bits of Q2.33 = Q2.16 coordinate
             unique case (word_idx)
-                2'd0:    disp_job_data = real_lower;
-                2'd1:    disp_job_data = imag_lower;
+                2'd0:    disp_job_data = z_real[34:17];
+                2'd1:    disp_job_data = z_imag[34:17];
                 default: disp_job_data = '0;
             endcase
         end
