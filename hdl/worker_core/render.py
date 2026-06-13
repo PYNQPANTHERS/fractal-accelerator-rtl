@@ -3,12 +3,11 @@
 render.py  --  convert sim/render/frame.csv -> sim/render/frame.png
 
 Reads the iteration-count CSV produced by tb_multiply_manager_render.sv and
-renders it as a coloured fractal image using a smooth histogram-equalised
-colour map.
+renders it as a coloured fractal image.
 
 Usage:
     python3 render.py [--csv sim/render/frame.csv] [--out sim/render/frame.png]
-                      [--max-iter 512] [--colormap inferno]
+                      [--colormap turbo] [--log]
 """
 
 import argparse
@@ -17,7 +16,6 @@ import pathlib
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 
 
 def load_csv(path: str) -> tuple[np.ndarray, int, int]:
@@ -35,74 +33,62 @@ def load_csv(path: str) -> tuple[np.ndarray, int, int]:
     max_py = max(r[1] for r in rows)
     w, h = max_px + 1, max_py + 1
 
-    arr = np.zeros((h, w), dtype=np.float32)
+    arr = np.zeros((h, w), dtype=np.float64)
     for px, py, it in rows:
         arr[py, px] = it
 
     return arr, w, h
 
 
-def histogram_equalise(arr: np.ndarray, max_iter: int) -> np.ndarray:
+def apply_colormap(arr: np.ndarray, colormap: str, log_scale: bool) -> np.ndarray:
     """
-    Map iteration counts to [0, 1] using histogram equalisation so that
-    colour variation is spread evenly across the escape counts present,
-    rather than being crushed at the low end.
-    Interior (== max_iter) stays mapped to exactly 1.0 (will be coloured black).
+    Map iteration counts to RGB.
+    Interior pixels (== max recorded count) are coloured black.
+    Normalises from actual data max, with optional log scale.
     """
-    flat = arr.flatten()
-    # build CDF over escaped pixels only
-    escaped = flat[flat < max_iter]
-    if escaped.size == 0:
-        return np.zeros_like(arr)
+    max_iter = int(arr.max())
+    interior = arr == max_iter
 
-    counts, bin_edges = np.histogram(escaped, bins=max_iter, range=(0, max_iter))
-    cdf = counts.cumsum().astype(np.float64)
-    cdf /= cdf[-1]                      # normalise to [0, 1]
+    f = arr.copy()
+    f[interior] = 0.0  # exclude interior from normalisation
 
-    # map each pixel: bin index then look up CDF
-    def map_val(v):
-        if v >= max_iter:
-            return 1.0                  # interior: will be forced to black
-        idx = min(int(v), max_iter - 1)
-        return cdf[idx]
+    if log_scale and f.max() > 0:
+        f = np.log1p(f)
 
-    mapped = np.vectorize(map_val)(arr).astype(np.float32)
-    return mapped
-
-
-def render(arr: np.ndarray, max_iter: int, colormap: str, out_path: str):
-    mapped = histogram_equalise(arr, max_iter)
+    vmax = f.max() if f.max() > 0 else 1.0
+    f_norm = f / vmax  # [0, 1]
 
     cmap = plt.get_cmap(colormap)
-    rgb  = cmap(mapped)[:, :, :3]      # drop alpha, shape (H, W, 3)
+    rgb = cmap(f_norm)[:, :, :3]   # drop alpha
+    rgb[interior] = [0.0, 0.0, 0.0]  # interior → black
 
-    # force interior pixels (hit limit) to pure black
-    interior = arr >= max_iter
-    rgb[interior] = 0.0
-
-    img_arr = (rgb * 255).astype(np.uint8)
-    img = Image.fromarray(img_arr, mode="RGB")
-    img.save(out_path)
-    print(f"Saved {out_path}  ({img.width}x{img.height})")
+    return (rgb * 255).astype(np.uint8)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv",      default="sim/render/frame.csv")
     parser.add_argument("--out",      default="sim/render/frame.png")
-    parser.add_argument("--max-iter", type=int, default=512,
-                        help="Iteration ceiling used in simulation (2^MAX_ITER)")
-    parser.add_argument("--colormap", default="inferno",
-                        help="Matplotlib colormap name (inferno, viridis, hot, ...)")
+    parser.add_argument("--colormap", default="turbo",
+                        help="Matplotlib colormap name (turbo, inferno, viridis, ...)")
+    parser.add_argument("--log",      action="store_true",
+                        help="Apply log scale to iteration counts before colouring")
     args = parser.parse_args()
 
     pathlib.Path(args.out).parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading {args.csv} ...")
     arr, w, h = load_csv(args.csv)
-    print(f"  {w}x{h} pixels, max recorded count = {int(arr.max())}")
+    max_iter = int(arr.max())
+    interior_frac = (arr == max_iter).mean() * 100
+    print(f"  {w}x{h} pixels, max recorded count = {max_iter}")
+    print(f"  interior pixels (== max_iter): {interior_frac:.1f}%")
 
-    render(arr, args.max_iter, args.colormap, args.out)
+    rgb = apply_colormap(arr, args.colormap, args.log)
+
+    img = Image.fromarray(rgb, mode="RGB")
+    img.save(args.out)
+    print(f"Saved {args.out}  ({img.width}x{img.height})")
 
 
 if __name__ == "__main__":

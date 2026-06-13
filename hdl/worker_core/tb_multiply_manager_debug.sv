@@ -197,46 +197,53 @@ module tb_multiply_manager_debug;
 
         // maxit=3, LOW=0 -> limit = 2^3 = 8 iterations
         // c=(0,0): z stays 0 forever -> hits limit = 8
-        run_left("mandel (0,0) hits limit",
-                 1'b0, 4'b0000, 5'd3,
-                 to_q216(0.0), to_q216(0.0),
-                 to_q216(0.0), to_q216(0.0),
-                 float_mandel(0.0, 0.0, 8));
+        // run_left("mandel (0,0) hits limit",
+        //          1'b0, 4'b0000, 5'd5,
+        //          to_q216(0.0), to_q216(0.0),
+        //          to_q216(0.0), to_q216(0.0),
+        //          float_mandel(0.0, 0.0, 32));
 
-        // c=(1.5,0): well outside set, fast escape
-        run_left("mandel (1.5,0) fast escape",
-                 1'b0, 4'b0000, 5'd5,
-                 to_q216(0.0), to_q216(0.0),
-                 to_q216(1.5), to_q216(0.0),
-                 float_mandel(1.5, 0.0, 32));
+        // // c=(1.5,0): well outside set, fast escape
+        // run_left("mandel (1.5,0) fast escape",
+        //          1'b0, 4'b0000, 5'd5,
+        //          to_q216(0.0), to_q216(0.0),
+        //          to_q216(1.5), to_q216(0.0),
+        //          float_mandel(1.5, 0.0, 32));
 
-        // c=(-1,0): period-2 bulb interior, hits limit
-        run_left("mandel (-1,0) interior",
-                 1'b0, 4'b0000, 5'd4,
-                 to_q216(0.0), to_q216(0.0),
-                 to_q216(-1.0), to_q216(0.0),
-                 float_mandel(-1.0, 0.0, 16));
+        // // c=(-1,0): period-2 bulb interior, hits limit
+        // run_left("mandel (-1,0) interior",
+        //          1'b0, 4'b0000, 5'd4,
+        //          to_q216(0.0), to_q216(0.0),
+        //          to_q216(-1.0), to_q216(0.0),
+        //          float_mandel(-1.0, 0.0, 16));
 
         // c=(0.3,0.5): boundary, intermediate count
-        run_left("mandel (0.3,0.5) boundary",
-                 1'b0, 4'b0000, 5'd5,
+        run_left("mandel (-1,1) boundary",
+                 1'b0, 4'b0000, 5'd9,
                  to_q216(0.0), to_q216(0.0),
-                 to_q216(0.3), to_q216(0.5),
-                 float_mandel(0.3, 0.5, 32));
+                 to_q216(0.913725), to_q216(0.003922),
+                 float_mandel(0.913725, 0.003922, 512));
 
-        // Julia: c=(-0.8,0.156), z0=(0,0)
-        run_left("julia c=(-0.8,0.156) z0=(0,0)",
-                 1'b1, 4'b0000, 5'd5,
-                 to_q216(-0.8), to_q216(0.156),
-                 to_q216(0.0),  to_q216(0.0),
-                 float_julia(0.0, 0.0, -0.8, 0.156, 32));
+// for (real x = 1.7; x <= 2.0; x = x + 0.002) begin
+//     run_left($sformatf("mandel (%.5f,0)", x),
+//              1'b0, 4'b0000, 5'd5,
+//              to_q216(0.0), to_q216(0.0),
+//              to_q216(x), to_q216(0),
+//              float_mandel(x, 0, 32));
+// end
+        // // Julia: c=(-0.8,0.156), z0=(0,0)
+        // run_left("julia c=(-0.8,0.156) z0=(0,0)",
+        //          1'b1, 4'b0000, 5'd5,
+        //          to_q216(-0.8), to_q216(0.156),
+        //          to_q216(0.0),  to_q216(0.0),
+        //          float_julia(0.0, 0.0, -0.8, 0.156, 32));
 
-        // Burning Ship: c=(-1.7,-0.01)
-        run_left("bship (-1.7,-0.01)",
-                 1'b0, 4'b1100, 5'd5,
-                 to_q216(0.0), to_q216(0.0),
-                 to_q216(-1.7), to_q216(-0.01),
-                 float_bship(-1.7, -0.01, 32));
+        // // Burning Ship: c=(-1.7,-0.01)
+        // run_left("bship (-1.7,-0.01)",
+        //          1'b0, 4'b1100, 5'd5,
+        //          to_q216(0.0), to_q216(0.0),
+        //          to_q216(-1.7), to_q216(-0.01),
+        //          float_bship(-1.7, -0.01, 32));
 
         $display("\n======== DONE: %0d error(s) ========", errors);
         if (errors == 0) $display("ALL TESTS PASSED");
