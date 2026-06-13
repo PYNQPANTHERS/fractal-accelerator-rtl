@@ -61,7 +61,6 @@ logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
 logic current_is_left, current_is_top;
 logic border_pixel_valid;
-logic [COORD_W:0] normal_width;
 // Internal counter registers (only used by QUEUE_BOX)
 logic [COORD_W-1:0] qbox_x, qbox_y;
 // QUEUE_BOX edge bookkeeping: a box on the image's right/bottom edge owns its

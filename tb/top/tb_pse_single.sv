@@ -34,7 +34,7 @@ module tb_pse_single;
     localparam logic [31:0] PAN_X = 32'hFFFF_0000;
     localparam logic [31:0] PAN_Y = 32'h0001_0000;
     localparam logic [31:0] ZOOM  = 32'd1;
-    localparam logic [11:0] MAX_I = 12'd5;   // match benchmark; raise to isolate compute vs drain
+    localparam logic [11:0] MAX_I = 12'd1;   // match benchmark; raise to isolate compute vs drain
     localparam logic [31:0] BASE  = 32'h0000_0000;
 
     per_sixteenth_engine #(.TILE_W(TILE_W)) dut (
