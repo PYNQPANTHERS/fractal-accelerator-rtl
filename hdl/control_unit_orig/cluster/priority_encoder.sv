@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// priority_encoder
+//   Lowest-index-wins priority encoder.
+//   Produces both a one-hot and a binary index, plus a "any_valid" flag.
+//   Purely combinational.
+// ─────────────────────────────────────────────────────────────────────────────
 module priority_encoder #(
     parameter  int BUS_WIDTH   = 8,
     localparam int ADDRESS_LEN = (BUS_WIDTH > 1) ? $clog2(BUS_WIDTH) : 1

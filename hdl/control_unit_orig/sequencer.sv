@@ -1,3 +1,13 @@
+
+// load_sequencer
+//
+//   Usage:
+//     - pulse start_load for one cycle with n_words set to the transfer
+//       length (2 for narrow, 4 for wide).
+//     - load_active stays high for the whole transfer
+//     - word_idx counts 0,1,2,... identifying which word to drive this cycle
+//     - load_last high on last cycle
+
 module load_sequencer #(
     parameter  int MAX_WORDS = 2,
     localparam int CNT_W     = $clog2(MAX_WORDS + 1)

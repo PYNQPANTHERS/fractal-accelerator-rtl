@@ -85,6 +85,9 @@ module tb_top_level;
     end
 
 
+    longint cyc = 0;
+    always @(posedge clk) cyc++;
+
     logic sxt_complete_prev;
     always @(posedge clk) begin
         sxt_complete_prev <= dut.u_engine.u_bram_to_dram.sixteenth_complete;
@@ -99,32 +102,7 @@ module tb_top_level;
                      $countones(dut.u_engine.tile_done));
     end
 
-    // ── STATE-CLEAR WAIT probe ────────────────────────────────────────────────
-    // Pure state_bram clear wait = # cycles where b2d has finished draining
-    // (b2d_sixteenth_complete=1) but the engine hasn't completed
-    // (sixteenth_complete=0), i.e. blocked solely on sbram_clear_done.
-    // Counted per sixteenth and reset on each engine completion. Isolates the
-    // state-clear stall from the b2d drain tail. Watch sxt 5 & 9 (fully flood-
-    // filled, ~1020 px compute): with 2 banks they stalled ~60k cyc here; with
-    // 4 banks this should be ~0.
-    logic   eng_done_prev = 0;
-    longint clear_wait_cnt = 0;
     always @(posedge clk) begin
-        eng_done_prev <= dut.u_engine.sixteenth_complete;
-        // accumulate cycles blocked solely on the clear
-        if (dut.u_engine.b2d_sixteenth_complete && !dut.u_engine.sixteenth_complete)
-            clear_wait_cnt <= clear_wait_cnt + 1;
-        // on engine completion: report and reset for next sixteenth
-        if (dut.u_engine.sixteenth_complete && !eng_done_prev) begin
-            $display("  [state_clear_wait] sxt=%0d  CLEAR_WAIT=%0d cyc (cycles b2d-done but blocked on sbram clear)",
-                     dut.u_sixteenth_controller.sixteenth_index, clear_wait_cnt);
-            clear_wait_cnt <= 0;
-        end
-    end
-
-    longint cyc = 0;
-    always @(posedge clk) begin
-        cyc++;
         if ((cyc % 100_000) == 0)
             $display("  [heartbeat] cyc=%0d  sxt=%0d  transferred=%0d  sched=%0d  seen=%0d  expected=%0d  inject=%0b  rfifo_empty=%0b  brw_state=%0d  cluster_done=%04b",
                      cyc, dut.u_sixteenth_controller.sixteenth_index,
@@ -335,8 +313,8 @@ module tb_top_level;
     endtask
 
     initial begin
-        $dumpfile("sim/waves/tb_top_level.vcd");
-        $dumpvars(0, tb_top_level);
+        //$dumpfile("sim/waves/tb_top_level.vcd");
+        //$dumpvars(0, tb_top_level);
 
         hp_axi_wr_ready = 1'b1;
 

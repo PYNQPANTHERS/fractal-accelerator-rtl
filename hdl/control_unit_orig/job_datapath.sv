@@ -1,3 +1,7 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// job_datapath
+//   Word multiplexer that drives disp_job_data across the cycles of a transfer.
+// ─────────────────────────────────────────────────────────────────────────────
 module job_datapath #(
     parameter  int DATA_WIDTH = 18,
     parameter  int JOB_DATA_W = 18,

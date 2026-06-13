@@ -98,10 +98,19 @@ module tb_tile_benchmark;
     // pixel_writes       : BRAM writes (pixels actually iterated)
     // any_core_busy_cyc  : cycles where at least one core was busy
     // all_core_idle_cyc  : cycles where every core was idle (stall/scheduler-bound)
+    reg [7:0]  dump_image [0:1023][0:1023];
+    reg [63:0] di_dd;
+    integer    di_fd, di_log2_bpt, di_words_p_row, di_tiles_p_axis, di_n;
+    integer    di_sxt_id, di_tile_idx, di_word_in_tile, di_tile_col, di_tile_row;
+    integer    di_row_in_tile, di_col_start, di_px, di_py, di_sxt_col, di_sxt_row;
+    integer    di_a, di_addr_off, di_within;
+    integer    di_r, di_c, di_i, di_b;
+
     longint m16_active=0, m16_busycore=0, m16_wait=0, m16_schedbusy=0;
     longint m16_pix=0, m16_anybusy=0, m16_allidle=0;
     longint m8_active=0,  m8_busycore=0,  m8_wait=0,  m8_schedbusy=0;
     longint m8_pix=0,  m8_anybusy=0,  m8_allidle=0;
+    int bc16, bc8;
 
     // ── BRAM→DRAM drain-tail metric (engine_done → sixteenth_complete) ────────
     // For each sixteenth, measure cycles from engine_done rising (compute finished)
@@ -286,11 +295,11 @@ module tb_tile_benchmark;
                 end
             end
         end
-        fd = $fopen(path, "w");
-        $fwrite(fd, "row,col,colour\n");
-        for (int r=0;r<1024;r++) for (int c=0;c<1024;c++)
-            $fwrite(fd, "%0d,%0d,%0d\n", r, c, image[r][c] & 8'h3F);
-        $fclose(fd);
+        di_fd = $fopen(path, "w");
+        $fwrite(di_fd, "row,col,colour\n");
+        for (di_r=0; di_r<1024; di_r++) for (di_c=0; di_c<1024; di_c++)
+            $fwrite(di_fd, "%0d,%0d,%0d\n", di_r, di_c, dump_image[di_r][di_c] & 8'h3F);
+        $fclose(di_fd);
         $display("  wrote %s  (1024x1024)", path);
     endtask
 

@@ -1,7 +1,10 @@
 // Flat register file - one entry per TILE_W x TILE_W tile in the sixteenth
 
 module tile_table #(
-    parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
+    parameter  int TILE_W        = 16,
+    localparam int TILES_PER_AXIS = 256 / TILE_W,
+    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS,
+    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES)
 )(
     input  logic        clk,
     input  logic        rst,    // synchronous reset - clears all entries
@@ -16,20 +19,26 @@ module tile_table #(
     // Combinational read port
     input  logic [TILE_IDX_W-1:0] rd_index,      // tile index to read
     output logic                  rd_is_filled,  // 1 = flood filled
-    output logic [5:0]            rd_fill_colour // fill colour (valid if is_filled)
+    output logic [5:0]            rd_fill_colour, // fill colour (valid if is_filled)
+
+    // Per-tile filled vector — used by per_sixteenth_engine to gate tile_done
+    output logic [TOTAL_TILES-1:0] rd_filled_vec  // bit[i]=1 if tile i is flood filled
 );
 
-    localparam int TILE_BITS      = $clog2(TILE_W);
-    localparam int TILES_PER_AXIS = 256 / TILE_W;
-    localparam int TOTAL_TILES    = TILES_PER_AXIS * TILES_PER_AXIS;
-    localparam int TILE_IDX_W     = $clog2(TOTAL_TILES);
-    localparam int AXIS_BITS      = $clog2(TILES_PER_AXIS);  // bits for tile col/row index
+    localparam int TILE_BITS = $clog2(TILE_W);
+    localparam int AXIS_BITS = $clog2(TILES_PER_AXIS);  // bits for tile col/row index
 
     // bit[6] = 1 -> flood-filled by scheduler; bits[5:0] = fill colour
     logic [6:0] tile_table [0:TOTAL_TILES-1];
 
     assign rd_is_filled   = tile_table[rd_index][6];
     assign rd_fill_colour = tile_table[rd_index][5:0];
+
+    genvar _ti;
+    generate
+        for (_ti = 0; _ti < TOTAL_TILES; _ti++)
+            assign rd_filled_vec[_ti] = tile_table[_ti][6];
+    endgenerate
 
     logic [AXIS_BITS-1:0] tile_col_start, tile_row_start;
     logic [AXIS_BITS:0]   tile_col_end,   tile_row_end;
