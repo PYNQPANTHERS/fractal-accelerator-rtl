@@ -242,6 +242,37 @@ top-full:
 	@echo "           $(RENDER_DIR)/top_full_image.csv"
 	@echo ""
 
+# Build the top_level sim binary once; top-run reuses it (no recompile).
+.PHONY: top-build
+top-build:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	iverilog $(IVFLAGS) -o $(BUILD_DIR)/tb_top_level.out $(TOP_HDL_SRCS) tb/top/tb_top_level.sv
+	@echo "  Built $(BUILD_DIR)/tb_top_level.out"
+
+# Run one render with runtime config via plusargs. Compile once with
+# `make top-build`, then launch many `make top-run ...` in parallel terminals.
+#   PAN_X / PAN_Y       : 35-bit hex Q2.33 pan (top-left); default from TB
+#   ZOOM                : integer zoom level (0-79)
+#   MAX_I               : integer max iterations
+#   FTYPE               : fractal type (bit4=julia); default 0 = mandelbrot
+#   JULIA_RE / JULIA_IM : 35-bit hex julia c (only for julia mode)
+#   TAG                 : output filename prefix; use a unique TAG per run
+# Example:
+#   make top-run ZOOM=40 PAN_X=0x4_0000_0000 PAN_Y=0x3_FFFF_FFFF MAX_I=1 TAG=z40
+.PHONY: top-run
+top-run:
+	mkdir -p $(RENDER_DIR)
+	@test -f $(BUILD_DIR)/tb_top_level.out || $(MAKE) top-build
+	vvp $(BUILD_DIR)/tb_top_level.out \
+		$(if $(PAN_X),+pan_x=$(PAN_X)) \
+		$(if $(PAN_Y),+pan_y=$(PAN_Y)) \
+		$(if $(ZOOM),+zoom=$(ZOOM)) \
+		$(if $(MAX_I),+max_i=$(MAX_I)) \
+		$(if $(FTYPE),+ftype=$(FTYPE)) \
+		$(if $(JULIA_RE),+julia_re=$(JULIA_RE)) \
+		$(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
+		$(if $(TAG),+tag=$(TAG))
+
 # Tile-size benchmark: renders the full image on TILE_W=16 then TILE_W=8 and
 # reports core-utilisation / scheduler-occupancy metrics for the report.
 .PHONY: tile-bench
