@@ -1,5 +1,8 @@
 // Top-level integration: sixteenth_controller + per_sixteenth_engine
-// AXI Lite slave and AXI HP master are stubbed pending IP wrapper integration
+//
+// AXI Lite config registers and AXI HP write interface are now exposed as
+// plain ports — they are driven/consumed by axi_lite_slave and
+// axi_hp_master_wrap respectively in bram_to_dram_top.sv.
 
 module top_level #(
     parameter int TILE_W = 16   // tile width/height in pixels (must be power of 2)
@@ -7,8 +10,8 @@ module top_level #(
     input  logic clk,
     input  logic rst,
 
-    // AXI HP write master - routed straight from bram_to_dram
-    // TODO: connect to AXI HP master wrapper
+    // AXI HP write master - routed straight from bram_to_dram (inside engine)
+    // connect to axi_hp_master_wrap in bram_to_dram_top
     output logic [31:0] hp_axi_wr_addr,
     output logic [63:0] hp_axi_wr_data,
     output logic        hp_axi_wr_en,
@@ -18,18 +21,19 @@ module top_level #(
     output logic irq_all_done,
 
     // PS handshake: high while PL is rendering (PS should not re-assert ps_start)
-    output logic irq_started
-);
+    output logic irq_started,
 
-    // AXI Lite config registers (written by PS)
-    // TODO: connect to AXI Lite slave wrapper
-    logic        ps_start           = 1'b0;
-    logic [4:0]  cfg_fractal_type   = 5'd0;
-    logic [31:0] cfg_pan_x          = 32'd0;
-    logic [31:0] cfg_pan_y          = 32'd0;
-    logic [31:0] cfg_zoom_level     = 32'd0;
-    logic [11:0] cfg_max_iter       = 12'd0;
-    logic [31:0] cfg_image_base_addr = 32'd0;
+    // -------------------------------------------------------------------------
+    // AXI Lite config registers — driven by axi_lite_slave in bram_to_dram_top
+    // -------------------------------------------------------------------------
+    input  logic        ps_start,
+    input  logic [4:0]  cfg_fractal_type,
+    input  logic [31:0] cfg_pan_x,
+    input  logic [31:0] cfg_pan_y,
+    input  logic [31:0] cfg_zoom_level,
+    input  logic [11:0] cfg_max_iter,
+    input  logic [31:0] cfg_image_base_addr
+);
 
     // Controller <-> engine wires
     logic        ctrl_engine_rst;
