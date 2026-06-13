@@ -27,7 +27,18 @@ module per_sixteenth_engine #(
     output logic [31:0] axi_wr_addr,
     output logic [63:0] axi_wr_data,
     output logic        axi_wr_en,
-    input  logic        axi_wr_ready
+    input  logic        axi_wr_ready,
+
+    // debug taps → axi_lite_slave (same clock domain, no CDC)
+    output logic [3:0]  dbg_scheduler_state,
+    output logic        dbg_sched_push,
+    output logic        dbg_wants_job,
+    output logic        dbg_grant,
+    output logic        dbg_cqh_done,
+    output logic        dbg_comp_valid,
+    output logic        dbg_comp_complete,
+    output logic        dbg_comp_differ,
+    output logic        dbg_engine_done
 );
 
     localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
@@ -152,8 +163,19 @@ module per_sixteenth_engine #(
         .tt_wr_quad_colour(tt_wr_quad_colour),
 
         .sched_tile_done_set(sched_tile_done_set),
-        .engine_done        (sched_engine_done)
+        .engine_done        (sched_engine_done),
+        .dbg_state          (dbg_scheduler_state)
     );
+
+    // debug taps: surface internal handshake signals for axi_lite_slave counters
+    assign dbg_sched_push    = jqh_sched_push;
+    assign dbg_wants_job     = jqh_wants_job;
+    assign dbg_grant         = jqh_grant;
+    assign dbg_cqh_done      = cqh_done;
+    assign dbg_comp_valid    = cqh_comp_valid;
+    assign dbg_comp_complete = comp_complete;
+    assign dbg_comp_differ   = comp_differ;
+    assign dbg_engine_done   = engine_done;
 
     // engine_done latched: scheduler fires a one-cycle pulse, bram_to_dram needs level
     always_ff @(posedge clk) begin

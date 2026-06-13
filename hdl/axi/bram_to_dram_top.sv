@@ -109,6 +109,19 @@ module bram_to_dram_top #(
     logic irq_started_w;
 
     // =========================================================================
+    // Debug taps: top_level → axi_lite_slave (same clock domain, no CDC)
+    // =========================================================================
+    logic [3:0] dbg_scheduler_state;
+    logic       dbg_sched_push;
+    logic       dbg_wants_job;
+    logic       dbg_grant;
+    logic       dbg_cqh_done;
+    logic       dbg_comp_valid;
+    logic       dbg_comp_complete;
+    logic       dbg_comp_differ;
+    logic       dbg_engine_done;
+
+    // =========================================================================
     // top_level ↔ axi_hp_master_wrap simple write interface
     // =========================================================================
     logic [31:0] hp_wr_addr;
@@ -170,6 +183,17 @@ module bram_to_dram_top #(
         .in_axi_err    (hp_err_flag),
         .in_burst_done (hp_burst_done),
 
+        // Debug inputs ← top_level
+        .dbg_scheduler_state(dbg_scheduler_state),
+        .dbg_sched_push     (dbg_sched_push),
+        .dbg_wants_job      (dbg_wants_job),
+        .dbg_grant          (dbg_grant),
+        .dbg_cqh_done       (dbg_cqh_done),
+        .dbg_comp_valid     (dbg_comp_valid),
+        .dbg_comp_complete  (dbg_comp_complete),
+        .dbg_comp_differ    (dbg_comp_differ),
+        .dbg_engine_done    (dbg_engine_done),
+
         .irq_out (irq_out)
     );
 
@@ -199,7 +223,18 @@ module bram_to_dram_top #(
         .cfg_pan_y           (cfg_pan_y),
         .cfg_zoom_level      (cfg_zoom_level),
         .cfg_max_iter        (cfg_max_iter),
-        .cfg_image_base_addr (cfg_image_base_addr)
+        .cfg_image_base_addr (cfg_image_base_addr),
+
+        // Debug taps → axi_lite_slave
+        .dbg_scheduler_state(dbg_scheduler_state),
+        .dbg_sched_push     (dbg_sched_push),
+        .dbg_wants_job      (dbg_wants_job),
+        .dbg_grant          (dbg_grant),
+        .dbg_cqh_done       (dbg_cqh_done),
+        .dbg_comp_valid     (dbg_comp_valid),
+        .dbg_comp_complete  (dbg_comp_complete),
+        .dbg_comp_differ    (dbg_comp_differ),
+        .dbg_engine_done    (dbg_engine_done)
     );
 
     // =========================================================================
