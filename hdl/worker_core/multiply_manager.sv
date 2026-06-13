@@ -273,30 +273,30 @@ always_comb begin
                 end
                 ADD_COORD_X : begin
                     multiply_operand_A_2 = {2'b01,{NARROW_FRACTIONAL_BITS{1'b0}}};
-                    multiply_operand_B_2 = sum_x_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
+                    multiply_operand_B_2 = starting_x_reg_2;
                     right_multiply_mode = 2'b10;
-                    right_mac_add = $signed(starting_x_reg_2) <<< NARROW_FRACTIONAL_BITS;
+                    right_mac_add = sum_x_reg_2;
                 end
 
                 ADD_COORD_Y : begin
                     multiply_operand_A_2 = {2'b01,{NARROW_FRACTIONAL_BITS{1'b0}}};
-                    multiply_operand_B_2 = {sum_y_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-2:NARROW_FRACTIONAL_BITS-1]};
+                    multiply_operand_B_2 = starting_y_reg_2;
                     right_multiply_mode = 2'b10;
-                    right_mac_add = $signed(starting_y_reg_2) <<< NARROW_FRACTIONAL_BITS;
+                    right_mac_add = {sum_y_reg_2[2*NARROW_WIDTH-2:0],1'b0};
                 end
 
                 ADD_JULIA_X : begin
                     multiply_operand_A_2 = {2'b01,{NARROW_FRACTIONAL_BITS{1'b0}}};
-                    multiply_operand_B_2 = sum_x_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-1:NARROW_FRACTIONAL_BITS];
+                    multiply_operand_B_2 = julia_c_x;
                     right_multiply_mode = 2'b10;
-                    right_mac_add = $signed(julia_c_x) <<< NARROW_FRACTIONAL_BITS;
+                    right_mac_add = sum_x_reg_2;
                 end
 
                 ADD_JULIA_Y : begin
                     multiply_operand_A_2 = {2'b01,{NARROW_FRACTIONAL_BITS{1'b0}}};
-                    multiply_operand_B_2 = {sum_y_reg_2[NARROW_FRACTIONAL_BITS+NARROW_WIDTH-2:NARROW_FRACTIONAL_BITS-1]};
+                    multiply_operand_B_2 = julia_c_y;
                     right_multiply_mode = 2'b10;
-                    right_mac_add = $signed(julia_c_y) <<< NARROW_FRACTIONAL_BITS;      
+                    right_mac_add = {sum_y_reg_2[2*NARROW_WIDTH-2:0],1'b0};      
                 end          
                 default : begin
                     right_multiply_mode = 2'b00;

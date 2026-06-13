@@ -53,16 +53,16 @@ module tb_multiply_manager_render;
     localparam int NFRAC   = NARROW_WIDTH - INTEGER_BITS;  // 16
     localparam int WIDTH   = 256;
     localparam int HEIGHT  = 256;
-    localparam real XMIN   = -1.0;
-    localparam real XMAX   =  1.0;
-    localparam real YMIN   = -1.0;
-    localparam real YMAX   =  1.0;
+    localparam real XMIN   = -2.0;
+    localparam real XMAX   =  2.0;
+    localparam real YMIN   = -2.0;
+    localparam real YMAX   =  2.0;
 
     // Narrow render window
-    localparam real N_XMIN = -1.0;
-    localparam real N_XMAX =  1.0;
-    localparam real N_YMIN = -1.0;
-    localparam real N_YMAX =  1.0;
+    localparam real N_XMIN = -2.0;
+    localparam real N_XMAX =  2.0;
+    localparam real N_YMIN = -2.0;
+    localparam real N_YMAX =  2.0;
 
     // Wide render window — Seahorse Valley, needs ~31 bits of fractional
     // precision to resolve detail; 35-bit Q2.33 provides 33 fractional bits.
