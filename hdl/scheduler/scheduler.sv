@@ -1,29 +1,3 @@
-
-//     // Job queue push
-//     output logic [17:0] sched_coord,
-//     output logic        sched_push,
-//     output logic        job_queue_flush,
-//     input  logic        sched_stall,
-
-//     // Comparator configuration
-//     output logic        sched_reset,
-//     output logic [8:0]  top_left_x,
-//     output logic [8:0]  top_left_y,
-
-//     output logic [8:0]  quad_size, done
-//     output logic [10:0] comparator_expected_count, done
-
-//     // Comparator results
-//     input  logic        differ, called comparator_differ
-//     input  logic        complete, called comparator_complete
-//     input  logic [5:0]  ref_colour_o, called comparator_ref_colour_o
-
-//     // Tile done (flood fill path)
-//     output logic [255:0] sched_tile_done_set,
-
-
-
-
 module scheduler #(
     parameter int COORD_W      = 8,  // coordinate bit width (image = 2**COORD_W pixels per axis)
     parameter int ZOOM_WIDTH   = 3,  // max zoom level bit width
@@ -81,6 +55,7 @@ logic [COORD_W-1:0] tlx, tly, x_coord_to_queue, y_coord_to_queue;
 logic border_first_time_flag, queue_first_time_flag;
 logic [1:0] box_id;
 logic [COORD_W:0] pixel_width_x, pixel_width_y;
+logic [COORD_W:0] normal_width;  // standard box side (256 >> zoom); declared before generator use
 logic [ZOOM_WIDTH-1:0] zoom_level;
 logic pixel_generator_reset;
 logic all_left_quadrants, all_top_quadrants;
@@ -88,6 +63,11 @@ logic current_is_left, current_is_top;
 logic border_pixel_valid;
 // Internal counter registers (only used by QUEUE_BOX)
 logic [COORD_W-1:0] qbox_x, qbox_y;
+// QUEUE_BOX edge bookkeeping: a box on the image's right/bottom edge owns its
+// right/bottom border; otherwise that border is the neighbour's to queue.
+logic [COORD_W:0] edge_box_tl;            // top-left coord of a rightmost/bottommost max-zoom box
+logic box_is_rightmost, box_is_bottommost;
+logic [COORD_W-1:0] qbox_end_x, qbox_end_y;  // last raster coord (right/bottom border trimmed off when shared)
 
 border_pixel_generator #(.N(COORD_W)) pixel_generator(
     .clk(clk), .rst(rst), .rst_start(pixel_generator_reset),
@@ -199,7 +179,7 @@ always_ff @ (posedge clk or posedge rst) begin
 
             QUEUE_BOX: begin
                 if (!sched_stall) begin
-                    if (qbox_x == tlx + pixel_width_x - 1'b1) begin
+                    if (qbox_x == qbox_end_x) begin
                         qbox_x <= tlx;
                         qbox_y <= qbox_y + 1'b1;
                     end
@@ -238,8 +218,6 @@ end
 
 
 // pixel width logic (256 >> zoom fits in 9 bits: range 16–256)
-logic [COORD_W:0] normal_width;
-
 always_comb begin
 
     // defaults
@@ -297,6 +275,19 @@ always_comb begin
     pixel_width_x = all_left_quadrants ? normal_width : normal_width + 1'b1;
     pixel_width_y = all_top_quadrants  ? normal_width : normal_width + 1'b1;
 
+    // A rightmost/bottommost max-zoom box has its right/bottom edge on the image
+    // boundary. Such a box is non-left/non-top (width = normal_width+1), so its
+    // top-left sits at (image_size - 1 - normal_width).
+    edge_box_tl       = ((1 << COORD_W) - 1) - normal_width;
+    box_is_rightmost  = ({1'b0, tlx} == edge_box_tl);
+    box_is_bottommost = ({1'b0, tly} == edge_box_tl);
+
+    // Last coord QUEUE_BOX rasters to. Drop the shared right/bottom border (it
+    // belongs to the neighbour) unless this box sits on the image edge, so those
+    // coordinates are never iterated rather than iterated-but-not-pushed.
+    qbox_end_x = tlx + pixel_width_x[COORD_W-1:0] - 1'b1 - (box_is_rightmost  ? '0 : 1'b1);
+    qbox_end_y = tly + pixel_width_y[COORD_W-1:0] - 1'b1 - (box_is_bottommost ? '0 : 1'b1);
+
     // width of a left-column box (box 00 / box 10 equivalent).
     // at zoom≤1, a left box always has all_left=1 → no +1 correction.
     // at zoom>1, inherits popped_all_left from the ancestor chain.
@@ -305,12 +296,16 @@ always_comb begin
     else
         pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;
 
-    // perimeter of the box (2W + 2H - 4); must match the generator's emit count,
-    // whose effective extent is pixel_width_x/y
+    // expected_count = perimeter of the actual box. The generator's effective
+    // extent equals pixel_width_x/y (it loads normal_width+1 then subtracts the
+    // all_left/all_top flag, so all_left=1 boxes are normal_width wide and
+    // all_left=0 boxes are normal_width+1 wide — exactly pixel_width_x/y).
+    // Perimeter of a W×H box (corners counted once) = 2W + 2H - 4.
     expected_count = (pixel_width_x << 1) + (pixel_width_y << 1) - 11'd4;
 
-    sched_first_time_queued = (zoom_level == '0) ?
-                                1'b1 : ((current_state == WAIT)? border_first_time_flag : queue_first_time_flag;)
+    sched_first_time_queued = (zoom_level == '0)      ? 1'b1
+                            : (current_state == WAIT)  ? border_first_time_flag
+                            :                            queue_first_time_flag;
 
     case(current_state)
 
@@ -377,15 +372,19 @@ always_comb begin
 
         QUEUE_BOX: begin
             if (!sched_stall) begin
+                // The raster bounds (qbox_end_x/y) already exclude the shared
+                // right/bottom borders for non-edge boxes, so every visited coord
+                // is pushed.
                 sched_push = 1'b1;
-                // flag interior pixels (not on the perimeter of this box)
+                // flag interior pixels (not on the perimeter of this box). The
+                // bounds are checked against the full box (pixel_width), so the
+                // trimmed last column/row still counts as interior (new) pixels.
                 if ((qbox_x != tlx) &&
                     ({1'b0, qbox_x} != {1'b0, tlx} + pixel_width_x - 1'b1) &&
                     (qbox_y != tly) &&
                     ({1'b0, qbox_y} != {1'b0, tly} + pixel_width_y - 1'b1))
                     queue_first_time_flag = 1'b1;
-                if ((sched_x == tlx + pixel_width_x[COORD_W-1:0] - 1'b1) &&
-                    (sched_y == tly + pixel_width_y[COORD_W-1:0] - 1'b1)) begin
+                if ((sched_x == qbox_end_x) && (sched_y == qbox_end_y)) begin
                     // if (box_id == 2'b11) next_state = INCREASE_LEVEL;
                     // else                 next_state = NEXT_BOX;
                     next_state = QUEUE_BOX_DRAIN;
