@@ -34,6 +34,8 @@ def bship_q233(cx, cy, max_iter):
             return i
         zx, zy = abs(zx), abs(zy)
         zx, zy = zx*zx - zy*zy + cx, 2*zx*zy + cy
+        print(zx)
+        print(zy)
     return max_iter
 
 def single_point(cx, cy, max_iter=64):
@@ -47,12 +49,8 @@ def single_point(cx, cy, max_iter=64):
     print(f"starting_y_reg_2 = 18'b{to_bin18(py_lo)};  // {py_lo}")
     print()
 
-single_point(0, 1)
-single_point(-1.5, 0.2)
-single_point(0.5, 0.5)
-single_point(-0.1275, 0.6513)
-single_point(-1.7, -0.01)
+single_point(0.913725, 0.003922)
 
 print("Reference counts:")
-for cx, cy in [(0,1), (-1.5, 0.2), (0.5, 0.5), (-0.1275, 0.6513), (-1.7, -0.01)]:
+for cx, cy in [(0.913725, 0.003922)]:
     print(f"  ({cx}, {cy})  mandel={mandel_q233(cx, cy, 64)}  bship={bship_q233(cx, cy, 64)}")
