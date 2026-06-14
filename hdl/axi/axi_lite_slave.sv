@@ -459,8 +459,6 @@ module axi_lite_slave #(
     assign cfg_image_base_addr  = reg_image_base_addr;
     assign cfg_julia_real       = {reg_julia_real, 3'b0};
     assign cfg_julia_imag       = {reg_julia_imag, 3'b0};
-    assign cfg_julia_real       = {3'b0, reg_julia_real};
-    assign cfg_julia_imag       = {3'b0, reg_julia_imag};
 
     // =========================================================================
     // Interrupt
