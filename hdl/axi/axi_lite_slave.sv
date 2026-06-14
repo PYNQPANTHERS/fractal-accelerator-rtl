@@ -33,9 +33,21 @@
 //  0x28  CLR_STATUS           WO   [0]=clear all_done
 //                                  [1]=clear axi_err
 //                                  [2]=clear trans_count
+//                                  [3]=clear all debug counters
 //
 //  0x2C  JULIA_REAL           RW   [31:0] → cfg_julia_real  (Q1.17 fixed-point C real)
 //  0x30  JULIA_IMAG           RW   [31:0] → cfg_julia_imag  (Q1.17 fixed-point C imag)
+//
+//  ── Debug registers (read-only, cleared by CLR_STATUS[3]) ───────────────────
+//  0x34  DBG_SCHED_STATE      RO   [3:0]  scheduler_state (live snapshot)
+//  0x38  DBG_SCHED_PUSH       RO   [31:0] sched_push_count   (saturating)
+//  0x3C  DBG_WANTS_JOB        RO   [31:0] wants_job_count    (saturating)
+//  0x40  DBG_GRANT            RO   [31:0] grant_count        (saturating)
+//  0x44  DBG_CQH_DONE         RO   [31:0] cqh_done_count     (saturating)
+//  0x48  DBG_COMP_VALID       RO   [31:0] comp_valid_count   (saturating)
+//  0x4C  DBG_FLAGS            RO   [0]=comp_complete (live)
+//                                  [1]=comp_differ   (live)
+//                                  [2]=engine_done   (live)
 // -----------------------------------------------------------------------------
 // AXI-Lite handling notes:
 //   - AW and W channels latched independently; write commits only when both
@@ -98,6 +110,19 @@ module axi_lite_slave #(
     input  logic        in_burst_done,   // ← axi_hp_master_wrap.burst_done (pulse)
 
     // -------------------------------------------------------------------------
+    // Debug inputs ← scheduler / engine (all in the same clock domain)
+    // -------------------------------------------------------------------------
+    input  logic [3:0]  dbg_scheduler_state,   // live scheduler FSM state
+    input  logic        dbg_sched_push,         // pulse: scheduler pushed a job
+    input  logic        dbg_wants_job,          // pulse: a core requested a job
+    input  logic        dbg_grant,              // pulse: scheduler granted a job
+    input  logic        dbg_cqh_done,           // pulse: completion queue head done
+    input  logic        dbg_comp_valid,         // pulse: comparator result valid
+    input  logic        dbg_comp_complete,      // level: comparator complete
+    input  logic        dbg_comp_differ,        // level: comparator found difference
+    input  logic        dbg_engine_done,        // level: engine_done signal
+
+    // -------------------------------------------------------------------------
     // Interrupt → PS (IRQ_F2P)
     // -------------------------------------------------------------------------
     output logic        irq_out
@@ -117,6 +142,13 @@ module axi_lite_slave #(
     logic [31:0] reg_trans_count;
     logic [31:0] reg_julia_real;
     logic [31:0] reg_julia_imag;
+
+    // Debug counters — saturating 32-bit
+    logic [31:0] dbg_sched_push_count;
+    logic [31:0] dbg_wants_job_count;
+    logic [31:0] dbg_grant_count;
+    logic [31:0] dbg_cqh_done_count;
+    logic [31:0] dbg_comp_valid_count;
 
     // Sticky flags
     logic done_flag;
@@ -139,7 +171,10 @@ module axi_lite_slave #(
         case (aw_addr_lat[7:2])
             6'h00, 6'h01, 6'h02, 6'h03, 6'h04,
             6'h05, 6'h06, 6'h07, 6'h08, 6'h09,
-            6'h0A, 6'h0B, 6'h0C: addr_valid = 1'b1;
+            6'h0A, 6'h0B, 6'h0C,
+            // debug regs 0x34-0x4C (read-only but we ACK writes gracefully)
+            6'h0D, 6'h0E, 6'h0F, 6'h10, 6'h11,
+            6'h12, 6'h13: addr_valid = 1'b1;
             default: addr_valid = 1'b0;
         endcase
     end
@@ -268,10 +303,11 @@ module axi_lite_slave #(
     // =========================================================================
     // Sticky flags + CLR_STATUS handling
     // =========================================================================
-    logic clr_done, clr_err, clr_count;
+    logic clr_done, clr_err, clr_count, clr_debug;
     assign clr_done  = write_commit && (aw_addr_lat[7:2] == 6'h0A) && w_data_lat[0];
     assign clr_err   = write_commit && (aw_addr_lat[7:2] == 6'h0A) && w_data_lat[1];
     assign clr_count = write_commit && (aw_addr_lat[7:2] == 6'h0A) && w_data_lat[2];
+    assign clr_debug = write_commit && (aw_addr_lat[7:2] == 6'h0A) && w_data_lat[3];
 
     always_ff @(posedge aclk) begin
         if (!aresetn) begin
@@ -298,6 +334,48 @@ module axi_lite_slave #(
         end else if (in_burst_done && reg_trans_count != 32'hFFFF_FFFF) begin
             reg_trans_count <= reg_trans_count + 1;
         end
+    end
+
+    // =========================================================================
+    // Debug counters — saturating, cleared by CLR_STATUS[3]
+    // Saturate at 0xFFFF_FFFF rather than wrapping so the PS can distinguish
+    // "exactly N events" from "at least N events".
+    // =========================================================================
+    function automatic logic [31:0] sat_next(
+        input logic [31:0] cnt,
+        input logic        pulse,
+        input logic        clr
+    );
+        if (clr)                                sat_next = '0;
+        else if (pulse && cnt != 32'hFFFF_FFFF) sat_next = cnt + 1;
+        else                                    sat_next = cnt;
+    endfunction
+
+    always_ff @(posedge aclk) begin
+        if (!aresetn) begin
+            dbg_sched_push_count <= '0;
+            dbg_wants_job_count  <= '0;
+            dbg_grant_count      <= '0;
+            dbg_cqh_done_count   <= '0;
+            dbg_comp_valid_count <= '0;
+        end else begin
+            dbg_sched_push_count <= sat_next(dbg_sched_push_count, dbg_sched_push, clr_debug);
+            dbg_wants_job_count  <= sat_next(dbg_wants_job_count,  dbg_wants_job,  clr_debug);
+            dbg_grant_count      <= sat_next(dbg_grant_count,      dbg_grant,      clr_debug);
+            dbg_cqh_done_count   <= sat_next(dbg_cqh_done_count,   dbg_cqh_done,   clr_debug);
+            dbg_comp_valid_count <= sat_next(dbg_comp_valid_count, dbg_comp_valid, clr_debug);
+        end
+    end
+
+    // =========================================================================
+    // DBG_FLAGS register — live snapshot
+    // =========================================================================
+    logic [31:0] reg_dbg_flags;
+    always_comb begin
+        reg_dbg_flags    = '0;
+        reg_dbg_flags[0] = dbg_comp_complete;
+        reg_dbg_flags[1] = dbg_comp_differ;
+        reg_dbg_flags[2] = dbg_engine_done;
     end
 
     // =========================================================================
@@ -351,6 +429,14 @@ module axi_lite_slave #(
                     6'h0A: begin s_rdata <= 32'h0000_0000;       s_rresp <= 2'b00; end // CLR_STATUS WO
                     6'h0B: begin s_rdata <= reg_julia_real;      s_rresp <= 2'b00; end
                     6'h0C: begin s_rdata <= reg_julia_imag;      s_rresp <= 2'b00; end
+                    // ── debug registers ─────────────────────────────────────
+                    6'h0D: begin s_rdata <= {28'b0, dbg_scheduler_state}; s_rresp <= 2'b00; end // 0x34
+                    6'h0E: begin s_rdata <= dbg_sched_push_count;         s_rresp <= 2'b00; end // 0x38
+                    6'h0F: begin s_rdata <= dbg_wants_job_count;          s_rresp <= 2'b00; end // 0x3C
+                    6'h10: begin s_rdata <= dbg_grant_count;              s_rresp <= 2'b00; end // 0x40
+                    6'h11: begin s_rdata <= dbg_cqh_done_count;           s_rresp <= 2'b00; end // 0x44
+                    6'h12: begin s_rdata <= dbg_comp_valid_count;         s_rresp <= 2'b00; end // 0x48
+                    6'h13: begin s_rdata <= reg_dbg_flags;                s_rresp <= 2'b00; end // 0x4C
                     default: begin s_rdata <= 32'hDEAD_BEEF;     s_rresp <= 2'b10; end
                 endcase
             end
