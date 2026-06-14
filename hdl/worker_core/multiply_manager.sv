@@ -80,6 +80,8 @@ reg signed [2*NARROW_WIDTH-1:0] wide_partial_2;
 wire left_o_flag;
 wire right_o_flag;
 
+wire signed [2*NARROW_WIDTH-1:0] left_multiply_result;
+wire signed [2*NARROW_WIDTH-1:0] right_multiply_result;
 
 logic is_wide;
 
@@ -156,10 +158,8 @@ logic signed [NARROW_WIDTH-1:0] y_low;
     .changed_sum_y_reg_2(encoded_y_reg_2)    
 );
 
-wire signed [2*NARROW_WIDTH-1:0] left_multiply_result;
 logic [1:0] left_multiply_mode;
 
-wire signed [2*NARROW_WIDTH-1:0] right_multiply_result;
 logic [1:0] right_multiply_mode;
 
 logic signed [2*NARROW_WIDTH-1:0] left_mac_add;

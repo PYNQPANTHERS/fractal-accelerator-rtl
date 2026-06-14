@@ -14,8 +14,8 @@ module cluster_dispatch_path #(
     input  logic                    opcode_broadcast_en,
     input  logic                    load_c_en,
     input  logic [1:0]              shared_word_idx,   // from shared load_sequencer (C loading)
-    input  logic [DATA_WIDTH-1:0]   c_real,
-    input  logic [DATA_WIDTH-1:0]   c_imag,
+    input  logic [34:0]             c_real,
+    input  logic [34:0]             c_imag,
     input  logic [OPCODE_W-1:0]     fractal_type,
     input  logic [OPCODE_W-1:0]     max_iter,
 
@@ -89,7 +89,8 @@ module cluster_dispatch_path #(
     job_datapath #(
         .DATA_WIDTH (DATA_WIDTH),
         .JOB_DATA_W (JOB_DATA_W),
-        .OPCODE_W   (OPCODE_W)
+        .OPCODE_W   (OPCODE_W),
+        .Z_WIDE     (Z_WIDE)
     ) u_dp (
         .z_real       (z_real_q),
         .z_imag       (z_imag_q),

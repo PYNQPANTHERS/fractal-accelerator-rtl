@@ -28,24 +28,37 @@ module top_level #(
     // -------------------------------------------------------------------------
     input  logic        ps_start,
     input  logic [4:0]  cfg_fractal_type,
-    input  logic [31:0] cfg_pan_x,
-    input  logic [31:0] cfg_pan_y,
-    input  logic [31:0] cfg_zoom_level,
+    input  logic [34:0] cfg_julia_real,
+    input  logic [34:0] cfg_julia_imag,
+    input  logic [34:0] cfg_pan_x,
+    input  logic [34:0] cfg_pan_y,
+    input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
-    input  logic [31:0] cfg_image_base_addr
+    input  logic [31:0] cfg_image_base_addr,
+
+    // -------------------------------------------------------------------------
+    // Debug taps → axi_lite_slave (driven by per_sixteenth_engine)
+    // -------------------------------------------------------------------------
+    output logic [3:0]  dbg_scheduler_state,
+    output logic        dbg_sched_push,
+    output logic        dbg_wants_job,
+    output logic        dbg_grant,
+    output logic        dbg_cqh_done,
+    output logic        dbg_comp_valid,
+    output logic        dbg_comp_complete,
+    output logic        dbg_comp_differ,
+    output logic        dbg_engine_done
 );
 
     // Controller <-> engine wires
     logic        ctrl_engine_rst;
     logic        ctrl_start;
     logic [4:0]  ctrl_fractal_type;
-    logic [31:0] ctrl_pan_x;
-    logic [31:0] ctrl_pan_y;
-    logic [31:0] ctrl_zoom_level;
+    logic [34:0] ctrl_pan_x;
+    logic [34:0] ctrl_pan_y;
+    logic [15:0] ctrl_zoom_level;
     logic [11:0] ctrl_max_iter;
     logic [3:0]  ctrl_sixteenth_id;
-    logic [9:0]  ctrl_x_offset;
-    logic [9:0]  ctrl_y_offset;
     logic [31:0] ctrl_sixteenth_base_addr;
     logic        ctrl_sixteenth_complete;
     logic        ctrl_all_done;
@@ -72,8 +85,6 @@ module top_level #(
         .pan_y              (ctrl_pan_y),
         .zoom_level         (ctrl_zoom_level),
         .max_iter           (ctrl_max_iter),
-        .x_offset           (ctrl_x_offset),
-        .y_offset           (ctrl_y_offset),
         .sixteenth_id       (ctrl_sixteenth_id),
         .sixteenth_base_addr(ctrl_sixteenth_base_addr),
         .sixteenth_complete (ctrl_sixteenth_complete),
@@ -89,18 +100,29 @@ module top_level #(
         .engine_done        (),
         .sixteenth_complete (ctrl_sixteenth_complete),
         .fractal_type       (ctrl_fractal_type),
+        .julia_real         (cfg_julia_real),
+        .julia_imag         (cfg_julia_imag),
         .pan_x              (ctrl_pan_x),
         .pan_y              (ctrl_pan_y),
         .zoom_level         (ctrl_zoom_level),
         .max_iter           (ctrl_max_iter),
-        .x_offset           (ctrl_x_offset),
-        .y_offset           (ctrl_y_offset),
         .sixteenth_id       (ctrl_sixteenth_id),
         .sixteenth_base_addr(ctrl_sixteenth_base_addr),
         .axi_wr_addr        (hp_axi_wr_addr),
         .axi_wr_data        (hp_axi_wr_data),
         .axi_wr_en          (hp_axi_wr_en),
-        .axi_wr_ready       (hp_axi_wr_ready)
+        .axi_wr_ready       (hp_axi_wr_ready),
+
+        // debug taps → top_level ports → axi_lite_slave
+        .dbg_scheduler_state(dbg_scheduler_state),
+        .dbg_sched_push     (dbg_sched_push),
+        .dbg_wants_job      (dbg_wants_job),
+        .dbg_grant          (dbg_grant),
+        .dbg_cqh_done       (dbg_cqh_done),
+        .dbg_comp_valid     (dbg_comp_valid),
+        .dbg_comp_complete  (dbg_comp_complete),
+        .dbg_comp_differ    (dbg_comp_differ),
+        .dbg_engine_done    (dbg_engine_done)
     );
 
     assign irq_all_done = ctrl_all_done;
