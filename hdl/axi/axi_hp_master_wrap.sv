@@ -160,19 +160,6 @@ module axi_hp_master_wrap #(
     assign m_awqos   = 4'b0000;
     assign m_wstrb   = 8'hFF;
 
-    // W channel driven combinationally from the skid head. Valid only in SEND_W
-    // and only when the skid actually holds the beat (mid-burst stalls are legal:
-    // wvalid simply drops when the skid momentarily empties). WLAST asserts on the
-    // final beat of the burst.
-    assign m_wdata  = skid_out_data;
-    assign m_wvalid = (bstate == SEND_W) && !skid_empty;
-    assign m_wlast  = (bstate == SEND_W) && (beat_cnt == LAST_BEAT);
-
-    // Pop the skid the SAME cycle a beat is accepted, so the head advances in
-    // lockstep with what has been sent (a registered pop lags by a cycle and
-    // re-sends the head). skid_rd_en is therefore combinational, not an FSM reg.
-    assign skid_rd_en = m_wvalid && m_wready;
-
     // =========================================================================
     // Burst state machine
     // =========================================================================
@@ -196,12 +183,17 @@ module axi_hp_master_wrap #(
             bstate          <= IDLE;
             m_awaddr        <= '0;
             m_awvalid       <= 1'b0;
+            m_wdata         <= '0;
+            m_wlast         <= 1'b0;
+            m_wvalid        <= 1'b0;
             m_bready        <= 1'b0;
             beat_cnt        <= '0;
             burst_base_addr <= '0;
+            skid_rd_en      <= 1'b0;
             err_flag        <= 1'b0;
             burst_done      <= 1'b0;
         end else begin
+            skid_rd_en <= 1'b0;
             burst_done <= 1'b0;
 
             case (bstate)
@@ -211,6 +203,7 @@ module axi_hp_master_wrap #(
                 // -----------------------------------------------------------------
                 IDLE: begin
                     m_awvalid <= 1'b0;
+                    m_wvalid  <= 1'b0;
                     m_bready  <= 1'b0;
                     beat_cnt  <= '0;
 
@@ -224,12 +217,17 @@ module axi_hp_master_wrap #(
                 // SEND_AW — assert AWVALID and hold until AWREADY.
                 // Prime the W channel with the first beat in parallel.
                 // -----------------------------------------------------------------
-                // SEND_AW — assert AWVALID until AWREADY. W data is driven
-                // directly from the skid head (combinational), so no priming /
-                // pre-load is needed here; the W phase handles all beats.
                 SEND_AW: begin
                     m_awaddr  <= burst_base_addr;
                     m_awvalid <= 1'b1;
+
+                    if (!m_wvalid && !skid_empty) begin
+                        m_wdata    <= skid_out_data;
+                        m_wlast    <= (beat_cnt == LAST_BEAT);
+                        m_wvalid   <= 1'b1;
+                        skid_rd_en <= 1'b1;
+                        beat_cnt   <= beat_cnt + 1'b1;
+                    end
 
                     if (m_awvalid && m_awready) begin
                         m_awvalid <= 1'b0;
@@ -238,18 +236,31 @@ module axi_hp_master_wrap #(
                 end
 
                 // -----------------------------------------------------------------
-                // SEND_W — stream beats. m_wdata/m_wvalid/m_wlast are driven
-                // combinationally from the skid head (see assigns below). The skid
-                // pointer and beat_cnt advance EXACTLY when a beat is accepted
-                // (wvalid && wready), keeping head, data and count in lockstep.
-                // This avoids the earlier duplicate/skew bug where a registered
-                // m_wdata and a registered skid_rd_en pulse drifted out of sync.
+                // SEND_W — stream beats from skid buffer onto W channel.
+                // WLAST is pre-computed when loading each beat: it asserts
+                // when beat_cnt reaches BURST_BEATS-1, i.e. on the final beat.
                 // -----------------------------------------------------------------
                 SEND_W: begin
-                    if (m_wvalid && m_wready) begin   // beat accepted (skid pops via assign)
-                        beat_cnt <= beat_cnt + 1'b1;
-                        if (m_wlast)
-                            bstate <= WAIT_B;
+                    if (m_wvalid && m_wready) begin
+                        if (m_wlast) begin
+                            m_wvalid <= 1'b0;
+                            m_wlast  <= 1'b0;
+                            bstate   <= WAIT_B;
+                        end else if (!skid_empty) begin
+                            m_wdata    <= skid_out_data;
+                            m_wlast    <= (beat_cnt == LAST_BEAT);
+                            skid_rd_en <= 1'b1;
+                            beat_cnt   <= beat_cnt + 1'b1;
+                        end else begin
+                            // skid buffer momentarily empty — legal mid-burst stall
+                            m_wvalid <= 1'b0;
+                        end
+                    end else if (!m_wvalid && !skid_empty) begin
+                        m_wdata    <= skid_out_data;
+                        m_wlast    <= (beat_cnt == LAST_BEAT);
+                        m_wvalid   <= 1'b1;
+                        skid_rd_en <= 1'b1;
+                        beat_cnt   <= beat_cnt + 1'b1;
                     end
                 end
 
@@ -277,6 +288,7 @@ module axi_hp_master_wrap #(
                 // -----------------------------------------------------------------
                 ERROR: begin
                     m_awvalid <= 1'b0;
+                    m_wvalid  <= 1'b0;
                     m_bready  <= 1'b1;
                 end
 

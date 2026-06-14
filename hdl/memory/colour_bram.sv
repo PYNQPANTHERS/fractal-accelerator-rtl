@@ -59,11 +59,7 @@ module colour_bram #(
     assign ctrl_rd_waddr_i = ctrl_rd_ta[15:3];
     assign ctrl_rd_boff    = ctrl_rd_ta[2:0];
 
-    // Port A: shared READ port. Serves the controller's cache-check byte read
-    // (priority) and the bram_to_dram word read. b2d is read-only and the
-    // cache-check is idle during the writeback drain, so moving b2d here lets it
-    // read every cycle during drain instead of starving behind ctrl writes on
-    // Port B. One physical read per cycle: ctrl_rd_en wins, else b2d_rd_en.
+    // Port A: controller byte read
     logic [63:0] a_rd_word;
     logic [2:0]  a_byte_off_reg;
 
@@ -71,26 +67,23 @@ module colour_bram #(
         if (ctrl_rd_en) begin
             a_rd_word      <= mem[ctrl_rd_waddr_i];
             a_byte_off_reg <= ctrl_rd_boff;
-        end else if (b2d_rd_en) begin
-            b2d_rd_data    <= mem[b2d_word_addr];
         end
     end
 
     always_comb
         ctrl_rd_data = a_rd_word[a_byte_off_reg*8 +: 8];
 
-    // b2d gets Port A whenever the cache-check read is not using it. Grant is
-    // registered to align with b2d_rd_data (both land the cycle after the read).
+    // Port B: RMW pre-read and b2d read (wr beats b2d); grant registered to align with data
     always_ff @(posedge clk)
-        b2d_rd_grant <= b2d_rd_en && !ctrl_rd_en;
+        b2d_rd_grant <= b2d_rd_en && !ctrl_wr_en && !ctrl_rmw_rd_en;
 
-    // Port B: controller write / RMW pre-read only. b2d no longer contends here,
-    // so the control unit never has to stall for the colour BRAM.
     always_ff @(posedge clk) begin
         if (ctrl_wr_en)
             mem[ctrl_wr_waddr] <= ctrl_wr_word;
         else if (ctrl_rmw_rd_en)
             ctrl_rmw_rd_data <= mem[ctrl_rmw_rd_addr];
+        else if (b2d_rd_en)
+            b2d_rd_data <= mem[b2d_word_addr];
     end
 
     // Per-tile write counter, ping-pong banks. rst rising edge flips active bank and
