@@ -317,7 +317,7 @@ module control_unit #(
     logic [PIXEL_ADDR_W-1:0]   disp_pixel_addr_per [CLUSTER_COUNT];
     logic [JOB_DATA_W-1:0]     disp_job_data_per   [CLUSTER_COUNT];
 
-    // Priority-encoded FIFO arbiter: one pop per cycle, lowest index wins ties
+    // Priority-encoded FIFO arbiter lowest index wins ties
     // cant think of better way tbh there is a writing bottle neck
     priority_encoder #(.BUS_WIDTH(CLUSTER_COUNT)) u_dispatch_arb (
         .core_bus    (dispatch_req_per),

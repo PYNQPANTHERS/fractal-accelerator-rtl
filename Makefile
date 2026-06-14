@@ -40,6 +40,11 @@ TOP_HDL_SRCS     := $(ENGINE_HDL_SRCS) \
                     hdl/top/sixteenth_controller.sv \
                     hdl/top/top_level.sv
 
+# Sources for dual_top_level testbench
+DUAL_HDL_SRCS    := $(ENGINE_HDL_SRCS) \
+                    hdl/dual_top/dual_sixteenth_controller.sv \
+                    hdl/dual_top/dual_top_level.sv
+
 # Collect all HDL sources automatically
 _TB_IN_HDL := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/tb_*.sv))
 HDL_SRCS   := $(filter-out $(_TB_IN_HDL),$(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/*.sv)))
@@ -281,6 +286,27 @@ b2d-csv:
 	@echo "  Outputs: $(RENDER_DIR)/b2d_bram_source.csv"
 	@echo "           $(RENDER_DIR)/b2d_partial_dram.csv"
 	@echo "           $(RENDER_DIR)/b2d_full_dram.csv"
+	@echo ""
+
+# Level-3b: dual_top_level, all 16 sixteenths via two parallel engines
+.PHONY: dual-full
+dual-full:
+	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval TB_NAME := tb_dual_top_level)
+	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Compiling: hdl/dual_top/$(TB_NAME).sv"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	iverilog $(IVFLAGS) -o $(OUT) $(DUAL_HDL_SRCS) hdl/dual_top/$(TB_NAME).sv
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Running:   $(TB_NAME)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	vvp $(OUT)
+	@echo ""
+	@echo "  Outputs: $(RENDER_DIR)/dual_full_image.csv"
+	@echo "           $(RENDER_DIR)/dual_sixteenth_N_bram.csv  (N=0..15)"
 	@echo ""
 
 # Clean
