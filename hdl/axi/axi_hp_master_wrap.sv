@@ -89,7 +89,17 @@ module axi_hp_master_wrap #(
     // Status outputs — to AXI-Lite status register
     // -------------------------------------------------------------------------
     output logic        err_flag,      // sticky: SLVERR/DECERR seen on B channel
-    output logic        burst_done     // 1-cycle pulse after each BVALID accepted
+    output logic        burst_done,    // 1-cycle pulse after each BVALID accepted
+
+    // -------------------------------------------------------------------------
+    // Debug taps → AXI-Lite status registers (same clock domain)
+    // -------------------------------------------------------------------------
+    output logic        dbg_axi_aw_hs,      // m_awvalid && m_awready
+    output logic        dbg_axi_w_hs,       // m_wvalid  && m_wready
+    output logic        dbg_axi_b_hs,       // m_bvalid  && m_bready
+    output logic [3:0]  dbg_axi_bstate,     // burst FSM state (zero-extended)
+    output logic        dbg_axi_wr_ready,   // live wr_ready (skid not full)
+    output logic [1:0]  dbg_axi_bresp_last  // live BRESP value
 );
 
     // =========================================================================
@@ -297,6 +307,16 @@ module axi_hp_master_wrap #(
             endcase
         end
     end
+
+    // =========================================================================
+    // Debug taps (combinational, off existing AXI signals) → AXI-Lite
+    // =========================================================================
+    assign dbg_axi_aw_hs      = m_awvalid && m_awready;
+    assign dbg_axi_w_hs       = m_wvalid  && m_wready;
+    assign dbg_axi_b_hs       = m_bvalid  && m_bready;
+    assign dbg_axi_bstate     = {1'b0, bstate};   // bstate is the 3-bit burst FSM enum
+    assign dbg_axi_wr_ready   = wr_ready;
+    assign dbg_axi_bresp_last = m_bresp;
 
 endmodule
 
