@@ -9,19 +9,19 @@ module complete_queue_handler (
     input  logic        done,
     input  logic [7:0]  iter_x,
     input  logic [7:0]  iter_y,
-    input  logic [3:0]  iter_colour,
+    input  logic [5:0]  iter_colour,
 
     // Comparator pop interface
     input  logic        comp_pop,     // comparator consumes one entry
     output logic        comp_valid,   // queue non-empty
-    output logic [19:0] comp_data,    // { colour[3:0], y[7:0], x[7:0] }
+    output logic [21:0] comp_data,    // { colour[5:0], y[7:0], x[7:0] }
 
-    // Debug 
+    // Debug
     output logic        full_err      // pulses if push attempted when full
 );
 
     logic        q_push;
-    logic [19:0] q_data_in;
+    logic [21:0] q_data_in;
     logic        q_full, q_empty;
 
     complete_queue u_complete_queue (

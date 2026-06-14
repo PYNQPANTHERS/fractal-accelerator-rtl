@@ -17,7 +17,7 @@ module comparator #(
 
     // Complete queue handler interface
     input  logic        comp_valid,
-    input  logic [19:0] comp_data,        // { colour[3:0], y[7:0], x[7:0] }
+    input  logic [21:0] comp_data,        // { colour[5:0], y[7:0], x[7:0] }
     output logic        comp_pop,
 
     // Flags to scheduler
@@ -27,11 +27,11 @@ module comparator #(
 );
 
     logic [COORD_W-1:0] entry_x, entry_y;
-    logic [3:0]  entry_colour;
+    logic [5:0]  entry_colour;
 
     assign entry_x      = comp_data[COORD_W-1:0];
     assign entry_y      = comp_data[COORD_W*2-1:COORD_W];
-    assign entry_colour = comp_data[19:16];
+    assign entry_colour = comp_data[21:16];
 
     // Bounds check
     logic in_bounds;
@@ -40,11 +40,11 @@ module comparator #(
                        ({1'b0, entry_y} >= {1'b0, top_left_y}) &&
                        ({1'b0, entry_y} <  {1'b0, top_left_y} + quad_size_y);
 
-    logic [3:0]  ref_colour;
+    logic [5:0]  ref_colour;
     logic        ref_valid;
     logic [10:0] seen_count;
 
-    assign ref_colour_o = {2'b00, ref_colour};
+    assign ref_colour_o = ref_colour;
 
     // Pop whenever there is a valid entry
     assign comp_pop = comp_valid;
@@ -54,32 +54,43 @@ module comparator #(
         if (rst) begin
             differ      <= 1'b0;
             complete    <= 1'b0;
-            ref_colour  <= 4'b0;
+            ref_colour  <= 6'b0;
             ref_valid   <= 1'b0;
             seen_count  <= 11'b0;
         end else if (sched_reset) begin
             differ      <= 1'b0;
             complete    <= 1'b0;
-            ref_colour  <= 4'b0;
+            ref_colour  <= 6'b0;
             ref_valid   <= 1'b0;
             seen_count  <= 11'b0;
         end else if (comp_valid && in_bounds) begin
+            // this_differs: the current pixel mismatches the reference. Computed
+            // here (not just the registered `differ`) so the final border pixel
+            // can suppress `complete` in the same cycle it sets `differ`.
+            logic this_differs;
+            this_differs = ref_valid && (entry_colour != ref_colour);
+
             // First valid entry after reset - store as reference colour
             if (!ref_valid) begin
                 ref_colour <= entry_colour;
                 ref_valid  <= 1'b1;
             end else begin
                 // Compare against reference - latch differ if mismatch
-                if (entry_colour != ref_colour)
+                if (this_differs)
                     differ <= 1'b1;
             end
 
             // Increment seen counter
             seen_count <= seen_count + 1'b1;
 
-            // Latch complete when we have seen all expected border pixels.
-            // ref_valid guard ensures we never fire complete before the first pixel lands.
-            if (ref_valid && (seen_count + 1'b1 >= expected_count))
+            // Latch complete only when all expected border pixels have been seen
+            // AND neither a previous pixel nor this one differed. Without the
+            // !differ && !this_differs guard, a border whose LAST pixel is the one
+            // that differs would set `differ` and `complete` on the same cycle;
+            // the scheduler checks `complete` first and would wrongly flood-fill a
+            // non-uniform box with the reference colour.
+            if (ref_valid && !differ && !this_differs &&
+                (seen_count + 1'b1 >= expected_count))
                 complete <= 1'b1;
         end
         // Out-of-bounds entries: comp_pop still fires (entry consumed) but no state changes 

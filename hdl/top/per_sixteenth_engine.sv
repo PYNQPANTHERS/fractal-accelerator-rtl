@@ -58,11 +58,11 @@ module per_sixteenth_engine #(
     logic [COORD_W-1:0] cqh_iter_x;
     logic [COORD_W-1:0] cqh_iter_y;
     logic [7:0]  cu_iter_colour_raw;
-    logic [3:0]  cqh_iter_colour;
-    assign cqh_iter_colour = cu_iter_colour_raw[3:0];
+    logic [5:0]  cqh_iter_colour;                       // 6-bit colour (matches fill path)
+    assign cqh_iter_colour = cu_iter_colour_raw[5:0];
     logic        cqh_comp_pop;
     logic        cqh_comp_valid;
-    logic [19:0] cqh_comp_data;
+    logic [21:0] cqh_comp_data;
     logic        comp_sched_reset;
     logic [COORD_W-1:0] comp_top_left_x;
     logic [COORD_W-1:0] comp_top_left_y;

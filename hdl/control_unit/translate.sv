@@ -2,6 +2,7 @@ module translate #(
     parameter int DATA_WIDTH = 35,
     parameter int RESOLUTION = 8
 ) (
+    input  logic                  clk,
     input  logic [DATA_WIDTH-1:0] pan_x,
     input  logic [DATA_WIDTH-1:0] pan_y,
     input  logic [RESOLUTION-1:0] a,
@@ -12,7 +13,13 @@ module translate #(
     output logic [DATA_WIDTH-1:0] z_imag
 );
 
-    logic [DATA_WIDTH-1:0] scale_factor;
+    logic [DATA_WIDTH-1:0] scale_factor;     // combinational LUT output
+    logic [DATA_WIDTH-1:0] scale_factor_q;   // registered: removes the 80-way LUT
+                                             // mux from the multiply's critical
+                                             // path. zoom is per-frame config so
+                                             // the 1-cycle delay is harmless.
+
+    always_ff @(posedge clk) scale_factor_q <= scale_factor;
 
 // Each raw step value is multiplied by 2^17 so that x_prod = px * scale_factor
 // places the Q2.16 coordinate in z_real[34:17] (the top 18 bits), matching the
@@ -123,8 +130,8 @@ end
         px = (DATA_WIDTH'(tile_col) << RESOLUTION) + DATA_WIDTH'(a);   // 0..1023
         py = (DATA_WIDTH'(tile_row) << RESOLUTION) + DATA_WIDTH'(b);
 
-        x_prod = px * scale_factor;     // uniform step everywhere
-        y_prod = py * scale_factor;
+        x_prod = px * scale_factor_q;   // uniform step everywhere
+        y_prod = py * scale_factor_q;
 
         z_real = $signed(pan_x) + $signed(DATA_WIDTH'(x_prod));
         z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(y_prod));

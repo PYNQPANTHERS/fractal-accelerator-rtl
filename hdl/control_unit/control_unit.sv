@@ -115,6 +115,7 @@ module control_unit #(
         .DATA_WIDTH (35),
         .RESOLUTION (PIXEL_W)
     ) cheezy_translator (
+        .clk       (clk),
         .pan_x     (pan_x),
         .pan_y     (pan_y),
         .a         (pf_coord_a),
