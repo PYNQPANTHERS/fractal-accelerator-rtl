@@ -278,6 +278,13 @@ top-run:
 		$(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
 		$(if $(TAG),+tag=$(TAG))
 
+# AXI-HP master wrapper unit test (stub AXI slave; checks burst beats/data/wlast).
+.PHONY: axi-wrap
+axi-wrap:
+	mkdir -p $(BUILD_DIR)
+	iverilog $(IVFLAGS) -o $(BUILD_DIR)/tb_axi_hp_master_wrap.out hdl/axi/axi_hp_master_wrap.sv tb/axi/tb_axi_hp_master_wrap.sv
+	vvp $(BUILD_DIR)/tb_axi_hp_master_wrap.out
+
 # Tile-size benchmark: renders the full image on TILE_W=16 then TILE_W=8 and
 # reports core-utilisation / scheduler-occupancy metrics for the report.
 .PHONY: tile-bench
