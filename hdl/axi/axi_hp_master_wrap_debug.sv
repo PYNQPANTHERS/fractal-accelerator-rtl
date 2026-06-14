@@ -225,23 +225,27 @@ module axi_hp_master_wrap #(
 
                 // -----------------------------------------------------------------
                 // SEND_AW — assert AWVALID and hold until AWREADY.
-                // Prime the W channel with the first beat in parallel.
+                // W beat 0 is loaded only in the same cycle AW is accepted so
+                // that WVALID is never asserted before AWREADY.  The Zynq HP AFI
+                // write-data FIFO can assert WREADY independently of the write-
+                // command FIFO; presenting W data early causes the AFI to consume
+                // beats that have no matching AW context, misaligning the burst
+                // and leaving the response channel permanently stalled (B_HS=0).
                 // -----------------------------------------------------------------
                 SEND_AW: begin
                     m_awaddr  <= burst_base_addr;
                     m_awvalid <= 1'b1;
 
-                    if (!m_wvalid && !skid_empty) begin
-                        m_wdata    <= skid_out_data;
-                        m_wlast    <= (beat_cnt == LAST_BEAT);
-                        m_wvalid   <= 1'b1;
-                        skid_rd_en <= 1'b1;
-                        beat_cnt   <= beat_cnt + 1'b1;
-                    end
-
                     if (m_awvalid && m_awready) begin
                         m_awvalid <= 1'b0;
                         bstate    <= SEND_W;
+                        if (!skid_empty) begin
+                            m_wdata    <= skid_out_data;
+                            m_wlast    <= (beat_cnt == LAST_BEAT);
+                            m_wvalid   <= 1'b1;
+                            skid_rd_en <= 1'b1;
+                            beat_cnt   <= beat_cnt + 1'b1;
+                        end
                     end
                 end
 
