@@ -14,12 +14,12 @@ module per_sixteenth_engine #(
 
     // Config from sixteenth_controller
     input  logic [4:0]  fractal_type,
-    input  logic [31:0] pan_x,
-    input  logic [31:0] pan_y,
-    input  logic [31:0] zoom_level,
+    input  logic [34:0] julia_real,
+    input  logic [34:0] julia_imag,
+    input  logic [34:0] pan_x,
+    input  logic [34:0] pan_y,
+    input  logic [15:0] zoom_level,
     input  logic [11:0] max_iter,
-    input  logic [9:0]  x_offset,
-    input  logic [9:0]  y_offset,
     input  logic [3:0]  sixteenth_id,
     input  logic [31:0] sixteenth_base_addr,
 
@@ -58,11 +58,11 @@ module per_sixteenth_engine #(
     logic [COORD_W-1:0] cqh_iter_x;
     logic [COORD_W-1:0] cqh_iter_y;
     logic [7:0]  cu_iter_colour_raw;
-    logic [3:0]  cqh_iter_colour;
-    assign cqh_iter_colour = cu_iter_colour_raw[3:0];
+    logic [5:0]  cqh_iter_colour;                       // 6-bit colour (matches fill path)
+    assign cqh_iter_colour = cu_iter_colour_raw[5:0];
     logic        cqh_comp_pop;
     logic        cqh_comp_valid;
-    logic [19:0] cqh_comp_data;
+    logic [21:0] cqh_comp_data;
     logic        comp_sched_reset;
     logic [COORD_W-1:0] comp_top_left_x;
     logic [COORD_W-1:0] comp_top_left_y;
@@ -191,15 +191,15 @@ module per_sixteenth_engine #(
         .opcode_reset       (1'b0),
 
         .fractal_type       (fractal_type),
-        .pan_x              (pan_x[17:0]),
-        .pan_y              (pan_y[17:0]),
-        .zoom_level         (zoom_level[3:0]),
+        .pan_x              (pan_x),
+        .pan_y              (pan_y),
+        .zoom_level         (zoom_level),
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
         .start_flag         (start),
         .width_flag         (1'b0),
-        .c_x                ('0),
-        .c_y                ('0),
+        .c_x                (julia_real),
+        .c_y                (julia_imag),
 
         .wants_job          (jqh_wants_job),
         .grant              (jqh_grant),

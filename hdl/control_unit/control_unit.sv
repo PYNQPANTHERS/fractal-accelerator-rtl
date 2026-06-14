@@ -16,17 +16,17 @@ module control_unit #(
 
     // frame control
     input  logic [4:0]              fractal_type,
-    input  logic [DATA_WIDTH-1:0]   pan_x,
-    input  logic [DATA_WIDTH-1:0]   pan_y,
-    input  logic [3:0]              zoom_level,
+    input  logic [34:0]   pan_x,
+    input  logic [34:0]   pan_y,
+    input  logic [15:0]              zoom_level,
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
     input  logic                    width_flag,
     input  logic [3:0]              sixteenth,
 
     // julia c in full precision
-    input  logic [DATA_WIDTH-1:0]   c_x,
-    input  logic [DATA_WIDTH-1:0]   c_y,
+    input  logic [34:0]   c_x,
+    input  logic [34:0]   c_y,
 
     // scheduler handshake (pixel coords in)
     output logic                    wants_job,
@@ -68,8 +68,7 @@ module control_unit #(
 
 );
 
-    localparam int Z_WIDTH      = DATA_WIDTH + 1;
-    localparam int Z_WIDE       = Z_WIDTH * 2 - 1;
+    localparam int Z_WIDE       = 35;
     localparam int WORDS_NARROW = 2;
     localparam int WORDS_WIDE   = 4;
     localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W + 1; // +1 for reinject flag (MSB)
@@ -113,11 +112,12 @@ module control_unit #(
     assign cu_rd_y = pf_coord_b;
 
     translate #(
-        .DATA_WIDTH (Z_WIDE),
+        .DATA_WIDTH (35),
         .RESOLUTION (PIXEL_W)
     ) cheezy_translator (
-        .pan_x     ({{(Z_WIDE-DATA_WIDTH){pan_x[DATA_WIDTH-1]}}, pan_x}),
-        .pan_y     ({{(Z_WIDE-DATA_WIDTH){pan_y[DATA_WIDTH-1]}}, pan_y}),
+        .clk       (clk),
+        .pan_x     (pan_x),
+        .pan_y     (pan_y),
         .a         (pf_coord_a),
         .b         (pf_coord_b),
         .zoom      (zoom_level),
@@ -318,7 +318,7 @@ module control_unit #(
     logic [PIXEL_ADDR_W-1:0]   disp_pixel_addr_per [CLUSTER_COUNT];
     logic [JOB_DATA_W-1:0]     disp_job_data_per   [CLUSTER_COUNT];
 
-    // Priority-encoded FIFO arbiter: one pop per cycle, lowest index wins ties
+    // Priority-encoded FIFO arbiter lowest index wins ties
     // cant think of better way tbh there is a writing bottle neck
     priority_encoder #(.BUS_WIDTH(CLUSTER_COUNT)) u_dispatch_arb (
         .core_bus    (dispatch_req_per),
