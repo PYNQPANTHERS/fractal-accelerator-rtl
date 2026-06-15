@@ -69,16 +69,18 @@ module bram_to_dram #(
     logic [TILE_IDX_W-1:0]  cur_tile;
     logic [WPT_W-1:0]       fill_count;
 
-    logic [WPT_W:0]  rd_count;    // next word index to request (0..WORDS_PER_TILE)
-    logic [WPT_W-1:0] rd_addr;    // address of in-flight read
-    logic             rd_inflight;
-    logic             rd_suppress; // suppress re-assert for 1 cycle after issuing new address
-
     logic [WPT_W-1:0] wr_count;
 
-    // 2-slot FIFO; slot 0 is the AXI head
-    logic [63:0] fifo0, fifo1;
-    logic        fifo0_v, fifo1_v;
+    // Single word buffer: read one word from BRAM, then write it to AXI.
+    // Simple sequential pipeline: BRAM_REQ -> BRAM_WAIT -> AXI_WAIT -> repeat.
+    typedef enum logic [1:0] {
+        BP_BRAM_REQ,   // assert b2d_rd_en
+        BP_BRAM_WAIT,  // wait for b2d_rd_grant, latch data
+        BP_AXI_WAIT    // present word to AXI, wait for axi_wr_ready
+    } bp_state_t;
+
+    bp_state_t bp_state;
+    logic [63:0] bp_word;  // latched BRAM word
 
     logic [TOTAL_TILES-1:0] pending;
     assign pending = tile_done & ~transferred;
@@ -117,10 +119,10 @@ module bram_to_dram #(
                 axi_wr_addr = sixteenth_base_addr + (32'(cur_tile) << $clog2(BYTES_PER_TILE)) + {wr_count, 3'b0};
                 axi_wr_data = fill_word;
             end
-            BURST_PIPE: if (fifo0_v) begin
+            BURST_PIPE: if (bp_state == BP_AXI_WAIT) begin
                 axi_wr_en   = 1'b1;
                 axi_wr_addr = sixteenth_base_addr + (32'(cur_tile) << $clog2(BYTES_PER_TILE)) + {wr_count, 3'b0};
-                axi_wr_data = fifo0;
+                axi_wr_data = bp_word;
             end
             default: ;
         endcase
@@ -133,15 +135,9 @@ module bram_to_dram #(
             transferred_count <= '0;
             cur_tile          <= '0;
             fill_count        <= '0;
-            rd_count          <= '0;
-            rd_addr           <= '0;
-            rd_inflight       <= 1'b0;
-            rd_suppress       <= 1'b0;
             wr_count          <= '0;
-            fifo0_v           <= 1'b0;
-            fifo1_v           <= 1'b0;
-            fifo0             <= '0;
-            fifo1             <= '0;
+            bp_state          <= BP_BRAM_REQ;
+            bp_word           <= '0;
             b2d_rd_en         <= 1'b0;
             b2d_word_addr     <= '0;
             cache_valid_wr_en <= 1'b0;
@@ -152,13 +148,9 @@ module bram_to_dram #(
             case (state)
 
                 SCAN: begin
-                    fifo0_v     <= 1'b0;
-                    fifo1_v     <= 1'b0;
-                    rd_inflight <= 1'b0;
-                    rd_suppress <= 1'b0;
-                    rd_count    <= '0;
-                    wr_count    <= '0;
-                    fill_count  <= '0;
+                    wr_count   <= '0;
+                    fill_count <= '0;
+                    bp_state   <= BP_BRAM_REQ;
                     if (any_pending) begin
                         cur_tile <= next_tile;
                         state    <= CHECK_TABLE;
@@ -169,13 +161,8 @@ module bram_to_dram #(
                     if (tt_is_filled)
                         state <= GENERATE_FILL;
                     else begin
-                        b2d_rd_en     <= 1'b1;
-                        b2d_word_addr <= {cur_tile, {WPT_W{1'b0}}};
-                        rd_addr       <= '0;
-                        rd_count      <= (WPT_W+1)'(1);
-                        rd_inflight   <= 1'b1;
-                        rd_suppress   <= 1'b1;
-                        state         <= BURST_PIPE;
+                        bp_state <= BP_BRAM_REQ;
+                        state    <= BURST_PIPE;
                     end
                 end
 
@@ -195,72 +182,44 @@ module bram_to_dram #(
                 end
 
                 BURST_PIPE: begin
-                    if (fifo0_v && axi_wr_ready) begin
-                        fifo0   <= fifo1;
-                        fifo0_v <= fifo1_v;
-                        fifo1   <= '0;
-                        fifo1_v <= 1'b0;
-                        if (wr_count == WPT_W'(WORDS_PER_TILE - 1)) begin
-                            transferred[cur_tile] <= 1'b1;
-                            transferred_count     <= transferred_count + 1'b1;
-                            cache_valid_wr_en     <= 1'b1;
-                            cache_valid_index     <= cur_tile;
-                            cache_valid_value     <= 1'b1;
-                            state                 <= SCAN;
-                        end else
-                            wr_count <= wr_count + 1'b1;
-                    end
-
-                    if (rd_inflight) begin
-                        if (rd_suppress) begin
+                    case (bp_state)
+                        // Request word wr_count from BRAM
+                        BP_BRAM_REQ: begin
                             b2d_rd_en     <= 1'b1;
-                            b2d_word_addr <= {cur_tile, rd_addr};
-                            rd_suppress   <= 1'b0;
-                        end else if (b2d_rd_grant) begin
-                            if (fifo0_v && axi_wr_ready) begin
-                                if (!fifo1_v) begin
-                                    fifo0   <= b2d_rd_data;
-                                    fifo0_v <= 1'b1;
-                                end else begin
-                                    fifo1   <= b2d_rd_data;
-                                    fifo1_v <= 1'b1;
-                                end
-                            end else begin
-                                if (!fifo0_v) begin
-                                    fifo0   <= b2d_rd_data;
-                                    fifo0_v <= 1'b1;
-                                end else begin
-                                    fifo1   <= b2d_rd_data;
-                                    fifo1_v <= 1'b1;
-                                end
-                            end
-                            rd_inflight <= 1'b0;
-
-                            if ((rd_count < (WPT_W+1)'(WORDS_PER_TILE))
-                                    && !(wr_count == WPT_W'(WORDS_PER_TILE-1) && fifo0_v && axi_wr_ready)
-                                    && ((fifo0_v && axi_wr_ready) || !fifo1_v)) begin
-                                b2d_rd_en     <= 1'b1;
-                                b2d_word_addr <= {cur_tile, rd_count[WPT_W-1:0]};
-                                rd_addr       <= rd_count[WPT_W-1:0];
-                                rd_count      <= rd_count + 1'b1;
-                                rd_inflight   <= 1'b1;
-                                rd_suppress   <= 1'b1;
-                            end
-                        end else begin
-                            b2d_rd_en     <= 1'b1;
-                            b2d_word_addr <= {cur_tile, rd_addr};
+                            b2d_word_addr <= {cur_tile, wr_count};
+                            bp_state      <= BP_BRAM_WAIT;
                         end
-                    end else if ((rd_count < (WPT_W+1)'(WORDS_PER_TILE))
-                            && !fifo1_v
-                            && !(wr_count == WPT_W'(WORDS_PER_TILE-1) && fifo0_v && axi_wr_ready)) begin
-                        b2d_rd_en     <= 1'b1;
-                        b2d_word_addr <= {cur_tile, rd_count[WPT_W-1:0]};
-                        rd_addr       <= rd_count[WPT_W-1:0];
-                        rd_count      <= rd_count + 1'b1;
-                        rd_inflight   <= 1'b1;
-                        rd_suppress   <= 1'b1;
-                    end
 
+                        // Wait for BRAM grant (re-assert each cycle until granted)
+                        BP_BRAM_WAIT: begin
+                            if (b2d_rd_grant) begin
+                                bp_word  <= b2d_rd_data;
+                                bp_state <= BP_AXI_WAIT;
+                            end else begin
+                                b2d_rd_en     <= 1'b1;
+                                b2d_word_addr <= {cur_tile, wr_count};
+                            end
+                        end
+
+                        // Present word to AXI wrapper, wait for ready
+                        BP_AXI_WAIT: begin
+                            if (axi_wr_ready) begin
+                                if (wr_count == WPT_W'(WORDS_PER_TILE - 1)) begin
+                                    transferred[cur_tile] <= 1'b1;
+                                    transferred_count     <= transferred_count + 1'b1;
+                                    cache_valid_wr_en     <= 1'b1;
+                                    cache_valid_index     <= cur_tile;
+                                    cache_valid_value     <= 1'b1;
+                                    state                 <= SCAN;
+                                end else begin
+                                    wr_count <= wr_count + 1'b1;
+                                    bp_state <= BP_BRAM_REQ;
+                                end
+                            end
+                        end
+
+                        default: bp_state <= BP_BRAM_REQ;
+                    endcase
                 end
 
             endcase
