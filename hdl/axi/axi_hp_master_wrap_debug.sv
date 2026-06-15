@@ -179,30 +179,36 @@ module axi_hp_master_wrap #(
     burst_state_t bstate;
 
     logic [ADDR_W-1:0] burst_base_addr;
-    logic [BEAT_W-1:0] beat_cnt;  // beats loaded into the W channel
+    logic [BEAT_W-1:0] beat_cnt;  // beats ACCEPTED so far in the current burst
 
-    always_comb begin
-        load_w_beat = 1'b0;
+    // -------------------------------------------------------------------------
+    // W channel, driven combinationally off the FIFO head.
+    //
+    // The burst is only started (AW issued) once a full BURST_BEATS worth of
+    // words is buffered (fifo_has_burst), so once we are in SEND_W the head
+    // always has a valid word to present. WVALID is therefore held continuously
+    // for the whole burst, WDATA comes straight from the FIFO head, and a beat
+    // is counted ONLY when it is actually accepted (WVALID && WREADY). This is
+    // the invariant that keeps WLAST aligned to AWLEN: WLAST asserts on the beat
+    // whose accept makes beat_cnt reach LAST_BEAT, so exactly AWLEN+1 beats are
+    // terminated by WLAST regardless of any WREADY bubbles.
+    // -------------------------------------------------------------------------
+    logic w_beat_accept;
+    assign w_beat_accept = (bstate == SEND_W) && m_wvalid && m_wready;
 
-        if (bstate == SEND_W) begin
-            if (!m_wvalid && !fifo_empty) begin
-                load_w_beat = 1'b1;
-            end else if (m_wvalid && m_wready && !m_wlast && !fifo_empty) begin
-                load_w_beat = 1'b1;
-            end
-        end
-    end
+    assign m_wvalid = (bstate == SEND_W);
+    assign m_wdata  = fifo_out_data;
+    assign m_wlast  = (bstate == SEND_W) && (beat_cnt == LAST_BEAT);
 
-    assign fifo_rd_fire = load_w_beat;
+    // FIFO is popped exactly when a W beat is accepted.
+    assign fifo_rd_fire = w_beat_accept;
+    assign load_w_beat  = w_beat_accept;  // retained for any external reference
 
     always_ff @(posedge clk) begin
         if (rst) begin
             bstate          <= IDLE;
             m_awaddr        <= '0;
             m_awvalid       <= 1'b0;
-            m_wdata         <= '0;
-            m_wlast         <= 1'b0;
-            m_wvalid        <= 1'b0;
             m_bready        <= 1'b0;
             beat_cnt        <= '0;
             burst_base_addr <= '0;
@@ -216,24 +222,22 @@ module axi_hp_master_wrap #(
                 // Wait until a complete AXI3-sized burst is buffered.
                 IDLE: begin
                     m_awvalid <= 1'b0;
-                    m_wvalid  <= 1'b0;
-                    m_wlast   <= 1'b0;
                     m_bready  <= 1'b0;
                     beat_cnt  <= '0;
 
                     if (fifo_has_burst) begin
                         burst_base_addr <= fifo_out_addr;
                         m_awaddr        <= fifo_out_addr;
+                        m_awvalid       <= 1'b1;
                         bstate          <= SEND_AW;
                     end
                 end
 
-                // Address first. Do not present WVALID until AW has completed.
+                // Address first. WVALID (combinational) is suppressed until
+                // SEND_W, so the slave never sees write data before AW completes.
                 SEND_AW: begin
                     m_awaddr  <= burst_base_addr;
                     m_awvalid <= 1'b1;
-                    m_wvalid  <= 1'b0;
-                    m_wlast   <= 1'b0;
                     beat_cnt  <= '0;
 
                     if (m_awvalid && m_awready) begin
@@ -242,19 +246,15 @@ module axi_hp_master_wrap #(
                     end
                 end
 
-                // Emit exactly BURST_BEATS write-data handshakes.
+                // Emit exactly BURST_BEATS accepted W handshakes. WVALID/WDATA/
+                // WLAST are combinational; here we only count accepted beats and
+                // advance to WAIT_B once the WLAST beat is accepted.
                 SEND_W: begin
-                    if (m_wvalid && m_wready && m_wlast) begin
-                        m_wvalid <= 1'b0;
-                        m_wlast  <= 1'b0;
-                        bstate   <= WAIT_B;
-                    end else if (load_w_beat) begin
-                        m_wdata      <= fifo_out_data;
-                        m_wlast      <= (beat_cnt == LAST_BEAT);
-                        m_wvalid     <= 1'b1;
-                        beat_cnt     <= beat_cnt + 1'b1;
-                    end else if (m_wvalid && m_wready) begin
-                        m_wvalid <= 1'b0;
+                    if (w_beat_accept) begin
+                        if (beat_cnt == LAST_BEAT)
+                            bstate <= WAIT_B;
+                        else
+                            beat_cnt <= beat_cnt + 1'b1;
                     end
                 end
 
@@ -277,8 +277,6 @@ module axi_hp_master_wrap #(
 
                 ERROR: begin
                     m_awvalid <= 1'b0;
-                    m_wvalid  <= 1'b0;
-                    m_wlast   <= 1'b0;
                     m_bready  <= 1'b1;
                 end
 
