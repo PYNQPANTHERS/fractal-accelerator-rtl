@@ -33,12 +33,17 @@ ENGINE_HDL_SRCS  := $(wildcard hdl/queues/*.sv) \
                     $(wildcard hdl/control_unit/*.sv) \
                     $(wildcard hdl/control_unit/cluster/*.sv) \
                     $(_ENGINE_WC_SRCS) \
-                    hdl/top/per_sixteenth_engine.sv
+                    hdl/top/per_sixteenth_engine_debug.sv
 
 # Sources for top_level testbench (engine sources + controller + top)
 TOP_HDL_SRCS     := $(ENGINE_HDL_SRCS) \
                     hdl/top/sixteenth_controller.sv \
-                    hdl/top/top_level.sv
+                    hdl/top/top_level_debug.sv
+
+# Sources for dual_top_level testbench
+DUAL_HDL_SRCS    := $(ENGINE_HDL_SRCS) \
+                    hdl/dual_top/dual_sixteenth_controller.sv \
+                    hdl/dual_top/dual_top_level.sv
 
 # Sources for dual_top_level testbench
 DUAL_HDL_SRCS    := $(ENGINE_HDL_SRCS) \
@@ -277,13 +282,6 @@ top-run:
 		$(if $(JULIA_RE),+julia_re=$(JULIA_RE)) \
 		$(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
 		$(if $(TAG),+tag=$(TAG))
-
-# AXI-HP master wrapper unit test (stub AXI slave; checks burst beats/data/wlast).
-.PHONY: axi-wrap
-axi-wrap:
-	mkdir -p $(BUILD_DIR)
-	iverilog $(IVFLAGS) -o $(BUILD_DIR)/tb_axi_hp_master_wrap.out hdl/axi/axi_hp_master_wrap.sv tb/axi/tb_axi_hp_master_wrap.sv
-	vvp $(BUILD_DIR)/tb_axi_hp_master_wrap.out
 
 # Tile-size benchmark: renders the full image on TILE_W=16 then TILE_W=8 and
 # reports core-utilisation / scheduler-occupancy metrics for the report.

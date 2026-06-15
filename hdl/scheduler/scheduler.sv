@@ -241,9 +241,6 @@ always_comb begin
     tt_wr_quad_tly          = '0;
     tt_wr_quad_size         = '0;
     tt_wr_quad_colour       = '0;
-    pixel_width_x_left      = pixel_width_x;
-    quad_size_x             = pixel_width_x;
-    quad_size_y             = pixel_width_y;
     top_left_x              = tlx;
     top_left_y              = tly;
 
@@ -280,6 +277,12 @@ always_comb begin
     pixel_width_x = all_left_quadrants ? normal_width : normal_width + 1'b1;
     pixel_width_y = all_top_quadrants  ? normal_width : normal_width + 1'b1;
 
+    // comparator bounds use the actual box size: assign AFTER pixel_width is
+    // computed (reading them earlier created an always_comb read-before-write /
+    // UNOPTFLAT combinational-ordering loop that Verilator flags).
+    quad_size_x = pixel_width_x;
+    quad_size_y = pixel_width_y;
+
     // A rightmost/bottommost max-zoom box has its right/bottom edge on the image
     // boundary. Such a box is non-left/non-top (width = normal_width+1), so its
     // top-left sits at (image_size - 1 - normal_width).
@@ -296,7 +299,7 @@ always_comb begin
     // width of a left-column box (box 00 / box 10 equivalent).
     // at zoom≤1, a left box always has all_left=1 → no +1 correction.
     // at zoom>1, inherits popped_all_left from the ancestor chain.
-    if (zoom_level <= '0)
+    if (zoom_level <= ZOOM_WIDTH'(1))
         pixel_width_x_left = normal_width;
     else
         pixel_width_x_left = popped_all_left? normal_width : normal_width +1'b1;

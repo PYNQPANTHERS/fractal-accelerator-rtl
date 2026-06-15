@@ -38,7 +38,16 @@ module per_sixteenth_engine #(
     output logic        dbg_comp_valid,
     output logic        dbg_comp_complete,
     output logic        dbg_comp_differ,
-    output logic        dbg_engine_done
+    output logic        dbg_engine_done,
+
+    // writeback-stage debug taps (from bram_to_dram) → axi_lite_slave
+    output logic [8:0]  dbg_tile_done_pop,
+    output logic [8:0]  dbg_transferred_pop,
+    output logic [2:0]  dbg_b2d_state,
+    output logic        dbg_b2d_any_pending,
+    output logic        dbg_b2d_wr_en,
+    output logic        dbg_b2d_accept,
+    output logic        dbg_tile_done_rise
 );
 
     localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
@@ -342,7 +351,16 @@ module per_sixteenth_engine #(
         .cache_valid_index  (),
         .cache_valid_value  (),
         .sixteenth_base_addr(sixteenth_base_addr),
-        .sixteenth_complete   (b2d_sixteenth_complete)
+        .sixteenth_complete   (b2d_sixteenth_complete),
+
+        // writeback-stage debug taps → per_sixteenth_engine ports
+        .dbg_tile_done_pop  (dbg_tile_done_pop),
+        .dbg_transferred_pop(dbg_transferred_pop),
+        .dbg_b2d_state      (dbg_b2d_state),
+        .dbg_b2d_any_pending(dbg_b2d_any_pending),
+        .dbg_b2d_wr_en      (dbg_b2d_wr_en),
+        .dbg_b2d_accept     (dbg_b2d_accept),
+        .dbg_tile_done_rise (dbg_tile_done_rise)
     );
 
 endmodule

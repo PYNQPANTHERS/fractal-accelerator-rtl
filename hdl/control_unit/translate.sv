@@ -122,16 +122,17 @@ end
     assign tile_col = sixteenth[1:0];   // X column
     assign tile_row = sixteenth[3:2];   // Y row = floor(sixteenth/4)
 
-    // Global pixel coord = tile offset (256 px per tile) + within-tile pixel.
-    logic [DATA_WIDTH-1:0]   px, py;
-    logic [2*DATA_WIDTH-1:0] x_prod, y_prod;
+    localparam int unsigned HALF_SPAN = 512; 
+
+    logic signed [DATA_WIDTH-1:0]   px, py;
+    logic signed [2*DATA_WIDTH-1:0] x_prod, y_prod;
 
     always_comb begin : coordinate_map
-        px = (DATA_WIDTH'(tile_col) << RESOLUTION) + DATA_WIDTH'(a);   // 0..1023
-        py = (DATA_WIDTH'(tile_row) << RESOLUTION) + DATA_WIDTH'(b);
+        px = $signed({1'b0, (DATA_WIDTH-1)'((tile_col << RESOLUTION) + a)}) - HALF_SPAN; 
+        py = $signed({1'b0, (DATA_WIDTH-1)'((tile_row << RESOLUTION) + b)}) - HALF_SPAN;
 
-        x_prod = px * scale_factor_q;   // uniform step everywhere
-        y_prod = py * scale_factor_q;
+        x_prod = px * $signed(scale_factor_q);     
+        y_prod = py * $signed(scale_factor_q);
 
         z_real = $signed(pan_x) + $signed(DATA_WIDTH'(x_prod));
         z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(y_prod));
