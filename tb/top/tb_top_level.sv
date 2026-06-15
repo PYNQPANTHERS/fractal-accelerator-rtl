@@ -28,8 +28,8 @@ module tb_top_level;
     logic [4:0]  cfg_fractal_type = 5'b0;
     logic [34:0] cfg_julia_real   = 35'b0;
     logic [34:0] cfg_julia_imag   = 35'b0;
-    logic [34:0] cfg_pan_x        = 35'h4_C000_0000; // -1.625 i
-    logic [34:0] cfg_pan_y        = 35'h1_C000_0000; // ~+2.0 in Q2.33
+    logic [34:0] cfg_centre_x        = 35'h0_0000_0000; // -1.625 i
+    logic [34:0] cfg_centre_y        = 35'h0_0000_0000; // ~+2.0 in Q2.33
     logic [15:0] cfg_zoom_level   = 16'd20;
     logic [11:0] cfg_max_iter     = 12'b0;
     logic [31:0] cfg_image_base_addr = 32'b0;
@@ -47,15 +47,15 @@ module tb_top_level;
         .cfg_fractal_type   (cfg_fractal_type),
         .cfg_julia_real     (cfg_julia_real),
         .cfg_julia_imag     (cfg_julia_imag),
-        .cfg_pan_x          (cfg_pan_x),
-        .cfg_pan_y          (cfg_pan_y),
+        .cfg_centre_x          (cfg_centre_x),
+        .cfg_centre_y          (cfg_centre_y),
         .cfg_zoom_level     (cfg_zoom_level),
         .cfg_max_iter       (cfg_max_iter),
         .cfg_image_base_addr(cfg_image_base_addr)
     );
 
-    localparam logic [34:0] CFG_PAN_X  = 35'h4_C000_0000; // -1.625 in Q2.33 (top-left real); centers on (-0.75, 0) cardioid/period-2 junction
-    localparam logic [34:0] CFG_PAN_Y  = 35'h1_C000_0000; // +0.875 in Q2.33 (top-left imag)
+    localparam logic [34:0] CFG_PAN_X  = 35'h0_0000_0000; // -1.625 in Q2.33 (top-left real); centers on (-0.75, 0) cardioid/period-2 junction
+    localparam logic [34:0] CFG_PAN_Y  = 35'h0_0000_0000; // +0.875 in Q2.33 (top-left imag)
     localparam logic [15:0] CFG_ZOOM   = 16'd20;
     localparam logic [34:0] CFG_JULIA  = 35'b0;
     localparam logic [11:0] CFG_MAX_I  = 12'd0;
@@ -345,7 +345,7 @@ module tb_top_level;
         hp_axi_wr_ready = 1'b1;
 
         // plusarg overrides (all hex except zoom/max_i/ftype which are decimal):
-        //   +pan_x=H +pan_y=H +julia_re=H +julia_im=H +zoom=N +max_i=N +ftype=N +tag=name
+        //   +centre_x=H +centre_y=H +julia_re=H +julia_im=H +zoom=N +max_i=N +ftype=N +tag=name
         run_pan_x    = CFG_PAN_X;
         run_pan_y    = CFG_PAN_Y;
         run_julia_re = CFG_JULIA;
@@ -354,8 +354,8 @@ module tb_top_level;
         run_max_i    = CFG_MAX_I;
         run_ftype    = 0;
         run_tag      = "top";
-        void'($value$plusargs("pan_x=%h",    run_pan_x));
-        void'($value$plusargs("pan_y=%h",    run_pan_y));
+        void'($value$plusargs("centre_x=%h",    run_pan_x));
+        void'($value$plusargs("centre_y=%h",    run_pan_y));
         void'($value$plusargs("julia_re=%h", run_julia_re));
         void'($value$plusargs("julia_im=%h", run_julia_im));
         void'($value$plusargs("zoom=%d",     run_zoom));
@@ -364,14 +364,14 @@ module tb_top_level;
         void'($value$plusargs("tag=%s",      run_tag));
 
         $display("\ntb_top_level — rendering 16 sixteenths  [tag=%s]", run_tag);
-        $display("PAN_X=0x%09X  PAN_Y=0x%09X  ZOOM=%0d  MAX_I=%0d  FTYPE=%0d",
+        $display("CENTRE_X=0x%09X  CENTRE_Y=0x%09X  ZOOM=%0d  MAX_I=%0d  FTYPE=%0d",
                  run_pan_x, run_pan_y, run_zoom, run_max_i, run_ftype);
 
         rst = 1; tick(4); rst = 0; tick(2);
 
         force dut.cfg_fractal_type    = run_ftype[4:0];
-        force dut.cfg_pan_x           = run_pan_x;
-        force dut.cfg_pan_y           = run_pan_y;
+        force dut.cfg_centre_x           = run_pan_x;
+        force dut.cfg_centre_y           = run_pan_y;
         force dut.cfg_zoom_level      = run_zoom[15:0];
         force dut.cfg_max_iter        = run_max_i[11:0];
         force dut.cfg_image_base_addr = CFG_BASE;
@@ -396,8 +396,8 @@ module tb_top_level;
         end
 
         release dut.cfg_fractal_type;
-        release dut.cfg_pan_x;
-        release dut.cfg_pan_y;
+        release dut.cfg_centre_x;
+        release dut.cfg_centre_y;
         release dut.cfg_zoom_level;
         release dut.cfg_max_iter;
         release dut.cfg_image_base_addr;

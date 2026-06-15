@@ -3,8 +3,8 @@ module translate #(
     parameter int RESOLUTION = 8
 ) (
     input  logic                  clk,
-    input  logic [DATA_WIDTH-1:0] pan_x,
-    input  logic [DATA_WIDTH-1:0] pan_y,
+    input  logic [DATA_WIDTH-1:0] centre_x,
+    input  logic [DATA_WIDTH-1:0] centre_y,
     input  logic [RESOLUTION-1:0] a,
     input  logic [RESOLUTION-1:0] b,
     input  logic [15:0]            zoom,
@@ -134,7 +134,7 @@ end
         x_prod = px * $signed(scale_factor_q);     
         y_prod = py * $signed(scale_factor_q);
 
-        z_real = $signed(pan_x) + $signed(DATA_WIDTH'(x_prod));
-        z_imag = $signed(pan_y) - $signed(DATA_WIDTH'(y_prod));
+        z_real = $signed(centre_x) + $signed(DATA_WIDTH'(x_prod));
+        z_imag = $signed(centre_y) - $signed(DATA_WIDTH'(y_prod));
     end
 endmodule

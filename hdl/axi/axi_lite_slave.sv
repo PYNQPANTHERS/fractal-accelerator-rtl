@@ -19,8 +19,8 @@
 //                                  [2]=axi_err    (sticky, from HP wrapper)
 //
 //  0x08  FRACTAL_TYPE         RW   [4:0]  → cfg_fractal_type
-//  0x0C  PAN_X                RW   [31:0] → cfg_pan_x
-//  0x10  PAN_Y                RW   [31:0] → cfg_pan_y
+//  0x0C  CENTRE_X             RW   [31:0] → cfg_centre_x
+//  0x10  CENTRE_Y             RW   [31:0] → cfg_centre_y
 //  0x14  ZOOM_LEVEL           RW   [31:0] → cfg_zoom_level
 //  0x18  MAX_ITER             RW   [11:0] → cfg_max_iter
 //  0x1C  IMAGE_BASE_ADDR      RW   [31:0] → cfg_image_base_addr
@@ -33,21 +33,9 @@
 //  0x28  CLR_STATUS           WO   [0]=clear all_done
 //                                  [1]=clear axi_err
 //                                  [2]=clear trans_count
-//                                  [3]=clear all debug counters
 //
 //  0x2C  JULIA_REAL           RW   [31:0] → cfg_julia_real  (Q1.17 fixed-point C real)
 //  0x30  JULIA_IMAG           RW   [31:0] → cfg_julia_imag  (Q1.17 fixed-point C imag)
-//
-//  ── Debug registers (read-only, cleared by CLR_STATUS[3]) ───────────────────
-//  0x34  DBG_SCHED_STATE      RO   [3:0]  scheduler_state (live snapshot)
-//  0x38  DBG_SCHED_PUSH       RO   [31:0] sched_push_count   (saturating)
-//  0x3C  DBG_WANTS_JOB        RO   [31:0] wants_job_count    (saturating)
-//  0x40  DBG_GRANT            RO   [31:0] grant_count        (saturating)
-//  0x44  DBG_CQH_DONE         RO   [31:0] cqh_done_count     (saturating)
-//  0x48  DBG_COMP_VALID       RO   [31:0] comp_valid_count   (saturating)
-//  0x4C  DBG_FLAGS            RO   [0]=comp_complete (live)
-//                                  [1]=comp_differ   (live)
-//                                  [2]=engine_done   (live)
 // -----------------------------------------------------------------------------
 // AXI-Lite handling notes:
 //   - AW and W channels latched independently; write commits only when both
@@ -90,8 +78,8 @@ module axi_lite_slave #(
     // -------------------------------------------------------------------------
     output logic        ps_start,            // 1-cycle pulse
     output logic [4:0]  cfg_fractal_type,
-    output logic [34:0] cfg_pan_x,
-    output logic [34:0] cfg_pan_y,
+    output logic [34:0] cfg_centre_x,
+    output logic [34:0] cfg_centre_y,
     output logic [15:0] cfg_zoom_level,
     output logic [11:0] cfg_max_iter,
     output logic [31:0] cfg_image_base_addr,
@@ -110,39 +98,6 @@ module axi_lite_slave #(
     input  logic        in_burst_done,   // ← axi_hp_master_wrap.burst_done (pulse)
 
     // -------------------------------------------------------------------------
-    // Debug inputs ← scheduler / engine (all in the same clock domain)
-    // -------------------------------------------------------------------------
-    input  logic [3:0]  dbg_scheduler_state,   // live scheduler FSM state
-    input  logic        dbg_sched_push,         // pulse: scheduler pushed a job
-    input  logic        dbg_wants_job,          // pulse: a core requested a job
-    input  logic        dbg_grant,              // pulse: scheduler granted a job
-    input  logic        dbg_cqh_done,           // pulse: completion queue head done
-    input  logic        dbg_comp_valid,         // pulse: comparator result valid
-    input  logic        dbg_comp_complete,      // level: comparator complete
-    input  logic        dbg_comp_differ,        // level: comparator found difference
-    input  logic        dbg_engine_done,        // level: engine_done signal
-
-    // -------------------------------------------------------------------------
-    // Writeback-stage debug inputs ← bram_to_dram / axi_hp_master_wrap
-    // (same clock domain — no CDC)
-    // -------------------------------------------------------------------------
-    // pulse inputs (1 cycle per event — counted, saturating)
-    input  logic        dbg_b2d_wr_en,       // bram_to_dram drives axi_wr_en
-    input  logic        dbg_b2d_accept,      // axi_wr_en && axi_wr_ready
-    input  logic        dbg_axi_aw_hs,       // m_awvalid && m_awready
-    input  logic        dbg_axi_w_hs,        // m_wvalid  && m_wready
-    input  logic        dbg_axi_b_hs,        // m_bvalid  && m_bready
-    input  logic        dbg_tile_done_rise,  // any tile_done bit 0->1 this cycle
-    // level inputs (sampled live, not counted)
-    input  logic [8:0]  dbg_tile_done_pop,   // popcount(tile_done)
-    input  logic [8:0]  dbg_transferred_pop, // popcount(transferred)
-    input  logic [2:0]  dbg_b2d_state,       // bram_to_dram FSM state
-    input  logic        dbg_b2d_any_pending, // any_pending
-    input  logic [3:0]  dbg_axi_bstate,      // axi_hp_master_wrap FSM state
-    input  logic        dbg_axi_wr_ready,    // live wr_ready (skid not full)
-    input  logic [1:0]  dbg_axi_bresp_last,  // BRESP value (latched on b_hs)
-
-    // -------------------------------------------------------------------------
     // Interrupt → PS (IRQ_F2P)
     // -------------------------------------------------------------------------
     output logic        irq_out
@@ -153,8 +108,8 @@ module axi_lite_slave #(
     // =========================================================================
     logic [31:0] reg_ctrl;
     logic [31:0] reg_fractal_type;
-    logic [31:0] reg_pan_x;
-    logic [31:0] reg_pan_y;
+    logic [31:0] reg_centre_x;
+    logic [31:0] reg_centre_y;
     logic [31:0] reg_zoom_level;
     logic [31:0] reg_max_iter;
     logic [31:0] reg_image_base_addr;
@@ -162,22 +117,6 @@ module axi_lite_slave #(
     logic [31:0] reg_trans_count;
     logic [31:0] reg_julia_real;
     logic [31:0] reg_julia_imag;
-
-    // Debug counters — saturating 32-bit
-    logic [31:0] dbg_sched_push_count;
-    logic [31:0] dbg_wants_job_count;
-    logic [31:0] dbg_grant_count;
-    logic [31:0] dbg_cqh_done_count;
-    logic [31:0] dbg_comp_valid_count;
-
-    // Writeback-stage debug counters/storage — saturating 32-bit, cleared by CLR_STATUS[3]
-    logic [31:0] dbg_b2d_wr_en_count;
-    logic [31:0] dbg_b2d_accept_count;
-    logic [31:0] dbg_axi_aw_hs_count;
-    logic [31:0] dbg_axi_w_hs_count;
-    logic [31:0] dbg_axi_b_hs_count;
-    logic [31:0] dbg_tile_done_rise_count;
-    logic [1:0]  dbg_bresp_last_reg;
 
     // Sticky flags
     logic done_flag;
@@ -200,13 +139,7 @@ module axi_lite_slave #(
         case (aw_addr_lat[8:2])
             7'h00, 7'h01, 7'h02, 7'h03, 7'h04,
             7'h05, 7'h06, 7'h07, 7'h08, 7'h09,
-            7'h0A, 7'h0B, 7'h0C,
-            // debug regs 0x34-0x4C (read-only but we ACK writes gracefully)
-            7'h0D, 7'h0E, 7'h0F, 7'h10, 7'h11,
-            7'h12, 7'h13,
-            // writeback debug regs 0x50-0x74 (read-only, ACK gracefully)
-            7'h14, 7'h15, 7'h16, 7'h17, 7'h18,
-            7'h19, 7'h1A, 7'h1B, 7'h1C, 7'h1D: addr_valid = 1'b1;
+            7'h0A, 7'h0B, 7'h0C: addr_valid = 1'b1;
             default: addr_valid = 1'b0;
         endcase
     end
@@ -266,8 +199,8 @@ module axi_lite_slave #(
         if (!aresetn) begin
             reg_ctrl            <= '0;
             reg_fractal_type    <= '0;
-            reg_pan_x           <= '0;
-            reg_pan_y           <= '0;
+            reg_centre_x        <= '0;
+            reg_centre_y        <= '0;
             reg_zoom_level      <= '0;
             reg_max_iter        <= '0;
             reg_image_base_addr <= 32'h1000_0000;
@@ -289,8 +222,8 @@ module axi_lite_slave #(
                         reg_fractal_type        <= apply_strobe(reg_fractal_type, w_data_lat, w_strb_lat);
                         reg_fractal_type[31:5]  <= '0;
                     end
-                    7'h03: reg_pan_x      <= apply_strobe(reg_pan_x,      w_data_lat, w_strb_lat);
-                    7'h04: reg_pan_y      <= apply_strobe(reg_pan_y,      w_data_lat, w_strb_lat);
+                    7'h03: reg_centre_x   <= apply_strobe(reg_centre_x,   w_data_lat, w_strb_lat);
+                    7'h04: reg_centre_y   <= apply_strobe(reg_centre_y,   w_data_lat, w_strb_lat);
                     7'h05: reg_zoom_level <= apply_strobe(reg_zoom_level, w_data_lat, w_strb_lat);
                     7'h06: begin // MAX_ITER
                         reg_max_iter        <= apply_strobe(reg_max_iter, w_data_lat, w_strb_lat);
@@ -335,11 +268,10 @@ module axi_lite_slave #(
     // =========================================================================
     // Sticky flags + CLR_STATUS handling
     // =========================================================================
-    logic clr_done, clr_err, clr_count, clr_debug;
+    logic clr_done, clr_err, clr_count;
     assign clr_done  = write_commit && (aw_addr_lat[8:2] == 7'h0A) && w_data_lat[0];
     assign clr_err   = write_commit && (aw_addr_lat[8:2] == 7'h0A) && w_data_lat[1];
     assign clr_count = write_commit && (aw_addr_lat[8:2] == 7'h0A) && w_data_lat[2];
-    assign clr_debug = write_commit && (aw_addr_lat[8:2] == 7'h0A) && w_data_lat[3];
 
     always_ff @(posedge aclk) begin
         if (!aresetn) begin
@@ -366,79 +298,6 @@ module axi_lite_slave #(
         end else if (in_burst_done && reg_trans_count != 32'hFFFF_FFFF) begin
             reg_trans_count <= reg_trans_count + 1;
         end
-    end
-
-    // =========================================================================
-    // Debug counters — saturating, cleared by CLR_STATUS[3]
-    // Saturate at 0xFFFF_FFFF rather than wrapping so the PS can distinguish
-    // "exactly N events" from "at least N events".
-    // =========================================================================
-    function automatic logic [31:0] sat_next(
-        input logic [31:0] cnt,
-        input logic        pulse,
-        input logic        clr
-    );
-        if (clr)                                sat_next = '0;
-        else if (pulse && cnt != 32'hFFFF_FFFF) sat_next = cnt + 1;
-        else                                    sat_next = cnt;
-    endfunction
-
-    always_ff @(posedge aclk) begin
-        if (!aresetn) begin
-            dbg_sched_push_count <= '0;
-            dbg_wants_job_count  <= '0;
-            dbg_grant_count      <= '0;
-            dbg_cqh_done_count   <= '0;
-            dbg_comp_valid_count <= '0;
-            dbg_b2d_wr_en_count      <= '0;
-            dbg_b2d_accept_count     <= '0;
-            dbg_axi_aw_hs_count      <= '0;
-            dbg_axi_w_hs_count       <= '0;
-            dbg_axi_b_hs_count       <= '0;
-            dbg_tile_done_rise_count <= '0;
-            dbg_bresp_last_reg       <= 2'b00;
-        end else begin
-            dbg_sched_push_count <= sat_next(dbg_sched_push_count, dbg_sched_push, clr_debug);
-            dbg_wants_job_count  <= sat_next(dbg_wants_job_count,  dbg_wants_job,  clr_debug);
-            dbg_grant_count      <= sat_next(dbg_grant_count,      dbg_grant,      clr_debug);
-            dbg_cqh_done_count   <= sat_next(dbg_cqh_done_count,   dbg_cqh_done,   clr_debug);
-            dbg_comp_valid_count <= sat_next(dbg_comp_valid_count, dbg_comp_valid, clr_debug);
-
-            // writeback-stage event counters (saturating, cleared by CLR_STATUS[3])
-            dbg_b2d_wr_en_count      <= sat_next(dbg_b2d_wr_en_count,      dbg_b2d_wr_en,      clr_debug);
-            dbg_b2d_accept_count     <= sat_next(dbg_b2d_accept_count,     dbg_b2d_accept,     clr_debug);
-            dbg_axi_aw_hs_count      <= sat_next(dbg_axi_aw_hs_count,      dbg_axi_aw_hs,      clr_debug);
-            dbg_axi_w_hs_count       <= sat_next(dbg_axi_w_hs_count,       dbg_axi_w_hs,       clr_debug);
-            dbg_axi_b_hs_count       <= sat_next(dbg_axi_b_hs_count,       dbg_axi_b_hs,       clr_debug);
-            dbg_tile_done_rise_count <= sat_next(dbg_tile_done_rise_count, dbg_tile_done_rise, clr_debug);
-
-            // last BRESP: clear on CLR_STATUS[3], else capture on each B handshake
-            if (clr_debug)         dbg_bresp_last_reg <= 2'b00;
-            else if (dbg_axi_b_hs) dbg_bresp_last_reg <= dbg_axi_bresp_last;
-        end
-    end
-
-    // =========================================================================
-    // DBG_FLAGS register — live snapshot
-    // =========================================================================
-    logic [31:0] reg_dbg_flags;
-    always_comb begin
-        reg_dbg_flags    = '0;
-        reg_dbg_flags[0] = dbg_comp_complete;
-        reg_dbg_flags[1] = dbg_comp_differ;
-        reg_dbg_flags[2] = dbg_engine_done;
-    end
-
-    // =========================================================================
-    // DBG_B2D_STATE (0x54) — composite live snapshot of the writeback FSMs
-    // =========================================================================
-    logic [31:0] reg_dbg_b2d_state;
-    always_comb begin
-        reg_dbg_b2d_state      = '0;
-        reg_dbg_b2d_state[2:0] = dbg_b2d_state;        // bram_to_dram FSM state
-        reg_dbg_b2d_state[4]   = dbg_b2d_any_pending;  // any pending tile
-        reg_dbg_b2d_state[8:5] = dbg_axi_bstate;       // axi_hp_master_wrap FSM state
-        reg_dbg_b2d_state[9]   = dbg_axi_wr_ready;      // live wr_ready
     end
 
     // =========================================================================
@@ -482,8 +341,8 @@ module axi_lite_slave #(
                     7'h00: begin s_rdata <= reg_ctrl;            s_rresp <= 2'b00; end
                     7'h01: begin s_rdata <= reg_status;          s_rresp <= 2'b00; end
                     7'h02: begin s_rdata <= reg_fractal_type;    s_rresp <= 2'b00; end
-                    7'h03: begin s_rdata <= reg_pan_x;           s_rresp <= 2'b00; end
-                    7'h04: begin s_rdata <= reg_pan_y;           s_rresp <= 2'b00; end
+                    7'h03: begin s_rdata <= reg_centre_x;        s_rresp <= 2'b00; end
+                    7'h04: begin s_rdata <= reg_centre_y;        s_rresp <= 2'b00; end
                     7'h05: begin s_rdata <= reg_zoom_level;      s_rresp <= 2'b00; end
                     7'h06: begin s_rdata <= reg_max_iter;        s_rresp <= 2'b00; end
                     7'h07: begin s_rdata <= reg_image_base_addr; s_rresp <= 2'b00; end
@@ -492,25 +351,6 @@ module axi_lite_slave #(
                     7'h0A: begin s_rdata <= 32'h0000_0000;       s_rresp <= 2'b00; end // CLR_STATUS WO
                     7'h0B: begin s_rdata <= reg_julia_real;      s_rresp <= 2'b00; end
                     7'h0C: begin s_rdata <= reg_julia_imag;      s_rresp <= 2'b00; end
-                    // ── compute-stage debug registers ───────────────────────
-                    7'h0D: begin s_rdata <= {28'b0, dbg_scheduler_state}; s_rresp <= 2'b00; end // 0x34
-                    7'h0E: begin s_rdata <= dbg_sched_push_count;         s_rresp <= 2'b00; end // 0x38
-                    7'h0F: begin s_rdata <= dbg_wants_job_count;          s_rresp <= 2'b00; end // 0x3C
-                    7'h10: begin s_rdata <= dbg_grant_count;              s_rresp <= 2'b00; end // 0x40
-                    7'h11: begin s_rdata <= dbg_cqh_done_count;           s_rresp <= 2'b00; end // 0x44
-                    7'h12: begin s_rdata <= dbg_comp_valid_count;         s_rresp <= 2'b00; end // 0x48
-                    7'h13: begin s_rdata <= reg_dbg_flags;                s_rresp <= 2'b00; end // 0x4C
-                    // ── writeback-stage debug registers ─────────────────────
-                    7'h14: begin s_rdata <= {23'b0, dbg_tile_done_pop};   s_rresp <= 2'b00; end // 0x50
-                    7'h15: begin s_rdata <= reg_dbg_b2d_state;            s_rresp <= 2'b00; end // 0x54
-                    7'h16: begin s_rdata <= dbg_b2d_wr_en_count;          s_rresp <= 2'b00; end // 0x58
-                    7'h17: begin s_rdata <= dbg_b2d_accept_count;         s_rresp <= 2'b00; end // 0x5C
-                    7'h18: begin s_rdata <= dbg_axi_aw_hs_count;          s_rresp <= 2'b00; end // 0x60
-                    7'h19: begin s_rdata <= dbg_axi_w_hs_count;           s_rresp <= 2'b00; end // 0x64
-                    7'h1A: begin s_rdata <= dbg_axi_b_hs_count;           s_rresp <= 2'b00; end // 0x68
-                    7'h1B: begin s_rdata <= {30'b0, dbg_bresp_last_reg};  s_rresp <= 2'b00; end // 0x6C
-                    7'h1C: begin s_rdata <= dbg_tile_done_rise_count;     s_rresp <= 2'b00; end // 0x70
-                    7'h1D: begin s_rdata <= {23'b0, dbg_transferred_pop}; s_rresp <= 2'b00; end // 0x74
                     default: begin s_rdata <= 32'hDEAD_BEEF;     s_rresp <= 2'b10; end
                 endcase
             end
@@ -526,8 +366,8 @@ module axi_lite_slave #(
     assign ps_start            = reg_ctrl[0];   // 1-cycle pulse
     assign reg_soft_reset       = reg_ctrl[1];  // level
     assign cfg_fractal_type     = reg_fractal_type[4:0];
-    assign cfg_pan_x            = {reg_pan_x,      3'b0};
-    assign cfg_pan_y            = {reg_pan_y,      3'b0};
+    assign cfg_centre_x          = {reg_centre_x,   3'b0};
+    assign cfg_centre_y          = {reg_centre_y,   3'b0};
     assign cfg_zoom_level       = reg_zoom_level[15:0];
     assign cfg_max_iter         = reg_max_iter[11:0];
     assign cfg_image_base_addr  = reg_image_base_addr;
@@ -550,8 +390,8 @@ endmodule
 //   mmio = MMIO(0x43000000, 0x1000)
 //
 //   mmio.write(0x08, fractal_type)        # 0..31
-//   mmio.write(0x0C, pan_x)
-//   mmio.write(0x10, pan_y)
+//   mmio.write(0x0C, centre_x)            # image centre X
+//   mmio.write(0x10, centre_y)            # image centre Y
 //   mmio.write(0x14, zoom_level)
 //   mmio.write(0x18, max_iter)
 //   mmio.write(0x1C, image_phys_addr)     # bottom 8 bits ignored/forced 0

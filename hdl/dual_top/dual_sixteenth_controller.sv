@@ -13,8 +13,8 @@ module dual_sixteenth_controller #(
     input  logic ps_start,
 
     input  logic [4:0]  cfg_fractal_type,
-    input  logic [34:0] cfg_pan_x,
-    input  logic [34:0] cfg_pan_y,
+    input  logic [34:0] cfg_centre_x,
+    input  logic [34:0] cfg_centre_y,
     input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
@@ -26,8 +26,8 @@ module dual_sixteenth_controller #(
     output logic        start_b,
 
     output logic [4:0]  fractal_type,
-    output logic [34:0] pan_x,
-    output logic [34:0] pan_y,
+    output logic [34:0] centre_x,
+    output logic [34:0] centre_y,
     output logic [15:0] zoom_level,
     output logic [11:0] max_iter,
 
@@ -89,8 +89,8 @@ module dual_sixteenth_controller #(
             engine_rst_a          <= 1'b1;
             engine_rst_b          <= 1'b1;
             fractal_type          <= '0;
-            pan_x                 <= '0;
-            pan_y                 <= '0;
+            centre_x                 <= '0;
+            centre_y                 <= '0;
             zoom_level            <= '0;
             max_iter              <= '0;
             cur_sxt_a             <= '0;
@@ -113,8 +113,8 @@ module dual_sixteenth_controller #(
             // ── Latch config once per render (guarded so PS can't re-trigger) ──
             if (ps_start && !busy) begin
                 fractal_type <= cfg_fractal_type;
-                pan_x        <= cfg_pan_x;
-                pan_y        <= cfg_pan_y;
+                centre_x        <= cfg_centre_x;
+                centre_y        <= cfg_centre_y;
                 zoom_level   <= cfg_zoom_level;
                 max_iter     <= cfg_max_iter;
                 busy         <= 1'b1;

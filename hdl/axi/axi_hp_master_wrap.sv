@@ -66,17 +66,7 @@ module axi_hp_master_wrap #(
     // Status outputs - to AXI-Lite status register
     // -------------------------------------------------------------------------
     output logic        err_flag,      // sticky: SLVERR/DECERR seen on B channel
-    output logic        burst_done,    // 1-cycle pulse after each BVALID accepted
-
-    // -------------------------------------------------------------------------
-    // Debug taps -> AXI-Lite status registers
-    // -------------------------------------------------------------------------
-    output logic        dbg_axi_aw_hs,
-    output logic        dbg_axi_w_hs,
-    output logic        dbg_axi_b_hs,
-    output logic [3:0]  dbg_axi_bstate,
-    output logic        dbg_axi_wr_ready,
-    output logic [1:0]  dbg_axi_bresp_last
+    output logic        burst_done     // 1-cycle pulse after each BVALID accepted
 );
 
     // =========================================================================
@@ -285,16 +275,6 @@ module axi_hp_master_wrap #(
             endcase
         end
     end
-
-    // =========================================================================
-    // Debug taps
-    // =========================================================================
-    assign dbg_axi_aw_hs      = m_awvalid && m_awready;
-    assign dbg_axi_w_hs       = m_wvalid  && m_wready;
-    assign dbg_axi_b_hs       = m_bvalid  && m_bready;
-    assign dbg_axi_bstate     = {1'b0, bstate};
-    assign dbg_axi_wr_ready   = wr_ready;
-    assign dbg_axi_bresp_last = m_bresp;
 
 endmodule
 

@@ -10,8 +10,8 @@ module sixteenth_controller #(
 
     // Config from PS AXI registers
     input  logic [4:0]  cfg_fractal_type,
-    input  logic [34:0] cfg_pan_x,
-    input  logic [34:0] cfg_pan_y,
+    input  logic [34:0] cfg_centre_x,
+    input  logic [34:0] cfg_centre_y,
     input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
@@ -21,8 +21,8 @@ module sixteenth_controller #(
 
     // Registered outputs to per_sixteenth_engine
     output logic [4:0]  fractal_type,
-    output logic [34:0] pan_x,
-    output logic [34:0] pan_y,
+    output logic [34:0] centre_x,
+    output logic [34:0] centre_y,
     output logic [15:0] zoom_level,
     output logic [11:0] max_iter,
     output logic [3:0]  sixteenth_id,
@@ -54,8 +54,8 @@ module sixteenth_controller #(
             started             <= 1'b0;
             engine_rst          <= 1'b1;
             fractal_type        <= '0;
-            pan_x               <= '0;
-            pan_y               <= '0;
+            centre_x               <= '0;
+            centre_y               <= '0;
             zoom_level          <= '0;
             max_iter            <= '0;
             sixteenth_id        <= '0;
@@ -74,8 +74,8 @@ module sixteenth_controller #(
                     sixteenth_index <= 4'd0;
                     if (ps_start) begin
                         fractal_type <= cfg_fractal_type;
-                        pan_x       <= cfg_pan_x;
-                        pan_y       <= cfg_pan_y;
+                        centre_x       <= cfg_centre_x;
+                        centre_y       <= cfg_centre_y;
                         zoom_level  <= cfg_zoom_level;
                         max_iter    <= cfg_max_iter;
                         state       <= LOAD;

@@ -16,8 +16,8 @@ module control_unit #(
 
     // frame control
     input  logic [4:0]              fractal_type,
-    input  logic [34:0]   pan_x,
-    input  logic [34:0]   pan_y,
+    input  logic [34:0]   centre_x,
+    input  logic [34:0]   centre_y,
     input  logic [15:0]              zoom_level,
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
@@ -116,8 +116,8 @@ module control_unit #(
         .RESOLUTION (PIXEL_W)
     ) cheezy_translator (
         .clk       (clk),
-        .pan_x     (pan_x),
-        .pan_y     (pan_y),
+        .centre_x     (centre_x),
+        .centre_y     (centre_y),
         .a         (pf_coord_a),
         .b         (pf_coord_b),
         .zoom      (zoom_level),

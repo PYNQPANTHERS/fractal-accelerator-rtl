@@ -42,22 +42,14 @@ module scheduler #(
     output logic [COLOUR_WIDTH-1:0] tt_wr_quad_colour,
 
     // BRAM to DRAM logic
-    output logic [TOTAL_TILES-1:0]  sched_tile_done_set,
-
-    // debug: live FSM state snapshot (13 states fit in 4 bits)
-    output logic [3:0]              dbg_state
+    output logic [TOTAL_TILES-1:0]  sched_tile_done_set
 );
 
     localparam int TILE_BITS      = $clog2(TILE_W);
 
 
 typedef enum {IDLE, STARTUP, INCREASE_LEVEL, INCREASE_LEVEL_SECOND, BEGIN_SEARCH_BOX, WAIT, QUEUE_BOX_INIT, QUEUE_BOX, QUEUE_BOX_DRAIN, FILL_BOX, NEXT_BOX, DESCEND_LEVEL, FINISHED} my_states;
-// fsm_encoding="sequential" keeps binary encoding so dbg_state codes match the
-// enum order exactly (0=IDLE … 12=FINISHED), independent of Vivado FSM extraction.
 (* fsm_encoding = "sequential" *) my_states current_state, next_state;
-
-// debug: expose the live FSM state as a 4-bit code
-assign dbg_state = 4'(current_state);
 
 logic [COORD_W-1:0] tlx, tly, x_coord_to_queue, y_coord_to_queue;
 logic border_first_time_flag, queue_first_time_flag;

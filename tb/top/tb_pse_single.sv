@@ -21,7 +21,7 @@ module tb_pse_single;
     logic        rst, start;
     wire         engine_done, sixteenth_complete;
     logic [4:0]  fractal_type;
-    logic [34:0] pan_x, pan_y;
+    logic [34:0] centre_x, centre_y;
     logic [15:0] zoom_level;
     logic [34:0] julia_real, julia_imag;
     logic [11:0] max_iter;
@@ -33,8 +33,8 @@ module tb_pse_single;
     wire         axi_wr_en;
     logic        axi_wr_ready;
 
-    localparam logic [31:0] PAN_X = 32'hFFFF_0000;
-    localparam logic [31:0] PAN_Y = 32'h0001_0000;
+    localparam logic [31:0] CENTRE_X = 32'hFFFF_0000;
+    localparam logic [31:0] CENTRE_Y = 32'h0001_0000;
     localparam logic [15:0] ZOOM  = 16'd1;
     localparam logic [34:0] JULIA = 35'b0;
     localparam logic [11:0] MAX_I = 12'd1;   // match benchmark; raise to isolate compute vs drain
@@ -47,8 +47,8 @@ module tb_pse_single;
         .engine_done        (engine_done),
         .sixteenth_complete (sixteenth_complete),
         .fractal_type       (fractal_type),
-        .pan_x              (pan_x),
-        .pan_y              (pan_y),
+        .centre_x              (centre_x),
+        .centre_y              (centre_y),
         .zoom_level         (zoom_level),
         .julia_real         (julia_real),
         .julia_imag         (julia_imag),
@@ -434,8 +434,8 @@ module tb_pse_single;
     int _t;
     initial begin
         fractal_type        = 5'b0_0000;
-        pan_x               = PAN_X;
-        pan_y               = PAN_Y;
+        centre_x               = CENTRE_X;
+        centre_y               = CENTRE_Y;
         zoom_level          = ZOOM;
         max_iter            = MAX_I;
         julia_real          = JULIA;

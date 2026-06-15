@@ -25,8 +25,8 @@ module tb_dual_top_level;
     logic [4:0]  cfg_fractal_type = 5'b0;
     logic [34:0] cfg_julia_real   = 35'b0;
     logic [34:0] cfg_julia_imag   = 35'b0;
-    logic [34:0] cfg_pan_x        = 35'h4_C000_0000;
-    logic [34:0] cfg_pan_y        = 35'h1_C000_0000;
+    logic [34:0] cfg_centre_x        = 35'h4_C000_0000;
+    logic [34:0] cfg_centre_y        = 35'h1_C000_0000;
     logic [15:0] cfg_zoom_level   = 16'd20;
     logic [11:0] cfg_max_iter     = 12'd0;
     logic [31:0] cfg_image_base_addr = 32'b0;
@@ -44,8 +44,8 @@ module tb_dual_top_level;
         .cfg_fractal_type   (cfg_fractal_type),
         .cfg_julia_real     (cfg_julia_real),
         .cfg_julia_imag     (cfg_julia_imag),
-        .cfg_pan_x          (cfg_pan_x),
-        .cfg_pan_y          (cfg_pan_y),
+        .cfg_centre_x          (cfg_centre_x),
+        .cfg_centre_y          (cfg_centre_y),
         .cfg_zoom_level     (cfg_zoom_level),
         .cfg_max_iter       (cfg_max_iter),
         .cfg_image_base_addr(cfg_image_base_addr),
@@ -170,14 +170,14 @@ module tb_dual_top_level;
     // ── Main ──────────────────────────────────────────────────────────────────
     initial begin
         $display("\ntb_dual_top_level — rendering 16 sixteenths (even/odd parallel)");
-        $display("PAN_X=0x%09X  PAN_Y=0x%09X  ZOOM=%0d  MAX_I=%0d",
+        $display("CENTRE_X=0x%09X  CENTRE_Y=0x%09X  ZOOM=%0d  MAX_I=%0d",
                  CFG_PAN_X, CFG_PAN_Y, CFG_ZOOM, CFG_MAX_I);
 
         rst = 1; tick(4); rst = 0; tick(2);
 
         force dut.cfg_fractal_type    = 5'b0_0000;
-        force dut.cfg_pan_x           = CFG_PAN_X;
-        force dut.cfg_pan_y           = CFG_PAN_Y;
+        force dut.cfg_centre_x           = CFG_PAN_X;
+        force dut.cfg_centre_y           = CFG_PAN_Y;
         force dut.cfg_zoom_level      = CFG_ZOOM;
         force dut.cfg_max_iter        = CFG_MAX_I;
         force dut.cfg_image_base_addr = 32'b0;
@@ -201,8 +201,8 @@ module tb_dual_top_level;
         end
 
         release dut.cfg_fractal_type;
-        release dut.cfg_pan_x;
-        release dut.cfg_pan_y;
+        release dut.cfg_centre_x;
+        release dut.cfg_centre_y;
         release dut.cfg_zoom_level;
         release dut.cfg_max_iter;
         release dut.cfg_image_base_addr;

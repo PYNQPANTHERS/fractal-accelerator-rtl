@@ -16,8 +16,8 @@ module per_sixteenth_engine #(
     input  logic [4:0]  fractal_type,
     input  logic [34:0] julia_real,
     input  logic [34:0] julia_imag,
-    input  logic [34:0] pan_x,
-    input  logic [34:0] pan_y,
+    input  logic [34:0] centre_x,
+    input  logic [34:0] centre_y,
     input  logic [15:0] zoom_level,
     input  logic [11:0] max_iter,
     input  logic [3:0]  sixteenth_id,
@@ -29,25 +29,6 @@ module per_sixteenth_engine #(
     output logic        axi_wr_en,
     input  logic        axi_wr_ready,
 
-    // debug taps → axi_lite_slave (same clock domain, no CDC)
-    output logic [3:0]  dbg_scheduler_state,
-    output logic        dbg_sched_push,
-    output logic        dbg_wants_job,
-    output logic        dbg_grant,
-    output logic        dbg_cqh_done,
-    output logic        dbg_comp_valid,
-    output logic        dbg_comp_complete,
-    output logic        dbg_comp_differ,
-    output logic        dbg_engine_done,
-
-    // writeback-stage debug taps (from bram_to_dram) → axi_lite_slave
-    output logic [8:0]  dbg_tile_done_pop,
-    output logic [8:0]  dbg_transferred_pop,
-    output logic [2:0]  dbg_b2d_state,
-    output logic        dbg_b2d_any_pending,
-    output logic        dbg_b2d_wr_en,
-    output logic        dbg_b2d_accept,
-    output logic        dbg_tile_done_rise
 );
 
     localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;
@@ -172,19 +153,8 @@ module per_sixteenth_engine #(
         .tt_wr_quad_colour(tt_wr_quad_colour),
 
         .sched_tile_done_set(sched_tile_done_set),
-        .engine_done        (sched_engine_done),
-        .dbg_state          (dbg_scheduler_state)
+        .engine_done        (sched_engine_done)
     );
-
-    // debug taps: surface internal handshake signals for axi_lite_slave counters
-    assign dbg_sched_push    = jqh_sched_push;
-    assign dbg_wants_job     = jqh_wants_job;
-    assign dbg_grant         = jqh_grant;
-    assign dbg_cqh_done      = cqh_done;
-    assign dbg_comp_valid    = cqh_comp_valid;
-    assign dbg_comp_complete = comp_complete;
-    assign dbg_comp_differ   = comp_differ;
-    assign dbg_engine_done   = engine_done;
 
     // engine_done latched: scheduler fires a one-cycle pulse, bram_to_dram needs level
     always_ff @(posedge clk) begin
@@ -200,8 +170,8 @@ module per_sixteenth_engine #(
         .opcode_reset       (1'b0),
 
         .fractal_type       (fractal_type),
-        .pan_x              (pan_x),
-        .pan_y              (pan_y),
+        .centre_x              (centre_x),
+        .centre_y              (centre_y),
         .zoom_level         (zoom_level),
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
@@ -351,16 +321,7 @@ module per_sixteenth_engine #(
         .cache_valid_index  (),
         .cache_valid_value  (),
         .sixteenth_base_addr(sixteenth_base_addr),
-        .sixteenth_complete   (b2d_sixteenth_complete),
-
-        // writeback-stage debug taps → per_sixteenth_engine ports
-        .dbg_tile_done_pop  (dbg_tile_done_pop),
-        .dbg_transferred_pop(dbg_transferred_pop),
-        .dbg_b2d_state      (dbg_b2d_state),
-        .dbg_b2d_any_pending(dbg_b2d_any_pending),
-        .dbg_b2d_wr_en      (dbg_b2d_wr_en),
-        .dbg_b2d_accept     (dbg_b2d_accept),
-        .dbg_tile_done_rise (dbg_tile_done_rise)
+        .sixteenth_complete  (b2d_sixteenth_complete)
     );
 
 endmodule

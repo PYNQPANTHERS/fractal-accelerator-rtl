@@ -37,16 +37,7 @@ module bram_to_dram #(
 
     input  logic [31:0]  sixteenth_base_addr,
 
-    output logic         sixteenth_complete,
-
-    // ── Debug taps (writeback stage) → axi_lite_slave (same clock domain) ──
-    output logic [8:0]   dbg_tile_done_pop,    // popcount(tile_done)
-    output logic [8:0]   dbg_transferred_pop,  // popcount(transferred)
-    output logic [2:0]   dbg_b2d_state,        // FSM state (zero-extended)
-    output logic         dbg_b2d_any_pending,  // any pending tile
-    output logic         dbg_b2d_wr_en,        // axi_wr_en
-    output logic         dbg_b2d_accept,       // axi_wr_en && axi_wr_ready
-    output logic         dbg_tile_done_rise    // any tile_done bit 0->1 this cycle
+    output logic         sixteenth_complete
 );
 
     localparam int TILE_BITS      = $clog2(TILE_W);
@@ -225,22 +216,5 @@ module bram_to_dram #(
             endcase
         end
     end
-
-    // ── Debug instrumentation (writeback stage) ────────────────────────────
-    // Live snapshots + a rising-edge detector on the tile_done bus. All combina-
-    // tional taps off existing signals; only the edge detector adds a register.
-    assign dbg_tile_done_pop   = 9'($countones(tile_done));
-    assign dbg_transferred_pop = 9'($countones(transferred));
-    assign dbg_b2d_state       = {1'b0, state};                 // state is 2-bit
-    assign dbg_b2d_any_pending = any_pending;
-    assign dbg_b2d_wr_en       = axi_wr_en;
-    assign dbg_b2d_accept      = axi_wr_en && axi_wr_ready;
-
-    logic [TOTAL_TILES-1:0] tile_done_prev;
-    always_ff @(posedge clk) begin
-        if (rst) tile_done_prev <= '0;
-        else     tile_done_prev <= tile_done;
-    end
-    assign dbg_tile_done_rise = |(tile_done & ~tile_done_prev);
 
 endmodule
