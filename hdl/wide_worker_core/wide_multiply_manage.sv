@@ -152,7 +152,7 @@ logic signed [NARROW_WIDTH-1:0] x_low; // still signed needs 0 pad at the MSB
 logic signed [NARROW_WIDTH-1:0] y_high;
 logic signed [NARROW_WIDTH-1:0] y_low;
 
-(* keep_hierarchy = "yes" *) sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_encoder (
+sum_alter #(.NARROW_WIDTH(NARROW_WIDTH), .INTEGER_BITS(INTEGER_BITS)) mag_neg_encoder (
     .magnitude_negation_encoding(magnitude_negation_encoding),
     .is_wide(is_wide),
     .sum_x_reg_1(sum_x_reg_1),
@@ -267,7 +267,7 @@ always_comb begin
     endcase
 end
 
-(* keep_hierarchy = "yes" *) multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
+ multiply #(.NARROW_WIDTH(NARROW_WIDTH)) left_multiply 
 (
     .clk(clk),
     .mode(left_multiply_mode),
@@ -279,7 +279,7 @@ end
     .result(left_multiply_result)
 );
 
-(* keep_hierarchy = "yes" *) multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
+multiply #(.NARROW_WIDTH(NARROW_WIDTH)) right_multiply 
 (
     .clk(clk),
     .mode(right_multiply_mode),
