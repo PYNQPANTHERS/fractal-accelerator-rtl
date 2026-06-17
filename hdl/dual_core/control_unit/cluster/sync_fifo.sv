@@ -1,7 +1,12 @@
 module sync_fifo #(
     parameter  int DW    = 32,
     parameter  int DEPTH = 8,
-    localparam int AW    = $clog2(DEPTH)
+    // The circular pointers rely on natural wrap at a power-of-2 boundary, so the
+    // physical ring is rounded up to the next power of 2 (PDEPTH). The requested
+    // DEPTH need NOT be a power of 2 — extra slots are simply unused capacity.
+    // This lets callers size FIFOs as CLUSTER_COUNT*2 etc. with any CLUSTER_COUNT.
+    localparam int AW     = (DEPTH <= 1) ? 1 : $clog2(DEPTH),
+    localparam int PDEPTH = 1 << AW
 ) (
     input  logic            clk,
     input  logic            rst,
@@ -15,7 +20,7 @@ module sync_fifo #(
     output logic            empty
 );
 
-    logic [DW-1:0]   mem [DEPTH];
+    logic [DW-1:0]   mem [PDEPTH];
     logic [AW:0]     wr_ptr;     // extra bit for full/empty disambiguation
     logic [AW:0]     rd_ptr;
 

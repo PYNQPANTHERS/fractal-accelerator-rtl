@@ -72,7 +72,6 @@ module control_unit #(
     localparam int WORDS_WIDE   = 4;
     localparam int RES_FIFO_DW  = PIXEL_ADDR_W + PIXEL_W + 1; // +1 for reinject flag (MSB)
     localparam int RES_FIFO_D   = CLUSTER_COUNT * 2;
-    // Dispatch FIFO: {z_real, z_imag, pixel_addr} — CLUSTER_COUNT must be a power of 2
     localparam int DISPATCH_DW  = PIXEL_ADDR_W + Z_WIDE * 2;
     localparam int DISPATCH_D   = CLUSTER_COUNT * 2;
 
