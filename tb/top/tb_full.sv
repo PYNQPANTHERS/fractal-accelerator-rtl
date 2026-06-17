@@ -1,11 +1,19 @@
 `timescale 1ns/1ps
+//
+// Shared full-image render testbench for BOTH designs:
+//   make full DESIGN=dual_core       (2 engines, compiled with -D DUAL)
+//   make full DESIGN=dual_precision   (1 engine)
+//
+// Reconstructs the 1024x1024 image from the colour-BRAM write stream via
+// hierarchical references — no DRAM/AXI in the loop (axi_wr_ready is stubbed high
+// inside top_level). Engine B probes/monitors are compiled only when DUAL is set.
+//
+// Hierarchy assumptions (identical across both trees):
+//   dut.u_engine_a.u_control_unit.u_bram_rw.{bram_wr_en, wr_waddr_q, wr_boff_q, wr_data_q}
+//   dual: also u_engine_b.*, controller signals dut.ctrl_sixteenth_id_a/_b
+//   single: controller signal dut.ctrl_sixteenth_id (no _a/_b)
 
-// Dual-engine full render testbench.
-// Reconstructs the 1024×1024 image from BRAM writes captured via hierarchical
-// references — no DRAM/AXI needed at this stage.
-// Run with:  make dual-full
-
-module tb_dual_top_level;
+module tb_full;
 
     localparam int TILE_W    = 8;
     localparam int TILE_BITS = $clog2(TILE_W);
@@ -31,13 +39,7 @@ module tb_dual_top_level;
     logic [11:0] cfg_max_iter     = 12'd0;
     logic [31:0] cfg_image_base_addr = 32'b0;
 
-    localparam logic [34:0] CFG_PAN_X = 35'h4_C000_0000;
-    localparam logic [34:0] CFG_PAN_Y = 35'h1_C000_0000;
-    localparam logic [15:0] CFG_ZOOM  = 16'd20;
-    localparam logic [34:0] CFG_JULIA = 35'b0;
-    localparam logic [11:0] CFG_MAX_I = 12'd0;
-
-    dual_top_level #(.TILE_W(TILE_W)) dut (
+    top_level #(.TILE_W(TILE_W)) dut (
         .clk                (clk),
         .rst                (rst),
         .ps_start           (ps_start),
@@ -53,30 +55,37 @@ module tb_dual_top_level;
         .irq_started        (irq_started)
     );
 
-    // ── BRAM write probes ─────────────────────────────────────────────────────
-    // Hierarchical references into each engine's bram_read_write instance.
+    // ── BRAM write probes — engine A (always present) ─────────────────────────
     wire        bram_wr_en_a  = dut.u_engine_a.u_control_unit.u_bram_rw.bram_wr_en;
     wire [12:0] bram_waddr_a  = dut.u_engine_a.u_control_unit.u_bram_rw.wr_waddr_q;
     wire [2:0]  bram_boff_a   = dut.u_engine_a.u_control_unit.u_bram_rw.wr_boff_q;
     wire [7:0]  bram_col_a    = dut.u_engine_a.u_control_unit.u_bram_rw.wr_data_q;
 
+    wire [15:0] ta_a        = {bram_waddr_a, bram_boff_a};
+    wire [7:0]  decoded_x_a = { ta_a[(2*TILE_BITS) +: HI],    ta_a[0 +: TILE_BITS]         };
+    wire [7:0]  decoded_y_a = { ta_a[(2*TILE_BITS+HI) +: HI], ta_a[TILE_BITS +: TILE_BITS] };
+
+`ifdef DUAL
     wire        bram_wr_en_b  = dut.u_engine_b.u_control_unit.u_bram_rw.bram_wr_en;
     wire [12:0] bram_waddr_b  = dut.u_engine_b.u_control_unit.u_bram_rw.wr_waddr_q;
     wire [2:0]  bram_boff_b   = dut.u_engine_b.u_control_unit.u_bram_rw.wr_boff_q;
     wire [7:0]  bram_col_b    = dut.u_engine_b.u_control_unit.u_bram_rw.wr_data_q;
 
-    // Decode tile addresses to (x,y) in continuous logic to avoid local-var issues.
-    wire [15:0] ta_a        = {bram_waddr_a, bram_boff_a};
-    wire [7:0]  decoded_x_a = { ta_a[(2*TILE_BITS) +: HI],    ta_a[0 +: TILE_BITS]         };
-    wire [7:0]  decoded_y_a = { ta_a[(2*TILE_BITS+HI) +: HI], ta_a[TILE_BITS +: TILE_BITS] };
-
     wire [15:0] ta_b        = {bram_waddr_b, bram_boff_b};
     wire [7:0]  decoded_x_b = { ta_b[(2*TILE_BITS) +: HI],    ta_b[0 +: TILE_BITS]         };
     wire [7:0]  decoded_y_b = { ta_b[(2*TILE_BITS+HI) +: HI], ta_b[TILE_BITS +: TILE_BITS] };
+`endif
+
+    // sixteenth-id for tagging captures: dual has per-engine *_a/_b, single has one.
+`ifdef DUAL
+    wire [3:0] sxt_id_a = dut.ctrl_sixteenth_id_a;
+    wire [3:0] sxt_id_b = dut.ctrl_sixteenth_id_b;
+`else
+    wire [3:0] sxt_id_a = dut.ctrl_sixteenth_id;
+`endif
 
     // Capture arrays (16 sixteenths × 256×256 = 1 M pixels total)
     localparam int MAX_BRAM = 1_048_576;
-
     logic [7:0] bram_x   [0:MAX_BRAM-1];
     logic [7:0] bram_y   [0:MAX_BRAM-1];
     logic [7:0] bram_col [0:MAX_BRAM-1];
@@ -88,61 +97,61 @@ module tb_dual_top_level;
             bram_x  [bram_cnt] = decoded_x_a;
             bram_y  [bram_cnt] = decoded_y_a;
             bram_col[bram_cnt] = bram_col_a;
-            bram_sxt[bram_cnt] = dut.ctrl_sixteenth_id_a;
+            bram_sxt[bram_cnt] = sxt_id_a;
             bram_cnt++;
         end
+`ifdef DUAL
         if (bram_wr_en_b && bram_cnt < MAX_BRAM) begin
             bram_x  [bram_cnt] = decoded_x_b;
             bram_y  [bram_cnt] = decoded_y_b;
             bram_col[bram_cnt] = bram_col_b;
-            bram_sxt[bram_cnt] = dut.ctrl_sixteenth_id_b;
+            bram_sxt[bram_cnt] = sxt_id_b;
             bram_cnt++;
         end
+`endif
     end
 
-    // ── Heartbeat and pair-complete monitors ──────────────────────────────────
+    // ── Heartbeat + per-sixteenth completion ──────────────────────────────────
     longint cyc = 0;
     always @(posedge clk) cyc++;
 
     always @(posedge clk)
         if ((cyc % 100_000) == 0)
-            $display("  [hb] cyc=%0d  next_sxt=%0d  sxt_a=%0d(st=%0d)  sxt_b=%0d(st=%0d)  bram=%0d",
-                     cyc,
-                     dut.u_dual_controller.next_sxt,
-                     dut.ctrl_sixteenth_id_a, dut.u_dual_controller.state_a,
-                     dut.ctrl_sixteenth_id_b, dut.u_dual_controller.state_b,
-                     bram_cnt);
+            $display("  [hb] cyc=%0d  sxt_a=%0d  bram=%0d", cyc, sxt_id_a, bram_cnt);
 
-    logic sxt_done_a_prev, sxt_done_b_prev;
+`ifdef DUAL
+    logic da_p, db_p;
     always @(posedge clk) begin
-        sxt_done_a_prev <= dut.ctrl_sixteenth_complete_a;
-        sxt_done_b_prev <= dut.ctrl_sixteenth_complete_b;
-        if (dut.ctrl_sixteenth_complete_a && !sxt_done_a_prev)
-            $display("  [done_a] cyc=%0d  sxt=%0d  bram=%0d",
-                     cyc, dut.ctrl_sixteenth_id_a, bram_cnt);
-        if (dut.ctrl_sixteenth_complete_b && !sxt_done_b_prev)
-            $display("  [done_b] cyc=%0d  sxt=%0d  bram=%0d",
-                     cyc, dut.ctrl_sixteenth_id_b, bram_cnt);
+        da_p <= dut.ctrl_sixteenth_complete_a;
+        db_p <= dut.ctrl_sixteenth_complete_b;
+        if (dut.ctrl_sixteenth_complete_a && !da_p)
+            $display("  [done_a] cyc=%0d sxt=%0d bram=%0d", cyc, sxt_id_a, bram_cnt);
+        if (dut.ctrl_sixteenth_complete_b && !db_p)
+            $display("  [done_b] cyc=%0d sxt=%0d bram=%0d", cyc, sxt_id_b, bram_cnt);
     end
+`else
+    logic da_p;
+    always @(posedge clk) begin
+        da_p <= dut.ctrl_sixteenth_complete;
+        if (dut.ctrl_sixteenth_complete && !da_p)
+            $display("  [done] cyc=%0d sxt=%0d bram=%0d", cyc, sxt_id_a, bram_cnt);
+    end
+`endif
 
     // ── CSV dump tasks ────────────────────────────────────────────────────────
     task automatic dump_full_image_csv(input string path);
         logic [7:0] image [0:1023][0:1023];
         integer fd;
         int sxt_col, sxt_row, px, py;
-
         for (int r = 0; r < 1024; r++)
             for (int c = 0; c < 1024; c++) image[r][c] = 8'hFF;
-
         for (int i = 0; i < bram_cnt; i++) begin
             sxt_col = int'(bram_sxt[i]) & 3;
             sxt_row = int'(bram_sxt[i]) >> 2;
             px = sxt_col * 256 + int'(bram_x[i]);
             py = sxt_row * 256 + int'(bram_y[i]);
-            if (px < 1024 && py < 1024)
-                image[py][px] = bram_col[i];
+            if (px < 1024 && py < 1024) image[py][px] = bram_col[i];
         end
-
         fd = $fopen(path, "w");
         $fwrite(fd, "row,col,colour\n");
         for (int r = 0; r < 1024; r++)
@@ -167,22 +176,37 @@ module tb_dual_top_level;
         $display("  wrote %s  (%0d pixels)", path, cnt);
     endtask
 
-    // ── Main ──────────────────────────────────────────────────────────────────
+    // ── plusarg config ────────────────────────────────────────────────────────
+    logic [34:0] run_cx, run_cy, run_jr, run_ji;
+    logic [31:0] run_zoom, run_maxi, run_ft;
+    string       run_tag;
     initial begin
-        $display("\ntb_dual_top_level — rendering 16 sixteenths (even/odd parallel)");
-        $display("CENTRE_X=0x%09X  CENTRE_Y=0x%09X  ZOOM=%0d  MAX_I=%0d",
-                 CFG_PAN_X, CFG_PAN_Y, CFG_ZOOM, CFG_MAX_I);
+        run_cx="h4_C000_0000"; run_cy="h1_C000_0000"; run_jr=0; run_ji=0;
+        run_cx = 35'h4_C000_0000; run_cy = 35'h1_C000_0000;
+        run_zoom = 16'd20; run_maxi = 12'd0; run_ft = 0; run_tag = "full";
+        void'($value$plusargs("centre_x=%h", run_cx));
+        void'($value$plusargs("centre_y=%h", run_cy));
+        void'($value$plusargs("julia_re=%h", run_jr));
+        void'($value$plusargs("julia_im=%h", run_ji));
+        void'($value$plusargs("zoom=%d",     run_zoom));
+        void'($value$plusargs("max_i=%d",    run_maxi));
+        void'($value$plusargs("ftype=%d",    run_ft));
+        void'($value$plusargs("tag=%s",      run_tag));
+
+        $display("\ntb_full — rendering 16 sixteenths  [tag=%s]", run_tag);
+        $display("CENTRE_X=0x%09X  CENTRE_Y=0x%09X  ZOOM=%0d  MAX_I=%0d  FTYPE=%0d",
+                 run_cx, run_cy, run_zoom, run_maxi, run_ft);
 
         rst = 1; tick(4); rst = 0; tick(2);
 
-        force dut.cfg_fractal_type    = 5'b0_0000;
-        force dut.cfg_centre_x           = CFG_PAN_X;
-        force dut.cfg_centre_y           = CFG_PAN_Y;
-        force dut.cfg_zoom_level      = CFG_ZOOM;
-        force dut.cfg_max_iter        = CFG_MAX_I;
+        force dut.cfg_fractal_type    = run_ft[4:0];
+        force dut.cfg_centre_x        = run_cx;
+        force dut.cfg_centre_y        = run_cy;
+        force dut.cfg_zoom_level      = run_zoom[15:0];
+        force dut.cfg_max_iter        = run_maxi[11:0];
         force dut.cfg_image_base_addr = 32'b0;
-        force dut.cfg_julia_real      = CFG_JULIA;
-        force dut.cfg_julia_imag      = CFG_JULIA;
+        force dut.cfg_julia_real      = run_jr;
+        force dut.cfg_julia_imag      = run_ji;
         force dut.ps_start            = 1'b1;
         tick(1);
         release dut.ps_start;
@@ -196,38 +220,22 @@ module tb_dual_top_level;
             if (irq_all_done)
                 $display("  irq_all_done at cycle %0d  bram_cnt=%0d", cyc, bram_cnt);
             else
-                $display("  [TIMEOUT] irq_all_done not seen after %0d cycles  bram=%0d",
-                         cyc, bram_cnt);
+                $display("  [TIMEOUT] irq_all_done not seen after %0d cycles  bram=%0d", cyc, bram_cnt);
         end
 
-        release dut.cfg_fractal_type;
-        release dut.cfg_centre_x;
-        release dut.cfg_centre_y;
-        release dut.cfg_zoom_level;
-        release dut.cfg_max_iter;
-        release dut.cfg_image_base_addr;
-        release dut.cfg_julia_real;
-        release dut.cfg_julia_imag;
-
+        release dut.cfg_fractal_type; release dut.cfg_centre_x; release dut.cfg_centre_y;
+        release dut.cfg_zoom_level; release dut.cfg_max_iter; release dut.cfg_image_base_addr;
+        release dut.cfg_julia_real; release dut.cfg_julia_imag;
         tick(10);
 
         $display("\n  Writing CSVs...");
-        dump_full_image_csv("sim/render/dual_full_image.csv");
-
+        dump_full_image_csv({"sim/render/", run_tag, "_full_image.csv"});
         for (int s = 0; s < 16; s++) begin
             string bram_path;
-            $sformat(bram_path, "sim/render/dual_sixteenth_%0d_bram.csv", s);
+            $sformat(bram_path, "sim/render/%s_sixteenth_%0d_bram.csv", run_tag, s);
             dump_sixteenth_bram_csv(bram_path, s);
         end
-
         $display("\n  Total cycles: %0d  BRAM writes: %0d", cyc, bram_cnt);
-        $finish;
-    end
-
-    initial begin
-        #(CLK_HALF * 2 * 500_000_000);
-        $display("\n[WATCHDOG] timeout at cycle %0d  bram=%0d  next_sxt=%0d",
-                 cyc, bram_cnt, dut.u_dual_controller.next_sxt);
         $finish;
     end
 

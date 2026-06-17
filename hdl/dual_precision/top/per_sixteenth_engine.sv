@@ -175,13 +175,12 @@ module per_sixteenth_engine #(
         .opcode_reset       (1'b0),
 
         .fractal_type       (fractal_type),
-        .centre_x              (centre_x),
-        .centre_y              (centre_y),
+        .centre_x           (centre_x),
+        .centre_y           (centre_y),
         .zoom_level         (zoom_level),
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
         .start_flag         (start),
-        .width_flag         (1'b0),
         .c_x                (julia_real),
         .c_y                (julia_imag),
 

@@ -1,365 +1,112 @@
-# Makefile
-# General purpose icarus verilog runner.
-# Usage:
-#   make TB=tb/queues/tb_queues.sv        run a specific testbench
-#   make all                               run every testbench found
-#   make clean                             remove build artifacts
+# Makefile — parameterized over the two designs.
 #
-# The TB variable points to the testbench file relative to repo root.
-# All HDL source files are automatically included from hdl/.
-# Waveforms are written to sim/waves/<tb_name>.vcd
+#   make full   DESIGN=dual_core        full 1024x1024 image, 2 engines
+#   make full   DESIGN=dual_precision    full 1024x1024 image, 1 engine (narrow+wide)
+#   make single DESIGN=dual_core         one 256x256 sixteenth (per_sixteenth_engine)
+#   make single DESIGN=dual_precision    one 256x256 sixteenth
+#
+# DESIGN selects which hdl/<DESIGN>/ tree the RTL comes from — that is the ONLY
+# thing that changes between builds. DESIGN defaults to dual_core.
+#
+# Optional render config (plusargs) for `full` / `single`:
+#   CENTRE_X / CENTRE_Y : 35-bit hex Q2.33
+#   ZOOM MAX_I FTYPE    : integers
+#   JULIA_RE / JULIA_IM : 35-bit hex julia c
+#   TAG                 : output filename prefix (default: the target name)
 
+DESIGN     ?= dual_core
+DESIGN_DIR := hdl/$(DESIGN)
 
-HDL_DIRS   := hdl/queues hdl/comparator hdl/memory hdl/arbiter  hdl/axi
-TB_DIRS    := tb/memory
 SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 RENDER_DIR := sim/render
+IVFLAGS    := -g2012 -Wall -Wno-timescale
 
-# Worker-core sources: use the WIDE multiply path (wide_multiply / wide_multiply_manage)
-# instead of the narrow multiply / multiply_manager. The wide files declare the same
-# module names (multiply, multiply_manager), so the narrow ones MUST be filtered out
-# to avoid duplicate definitions. mac.sv is only used by the narrow manager and is
-# left in the dir (unused, harmless). All other worker_core helpers (coord_flagger,
-# sum_alter, magnitude_comparison_unit, ...) are shared and stay.
-_WC_NARROW_SWAP := hdl/worker_core/multiply.sv hdl/worker_core/multiply_manager.sv
-_WC_WIDE_ADD    := hdl/wide_worker_core/wide_multiply.sv \
-                   hdl/wide_worker_core/wide_multiply_manage.sv
+# dual_core has two engines → compile the shared TB with -D DUAL so it probes
+# engine B. dual_precision has a single engine and omits it.
+ifeq ($(DESIGN),dual_core)
+DESIGN_DEFS := -D DUAL
+else
+DESIGN_DEFS :=
+endif
 
-# Sources for control_unit testbenches (isolated — CU has declaration quirks)
-_CU_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv) $(_WC_NARROW_SWAP), \
-                               $(wildcard hdl/worker_core/*.sv)) \
-                $(_WC_WIDE_ADD)
-CU_HDL_SRCS  := $(wildcard hdl/control_unit/*.sv) \
-                $(wildcard hdl/control_unit/cluster/*.sv) \
-                $(_CU_WC_SRCS)
+# ── Source collection ──────────────────────────────────────────────────────────
+# Every .sv under the selected design tree, minus any testbench files (tb_*.sv).
+# Each tree is self-contained (its own worker_core), so no cross-tree swapping.
+_ALL_SV    := $(shell find $(DESIGN_DIR) -name '*.sv')
+_TB_SV     := $(shell find $(DESIGN_DIR) -name 'tb_*.sv')
+HDL_SRCS   := $(filter-out $(_TB_SV),$(_ALL_SV))
 
-# Sources for engine/top testbenches (all subsystems except worker_core TB stubs)
-_ENGINE_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv) $(_WC_NARROW_SWAP), \
-                                  $(wildcard hdl/worker_core/*.sv)) \
-                    $(_WC_WIDE_ADD)
-ENGINE_HDL_SRCS  := $(wildcard hdl/queues/*.sv) \
-                    $(wildcard hdl/comparator/*.sv) \
-                    $(wildcard hdl/scheduler/*.sv) \
-                    $(wildcard hdl/memory/*.sv) \
-                    $(wildcard hdl/control_unit/*.sv) \
-                    $(wildcard hdl/control_unit/cluster/*.sv) \
-                    $(_ENGINE_WC_SRCS) \
-                    hdl/top/per_sixteenth_engine.sv
+# Testbenches (shared across both designs)
+TB_FULL    := tb/top/tb_full.sv
+TB_SINGLE  := tb/top/tb_pse_single.sv
 
-# Sources for top_level testbench (engine sources + controller + top)
-TOP_HDL_SRCS     := $(ENGINE_HDL_SRCS) \
-                    hdl/top/sixteenth_controller.sv \
-                    hdl/top/top_level.sv
+# Plusargs assembled from optional make vars
+PLUSARGS = $(if $(CENTRE_X),+centre_x=$(CENTRE_X)) \
+           $(if $(CENTRE_Y),+centre_y=$(CENTRE_Y)) \
+           $(if $(ZOOM),+zoom=$(ZOOM)) \
+           $(if $(MAX_I),+max_i=$(MAX_I)) \
+           $(if $(FTYPE),+ftype=$(FTYPE)) \
+           $(if $(JULIA_RE),+julia_re=$(JULIA_RE)) \
+           $(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
+           $(if $(TAG),+tag=$(TAG))
 
-# Sources for dual_top_level testbench
-DUAL_HDL_SRCS    := $(ENGINE_HDL_SRCS) \
-                    hdl/dual_top/dual_sixteenth_controller.sv \
-                    hdl/dual_top/dual_top_level.sv
-
-# Sources for dual_top_level testbench
-DUAL_HDL_SRCS    := $(ENGINE_HDL_SRCS) \
-                    hdl/dual_top/dual_sixteenth_controller.sv \
-                    hdl/dual_top/dual_top_level.sv
-
-# Collect all HDL sources automatically
-_TB_IN_HDL := $(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/tb_*.sv))
-HDL_SRCS   := $(filter-out $(_TB_IN_HDL),$(foreach dir,$(HDL_DIRS),$(wildcard $(dir)/*.sv)))
-
-IVFLAGS := -g2012 -Wall -Wno-timescale
-
+# ── Targets ─────────────────────────────────────────────────────────────────────
 .PHONY: default
 default:
-	@if [ -z "$(TB)" ]; then \
-		echo ""; \
-		echo "  Usage: make TB=tb/queues/tb_queues.sv"; \
-		echo "  Or:    make all"; \
-		echo ""; \
-	else \
-		$(MAKE) run TB=$(TB); \
-	fi
-
-# Run a single testbench
-.PHONY: run
-run:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR)
-	@if [ -z "$(TB)" ]; then echo "ERROR: TB not set"; exit 1; fi
-	$(eval TB_NAME := $(basename $(notdir $(TB))))
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	$(eval VCD     := $(SIM_DIR)/$(TB_NAME).vcd)
 	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: $(TB)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(HDL_SRCS) $(TB)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Waveform: $(VCD)"
+	@echo "  make full   DESIGN=dual_core|dual_precision   — full image"
+	@echo "  make single DESIGN=dual_core|dual_precision   — one sixteenth"
+	@echo "  (DESIGN defaults to dual_core)"
 	@echo ""
 
-# Run all testbenches found in tb/
-ALL_TBS := $(foreach dir,$(TB_DIRS),$(wildcard $(dir)/tb_*.sv))
-
-.PHONY: all
-all: $(SIM_DIR) $(BUILD_DIR)
+.PHONY: full
+full:
+	@mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval OUT := $(BUILD_DIR)/$(DESIGN)_full.out)
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running all testbenches"
+	@echo "  Compiling: $(TB_FULL)   [DESIGN=$(DESIGN)]"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@PASS=0; FAIL=0; \
-	for tb in $(ALL_TBS); do \
-		TB_NAME=$$(basename $$tb .sv); \
-		OUT=$(BUILD_DIR)/$$TB_NAME.out; \
-		iverilog $(IVFLAGS) -o $$OUT $(HDL_SRCS) $$tb 2>&1; \
-		if [ $$? -ne 0 ]; then \
-			echo "  [COMPILE FAIL] $$tb"; \
-			FAIL=$$((FAIL+1)); \
-		else \
-			RESULT=$$(vvp $$OUT); \
-			echo "$$RESULT"; \
-			if echo "$$RESULT" | grep -q "ALL TESTS PASSED"; then \
-				PASS=$$((PASS+1)); \
-			else \
-				FAIL=$$((FAIL+1)); \
-			fi; \
-		fi; \
-	done; \
-	echo ""; \
-	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
-	echo "  FINAL: $$PASS testbench(es) passed, $$FAIL failed"; \
-	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
-	echo ""
-
-$(SIM_DIR):
-	mkdir -p $(SIM_DIR)
-
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-# Render three fractal frames through control_unit → CSVs
-.PHONY: cu-debug
-cu-debug:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR)
-	$(eval TB_NAME := tb_cu_debug)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
-	vvp $(OUT) 2>&1 | head -300
-
-.PHONY: cu-single
-cu-single:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR)
-	$(eval TB_NAME := tb_cu_single)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
-	vvp $(OUT)
-
-.PHONY: cu-render
-cu-render:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR)
-	$(eval TB_NAME := tb_cu_render)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(OUT) $(HDL_SRCS) $(TB_FULL)
 	@echo ""
+	@echo "  Running:   $(DESIGN) full image"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/control_unit/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(CU_HDL_SRCS) tb/control_unit/$(TB_NAME).sv
+	vvp $(OUT) $(PLUSARGS)
 	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
+	@echo "  Outputs: $(RENDER_DIR)/<tag>_full_image.csv  (+ per-sixteenth bram CSVs)"
 	@echo ""
 
-# Level-1: per_sixteenth_engine, one sixteenth, all real sub-modules
-.PHONY: pse
-pse:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_per_sixteenth_engine)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
+.PHONY: single
+single:
+	@mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval OUT := $(BUILD_DIR)/$(DESIGN)_single.out)
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/top/$(TB_NAME).sv"
+	@echo "  Compiling: $(TB_SINGLE)   [DESIGN=$(DESIGN)]"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(ENGINE_HDL_SRCS) tb/top/$(TB_NAME).sv
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(OUT) $(HDL_SRCS) $(TB_SINGLE)
 	@echo ""
+	@echo "  Running:   $(DESIGN) single sixteenth"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
+	vvp $(OUT) $(PLUSARGS)
 	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/pse_bram.csv"
-	@echo "           $(RENDER_DIR)/pse_dram.csv"
-	@echo "           $(RENDER_DIR)/pse_image.csv"
+	@echo "  Outputs: $(RENDER_DIR)/single_*.csv"
 	@echo ""
 
-# Level-1b: per_sixteenth_engine, single run, top-full config, dumps CSV on sixteenth_complete
-.PHONY: pse-single
-pse-single:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_pse_single)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/top/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(ENGINE_HDL_SRCS) tb/top/$(TB_NAME).sv
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/single_bram.csv"
-	@echo "           $(RENDER_DIR)/single_dram.csv"
-	@echo "           $(RENDER_DIR)/single_image.csv"
-	@echo ""
+# Build-only variants (compile, no run) for launching many runs in parallel.
+.PHONY: full-build single-build
+full-build:
+	@mkdir -p $(BUILD_DIR) $(RENDER_DIR)
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(BUILD_DIR)/$(DESIGN)_full.out $(HDL_SRCS) $(TB_FULL)
+	@echo "  Built $(BUILD_DIR)/$(DESIGN)_full.out"
+single-build:
+	@mkdir -p $(BUILD_DIR) $(RENDER_DIR)
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(BUILD_DIR)/$(DESIGN)_single.out $(HDL_SRCS) $(TB_SINGLE)
+	@echo "  Built $(BUILD_DIR)/$(DESIGN)_single.out"
 
-# Level-2: per_sixteenth_engine, two sixteenths, cross-run checks
-.PHONY: engine-full
-engine-full:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_engine_full)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/top/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(ENGINE_HDL_SRCS) tb/top/$(TB_NAME).sv
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/engine_sixteenth_0_bram.csv"
-	@echo "           $(RENDER_DIR)/engine_sixteenth_0_dram.csv"
-	@echo "           $(RENDER_DIR)/engine_sixteenth_0_image.csv"
-	@echo "           $(RENDER_DIR)/engine_sixteenth_5_{bram,dram,image}.csv"
-	@echo "           $(RENDER_DIR)/engine_full_{bram,dram}.csv"
-	@echo ""
-
-# Level-3: full top_level, all 16 sixteenths, PS input injection
-.PHONY: top-full
-top-full:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_top_level)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/top/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(TOP_HDL_SRCS) tb/top/$(TB_NAME).sv
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/top_sixteenth_N_{bram,image}.csv  (N=0..15)"
-	@echo "           $(RENDER_DIR)/top_dram.csv"
-	@echo "           $(RENDER_DIR)/top_full_image.csv"
-	@echo ""
-
-# Build the top_level sim binary once; top-run reuses it (no recompile).
-.PHONY: top-build
-top-build:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	iverilog $(IVFLAGS) -o $(BUILD_DIR)/tb_top_level.out $(TOP_HDL_SRCS) tb/top/tb_top_level.sv
-	@echo "  Built $(BUILD_DIR)/tb_top_level.out"
-
-# Run one render with runtime config via plusargs. Compile once with
-# `make top-build`, then launch many `make top-run ...` in parallel terminals.
-#   PAN_X / PAN_Y       : 35-bit hex Q2.33 pan (top-left); default from TB
-#   ZOOM                : integer zoom level (0-79)
-#   MAX_I               : integer max iterations
-#   FTYPE               : fractal type (bit4=julia); default 0 = mandelbrot
-#   JULIA_RE / JULIA_IM : 35-bit hex julia c (only for julia mode)
-#   TAG                 : output filename prefix; use a unique TAG per run
-# Example:
-#   make top-run ZOOM=40 PAN_X=0x4_0000_0000 PAN_Y=0x3_FFFF_FFFF MAX_I=1 TAG=z40
-.PHONY: top-run
-top-run:
-	mkdir -p $(RENDER_DIR)
-	@test -f $(BUILD_DIR)/tb_top_level.out || $(MAKE) top-build
-	vvp $(BUILD_DIR)/tb_top_level.out \
-		$(if $(PAN_X),+pan_x=$(PAN_X)) \
-		$(if $(PAN_Y),+pan_y=$(PAN_Y)) \
-		$(if $(ZOOM),+zoom=$(ZOOM)) \
-		$(if $(MAX_I),+max_i=$(MAX_I)) \
-		$(if $(FTYPE),+ftype=$(FTYPE)) \
-		$(if $(JULIA_RE),+julia_re=$(JULIA_RE)) \
-		$(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
-		$(if $(TAG),+tag=$(TAG))
-
-# Tile-size benchmark: renders the full image on TILE_W=16 then TILE_W=8 and
-# reports core-utilisation / scheduler-occupancy metrics for the report.
-.PHONY: tile-bench
-tile-bench:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_tile_benchmark)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "  Compiling: tb/top/$(TB_NAME).sv  (TILE_W=16 + TILE_W=8 DUTs)"
-	iverilog $(IVFLAGS) -o $(OUT) $(TOP_HDL_SRCS) tb/top/$(TB_NAME).sv
-	@echo "  Running:   $(TB_NAME)"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Rendering PNGs..."
-	-cd $(RENDER_DIR) && python3 visualise.py bench_tile16_image.csv
-	-cd $(RENDER_DIR) && python3 visualise.py bench_tile8_image.csv
-	@echo "  Outputs: $(RENDER_DIR)/bench_tile{8,16}_{dram,image}.csv (+ .png)"
-	@echo ""
-
-# BRAM→DRAM CSV render validation: loads fractal CSV, drives bram_to_dram, checks pixel fidelity
-.PHONY: b2d-csv
-b2d-csv:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_bram_to_dram_csv)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: tb/memory/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(HDL_SRCS) tb/memory/$(TB_NAME).sv
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/b2d_bram_source.csv"
-	@echo "           $(RENDER_DIR)/b2d_partial_dram.csv"
-	@echo "           $(RENDER_DIR)/b2d_full_dram.csv"
-	@echo ""
-
-# Level-3b: dual_top_level, all 16 sixteenths via two parallel engines
-.PHONY: dual-full
-dual-full:
-	mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
-	$(eval TB_NAME := tb_dual_top_level)
-	$(eval OUT     := $(BUILD_DIR)/$(TB_NAME).out)
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Compiling: hdl/dual_top/$(TB_NAME).sv"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	iverilog $(IVFLAGS) -o $(OUT) $(DUAL_HDL_SRCS) hdl/dual_top/$(TB_NAME).sv
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Running:   $(TB_NAME)"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	vvp $(OUT)
-	@echo ""
-	@echo "  Outputs: $(RENDER_DIR)/dual_full_image.csv"
-	@echo "           $(RENDER_DIR)/dual_sixteenth_N_bram.csv  (N=0..15)"
-	@echo ""
-
-# Clean
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(SIM_DIR)
-	find $(RENDER_DIR) -type f ! -name '*.py' ! -name 'bench_metrics.csv' ! -name 'bench_tile*.png' -delete 2>/dev/null || true
-	@echo "Cleaned build, wave, and render outputs (kept .py scripts + benchmark report/PNGs)"
+	find $(RENDER_DIR) -type f ! -name '*.py' -delete 2>/dev/null || true
+	@echo "Cleaned build, wave, and render outputs (kept .py scripts)"

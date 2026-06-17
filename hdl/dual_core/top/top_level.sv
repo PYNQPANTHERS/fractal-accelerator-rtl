@@ -3,8 +3,10 @@
 // renders odd sixteenths (1,3,…,15).  DRAM/AXI is stubbed (axi_wr_ready tied high)
 // and will be wired up in a future revision.
 
-module dual_top_level #(
-    parameter int TILE_W = 16
+module top_level #(
+    parameter int TILE_W        = 16,
+    parameter int CLUSTER_COUNT = 4,   // iterator compute clusters per engine (power of 2)
+    parameter int CLUSTER_SIZE  = 8    // worker cores per cluster
 )(
     input  logic clk,
     input  logic rst,
@@ -53,7 +55,7 @@ module dual_top_level #(
     logic        axi_wr_en_a,   axi_wr_en_b;
 
     // ── Dual controller ────────────────────────────────────────────────────
-    dual_sixteenth_controller #(.TILE_W(TILE_W)) u_dual_controller (
+    sixteenth_controller #(.TILE_W(TILE_W)) u_dual_controller (
         .clk                  (clk),
         .rst                  (rst),
         .ps_start             (ps_start),
@@ -83,7 +85,11 @@ module dual_top_level #(
     );
 
     // ── Engine A (even sixteenths: 0, 2, 4, …, 14) ────────────────────────
-    per_sixteenth_engine #(.TILE_W(TILE_W), .CLUSTER_COUNT(2)) u_engine_a (
+    per_sixteenth_engine #(
+        .TILE_W       (TILE_W),
+        .CLUSTER_COUNT(CLUSTER_COUNT),
+        .CLUSTER_SIZE (CLUSTER_SIZE)
+    ) u_engine_a (
         .clk                (clk),
         .rst                (engine_combined_rst_a),
         .start              (ctrl_start_a),
@@ -105,7 +111,11 @@ module dual_top_level #(
     );
 
     // ── Engine B (odd sixteenths: 1, 3, 5, …, 15) ─────────────────────────
-    per_sixteenth_engine #(.TILE_W(TILE_W), .CLUSTER_COUNT(2)) u_engine_b (
+    per_sixteenth_engine #(
+        .TILE_W       (TILE_W),
+        .CLUSTER_COUNT(CLUSTER_COUNT),
+        .CLUSTER_SIZE (CLUSTER_SIZE)
+    ) u_engine_b (
         .clk                (clk),
         .rst                (engine_combined_rst_b),
         .start              (ctrl_start_b),

@@ -4,7 +4,7 @@
 // they never wait for each other.  Engine A has priority when both finish
 // on the same clock edge.
 
-module dual_sixteenth_controller #(
+module sixteenth_controller #(
     parameter int TILE_W = 16
 )(
     input  logic clk,
