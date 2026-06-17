@@ -51,7 +51,37 @@ PLUSARGS = $(if $(CENTRE_X),+centre_x=$(CENTRE_X)) \
            $(if $(JULIA_IM),+julia_im=$(JULIA_IM)) \
            $(if $(TAG),+tag=$(TAG))
 
-# ── Targets ─────────────────────────────────────────────────────────────────────
+# ── Unit / integration testbenches ──────────────────────────────────────────────
+# Run any tb/ testbench against either tree: each TB compiles against the whole
+# selected design tree (iverilog drops unused modules), so no per-module dep map.
+#   make test TB=tb/comparator/tb_comparator.sv DESIGN=dual_precision
+#   make test-all DESIGN=dual_core          run every tb/**/tb_*.sv, report pass/fail
+ALL_UNIT_TBS := $(shell find tb -name 'tb_*.sv' 2>/dev/null | sort)
+
+.PHONY: test
+test:
+	@mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	@if [ -z "$(TB)" ]; then echo "ERROR: set TB=tb/.../tb_x.sv"; exit 1; fi
+	$(eval NM := $(basename $(notdir $(TB))))
+	@echo "━━ $(NM)  [DESIGN=$(DESIGN)] ━━"
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(BUILD_DIR)/$(NM).out $(HDL_SRCS) $(TB)
+	@vvp $(BUILD_DIR)/$(NM).out
+
+.PHONY: test-all
+test-all:
+	@mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	@PASS=0; FAIL=0; CFAIL=0; \
+	for tb in $(ALL_UNIT_TBS); do \
+	  NM=$$(basename $$tb .sv); \
+	  if iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(BUILD_DIR)/$$NM.out $(HDL_SRCS) $$tb 2>/dev/null; then \
+	    OUT=$$(timeout 120 vvp $(BUILD_DIR)/$$NM.out 2>&1); \
+	    if echo "$$OUT" | grep -qiE "ALL TESTS PASSED|ALL PASS|TEST PASSED"; then \
+	      echo "  [PASS]    $$tb"; PASS=$$((PASS+1)); \
+	    else echo "  [norpt]   $$tb (ran, no PASS marker)"; PASS=$$((PASS+1)); fi; \
+	  else echo "  [BUILD✗]  $$tb"; CFAIL=$$((CFAIL+1)); fi; \
+	done; \
+	echo ""; echo "  DESIGN=$(DESIGN): $$PASS ran, $$CFAIL build-fail"
+
 .PHONY: default
 default:
 	@echo ""

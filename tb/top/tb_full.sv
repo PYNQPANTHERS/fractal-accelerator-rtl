@@ -29,6 +29,13 @@ module tb_full;
     wire         irq_all_done;
     wire         irq_started;
 
+    // HP write port — the TB reconstructs the image from the colour-BRAM write
+    // stream (hierarchical), so it just holds ready high and ignores the bus.
+    wire  [31:0] hp_axi_wr_addr;
+    wire  [63:0] hp_axi_wr_data;
+    wire         hp_axi_wr_en;
+    logic        hp_axi_wr_ready = 1'b1;
+
     logic        ps_start         = 1'b0;
     logic [4:0]  cfg_fractal_type = 5'b0;
     logic [34:0] cfg_julia_real   = 35'b0;
@@ -51,6 +58,10 @@ module tb_full;
         .cfg_zoom_level     (cfg_zoom_level),
         .cfg_max_iter       (cfg_max_iter),
         .cfg_image_base_addr(cfg_image_base_addr),
+        .hp_axi_wr_addr     (hp_axi_wr_addr),
+        .hp_axi_wr_data     (hp_axi_wr_data),
+        .hp_axi_wr_en       (hp_axi_wr_en),
+        .hp_axi_wr_ready    (hp_axi_wr_ready),
         .irq_all_done       (irq_all_done),
         .irq_started        (irq_started)
     );

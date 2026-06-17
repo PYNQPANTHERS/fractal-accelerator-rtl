@@ -1,7 +1,9 @@
-// Dual-engine top level: one dual_sixteenth_controller drives two per_sixteenth_engine
+// Dual-engine top level: one sixteenth_controller drives two per_sixteenth_engine
 // instances in parallel.  Engine A renders even sixteenths (0,2,…,14); engine B
-// renders odd sixteenths (1,3,…,15).  DRAM/AXI is stubbed (axi_wr_ready tied high)
-// and will be wired up in a future revision.
+// renders odd sixteenths (1,3,…,15).  Both engines share one HP write port via
+// axi_wr_arbiter (internal — keeps each tile's word-stream atomic).  External
+// ports are IDENTICAL to dual_precision/top_level so a single Vivado block design
+// (axi_lite_slave -> cfg_*, hp_axi_wr_* -> axi_hp_master_wrap) works for both.
 
 module top_level #(
     parameter int TILE_W        = 16,
@@ -20,6 +22,12 @@ module top_level #(
     input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
+
+    // AXI HP write master — connect to axi_hp_master_wrap in the block design
+    output logic [31:0] hp_axi_wr_addr,
+    output logic [63:0] hp_axi_wr_data,
+    output logic        hp_axi_wr_en,
+    input  logic        hp_axi_wr_ready,
 
     output logic irq_all_done,
     output logic irq_started
@@ -49,10 +57,11 @@ module top_level #(
     wire engine_combined_rst_a = rst | ctrl_engine_rst_a;
     wire engine_combined_rst_b = rst | ctrl_engine_rst_b;
 
-    // ── AXI stubs (DRAM not connected yet — tied ready high) ───────────────
+    // ── Per-engine AXI write request wires (-> arbiter) ────────────────────
     logic [31:0] axi_wr_addr_a, axi_wr_addr_b;
     logic [63:0] axi_wr_data_a, axi_wr_data_b;
     logic        axi_wr_en_a,   axi_wr_en_b;
+    logic        axi_wr_ready_a, axi_wr_ready_b;
 
     // ── Dual controller ────────────────────────────────────────────────────
     sixteenth_controller #(.TILE_W(TILE_W)) u_dual_controller (
@@ -107,7 +116,7 @@ module top_level #(
         .axi_wr_addr        (axi_wr_addr_a),
         .axi_wr_data        (axi_wr_data_a),
         .axi_wr_en          (axi_wr_en_a),
-        .axi_wr_ready       (1'b1)
+        .axi_wr_ready       (axi_wr_ready_a)
     );
 
     // ── Engine B (odd sixteenths: 1, 3, 5, …, 15) ─────────────────────────
@@ -133,7 +142,29 @@ module top_level #(
         .axi_wr_addr        (axi_wr_addr_b),
         .axi_wr_data        (axi_wr_data_b),
         .axi_wr_en          (axi_wr_en_b),
-        .axi_wr_ready       (1'b1)
+        .axi_wr_ready       (axi_wr_ready_b)
+    );
+
+    // ── 2:1 write arbiter — serialises both engines onto the shared HP port ─
+    // Grant switches at sixteenth boundaries (a_complete/b_complete come from each
+    // engine's bram_to_dram sixteenth_complete, tapped here via the controller wires).
+    axi_wr_arbiter u_arbiter (
+        .clk        (clk),
+        .rst        (rst),
+        .a_wr_addr  (axi_wr_addr_a),
+        .a_wr_data  (axi_wr_data_a),
+        .a_wr_en    (axi_wr_en_a),
+        .a_wr_ready (axi_wr_ready_a),
+        .a_complete (ctrl_sixteenth_complete_a),
+        .b_wr_addr  (axi_wr_addr_b),
+        .b_wr_data  (axi_wr_data_b),
+        .b_wr_en    (axi_wr_en_b),
+        .b_wr_ready (axi_wr_ready_b),
+        .b_complete (ctrl_sixteenth_complete_b),
+        .wr_addr    (hp_axi_wr_addr),
+        .wr_data    (hp_axi_wr_data),
+        .wr_en      (hp_axi_wr_en),
+        .wr_ready   (hp_axi_wr_ready)
     );
 
     assign irq_all_done = ctrl_all_done;

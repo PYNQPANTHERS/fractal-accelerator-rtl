@@ -1,7 +1,10 @@
 // Single-engine top level: sixteenth_controller + one per_sixteenth_engine.
-// DRAM/AXI is stubbed (axi_wr_ready tied high) — the testbench reconstructs the
-// image from the colour-BRAM write stream via hierarchical references, matching
-// the dual_core top_level interface so one TB (tb_full) drives both designs.
+// The single engine drives the hp_axi_wr_* port DIRECTLY — no arbiter needed
+// (dual_core merges its two engines through axi_wr_arbiter; here there is only
+// one). External ports are IDENTICAL to dual_core/top_level so a single Vivado
+// block design (axi_lite_slave -> cfg_*, hp_axi_wr_* -> axi_hp_master_wrap) works
+// for both designs. The testbench reconstructs the image from the colour-BRAM
+// write stream via hierarchical refs and just holds hp_axi_wr_ready high.
 
 module top_level #(
     parameter int TILE_W        = 16,  // tile width/height in pixels (power of 2)
@@ -20,6 +23,12 @@ module top_level #(
     input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
     input  logic [31:0] cfg_image_base_addr,
+
+    // AXI HP write master — connect to axi_hp_master_wrap in the block design
+    output logic [31:0] hp_axi_wr_addr,
+    output logic [63:0] hp_axi_wr_data,
+    output logic        hp_axi_wr_en,
+    input  logic        hp_axi_wr_ready,
 
     output logic irq_all_done,
     output logic irq_started
@@ -67,12 +76,8 @@ module top_level #(
         .started            (ctrl_started)
     );
 
-    // ── AXI stub (DRAM not connected — tied ready high) ────────────────────
-    logic [31:0] axi_wr_addr_a;
-    logic [63:0] axi_wr_data_a;
-    logic        axi_wr_en_a;
-
-    // per_sixteenth_engine (named u_engine_a so one TB matches dual_core too)
+    // Single engine drives the HP write port directly — no arbiter needed.
+    // (named u_engine_a so one TB matches dual_core too)
     per_sixteenth_engine #(
         .TILE_W       (TILE_W),
         .CLUSTER_COUNT(CLUSTER_COUNT),
@@ -92,10 +97,10 @@ module top_level #(
         .max_iter           (ctrl_max_iter),
         .sixteenth_id       (ctrl_sixteenth_id),
         .sixteenth_base_addr(ctrl_sixteenth_base_addr),
-        .axi_wr_addr        (axi_wr_addr_a),
-        .axi_wr_data        (axi_wr_data_a),
-        .axi_wr_en          (axi_wr_en_a),
-        .axi_wr_ready       (1'b1)
+        .axi_wr_addr        (hp_axi_wr_addr),
+        .axi_wr_data        (hp_axi_wr_data),
+        .axi_wr_en          (hp_axi_wr_en),
+        .axi_wr_ready       (hp_axi_wr_ready)
     );
 
     assign irq_all_done = ctrl_all_done;
