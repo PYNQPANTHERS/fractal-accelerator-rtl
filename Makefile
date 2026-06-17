@@ -38,8 +38,9 @@ _TB_SV     := $(shell find $(DESIGN_DIR) -name 'tb_*.sv')
 HDL_SRCS   := $(filter-out $(_TB_SV),$(_ALL_SV))
 
 # Testbenches (shared across both designs)
-TB_FULL    := tb/top/tb_full.sv
-TB_SINGLE  := tb/top/tb_pse_single.sv
+TB_FULL      := tb/top/tb_full.sv
+TB_FULL_DRAM := tb/top/tb_full_dram.sv
+TB_SINGLE    := tb/top/tb_pse_single.sv
 
 # Plusargs assembled from optional make vars
 PLUSARGS = $(if $(CENTRE_X),+centre_x=$(CENTRE_X)) \
@@ -105,6 +106,23 @@ full:
 	vvp $(OUT) $(PLUSARGS)
 	@echo ""
 	@echo "  Outputs: $(RENDER_DIR)/<tag>_full_image.csv  (+ per-sixteenth bram CSVs)"
+	@echo ""
+
+.PHONY: full-dram
+full-dram:
+	@mkdir -p $(SIM_DIR) $(BUILD_DIR) $(RENDER_DIR)
+	$(eval OUT := $(BUILD_DIR)/$(DESIGN)_full_dram.out)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Compiling: $(TB_FULL_DRAM)   [DESIGN=$(DESIGN)]  (reconstruct from DRAM)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	iverilog $(IVFLAGS) $(DESIGN_DEFS) -o $(OUT) $(HDL_SRCS) $(TB_FULL_DRAM)
+	@echo ""
+	@echo "  Running:   $(DESIGN) full image (from DRAM/AXI words)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	vvp $(OUT) $(PLUSARGS)
+	@echo ""
+	@echo "  Outputs: $(RENDER_DIR)/<tag>_dram_full_image.csv  (+ <tag>_dram_raw.csv)"
 	@echo ""
 
 .PHONY: single
