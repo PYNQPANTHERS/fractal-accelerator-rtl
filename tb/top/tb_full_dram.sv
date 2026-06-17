@@ -129,9 +129,21 @@ module tb_full_dram;
     // ── Heartbeat ──────────────────────────────────────────────────────────────
     longint cyc = 0;
     always @(posedge clk) cyc++;
+
+    // sixteenth-id being rendered: dual has per-engine _a/_b, single has one.
+`ifdef DUAL
+    wire [3:0] sxt_id_a = dut.ctrl_sixteenth_id_a;
+    wire [3:0] sxt_id_b = dut.ctrl_sixteenth_id_b;
     always @(posedge clk)
         if ((cyc % 100_000) == 0)
-            $display("  [hb] cyc=%0d  beats=%0d", cyc, beat_cnt);
+            $display("  [hb] cyc=%0d  sxt_a=%0d sxt_b=%0d  beats=%0d",
+                     cyc, sxt_id_a, sxt_id_b, beat_cnt);
+`else
+    wire [3:0] sxt_id = dut.ctrl_sixteenth_id;
+    always @(posedge clk)
+        if ((cyc % 100_000) == 0)
+            $display("  [hb] cyc=%0d  sxt=%0d  beats=%0d", cyc, sxt_id, beat_cnt);
+`endif
 
     // ── DRAM -> 1024x1024 image CSV ─────────────────────────────────────────────
     task automatic dump_dram_full_image_csv(input string path);
