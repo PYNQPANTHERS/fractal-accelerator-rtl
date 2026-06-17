@@ -1,5 +1,12 @@
-# PYNQZOOM - A fractal accelerator in hardware
+<div align="center">
 
+# PYNQZOOM
+
+### A fractal accelerator in hardware
+
+</div>
+
+---
 
 ## Overview
 
@@ -16,7 +23,7 @@ Each core supports two runtime-selectable precision modes without additional har
 The RTL is maintained as two parallel, self-contained trees under `hdl/`:
 
 | Tree | Engines | Precision | Top module |
-|------|---------|-----------|------------|
+| :--- | :--- | :--- | :--- |
 | `hdl/dual_core/` | **2** -- even/odd sixteenths in parallel, merged by an internal `axi_wr_arbiter` | Narrow | `top_level` |
 | `hdl/dual_precision/` | **1** | Narrow **+ wide** -- zoom-selected at runtime | `top_level` |
 
@@ -26,11 +33,14 @@ Both `top_level`s expose the same external ports (`cfg_*` config inputs, `hp_axi
 
 Each tree is fully self-contained, with its own copy of every submodule.
 
+Each variant can also be found in its individual branch: [`dual_core`](https://github.com/PYNQPANTHERS/fractal-accelerator-rtl/tree/dual_core) · [`dual_precision`](https://github.com/PYNQPANTHERS/fractal-accelerator-rtl/tree/dual_precision)
+
+
 ---
 
 ## Repository structure
 
-```
+```text
 hdl/<design>/
   top/              Top-level control and frame sequencing
                     (top_level, sixteenth_controller, per_sixteenth_engine)
@@ -53,6 +63,8 @@ tb/                 Unit and integration testbenches, shared across both design 
 sim/                Simulation artefacts: compiled binaries, VCD waveforms,
                     per-transaction CSVs and visualise.py PNG reconstruction
 ```
+
+---
 
 ## Building & running
 
@@ -82,7 +94,7 @@ make full DESIGN=dual_precision ZOOM=20 MAX_I=3 TAG=seahorse
 ```
 
 The testbenches reconstruct the image from the colour-BRAM write stream (via
-hierarchical references — no AXI in the loop; `hp_axi_wr_ready` is held high) and
+hierarchical references (no AXI in the loop; `hp_axi_wr_ready` is held high) and
 dump CSVs to `sim/render/`. Render them to PNG:
 
 ```bash
@@ -90,7 +102,9 @@ cd sim/render && python3 visualise.py            # all CSVs
                  python3 visualise.py <file>.csv  # one
 ```
 
-Requires Icarus Verilog (`iverilog`/`vvp`) and Python + Pillow for visualise.
+> Requires Icarus Verilog (`iverilog`/`vvp`) and Python + Pillow for visualise.
+
+---
 
 ## Testbenches
 
@@ -100,6 +114,8 @@ Unit and integration testbenches live in `tb/` and run against either tree:
 make test     TB=tb/scheduler/tb_scheduler.sv DESIGN=dual_precision
 make test-all DESIGN=dual_core                 # build+run every tb/**/tb_*.sv
 ```
+
+---
 
 ## RTL does not contain
 
