@@ -573,8 +573,15 @@ always_ff @(posedge clk) begin
 
             if(julia_type) begin //julia set setup
 
-                {sum_x_reg_1, sum_x_reg_2} <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
-                {sum_y_reg_1, sum_y_reg_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}};
+                // Reassemble the full coordinate z[34:0] = {reg_1[16:0], reg_2[17:0]}.
+                // reg_1 (upper) carries z[34:18] in its low 17 bits with a redundant
+                // sign at bit[17]; reg_2 (lower) carries z[17:0] in all 18 bits. Use
+                // reg_1[NARROW_WIDTH-2:0] (drop the redundant sign) and the FULL
+                // reg_2[NARROW_WIDTH-1:0] (the old reg_2[NARROW_WIDTH-2:0] dropped bit
+                // 17, shifting the coordinate by one fixed-point bit = /2 and mangling
+                // the low bits where px*scale lives).
+                {sum_x_reg_1, sum_x_reg_2} <= {{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1[NARROW_WIDTH-2:0], starting_x_reg_2[NARROW_WIDTH-1:0], {2*NARROW_WIDTH-1{1'b0}}};
+                {sum_y_reg_1, sum_y_reg_2} <= {{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1[NARROW_WIDTH-2:0], starting_y_reg_2[NARROW_WIDTH-1:0], {2*NARROW_WIDTH-1{1'b0}}};
                 
                 // $display("julia: enc=%b starting_x_reg_1=%18b starting_x_reg_2=%18b starting_y_reg_1=%18b starting_y_reg_2=%18b",
                 //     magnitude_negation_encoding,
@@ -713,11 +720,14 @@ always_ff @(posedge clk) begin
                 end
 
                 W_ADD_COORD : begin
-                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2}) 
-                    + $signed({{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1, starting_x_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}});
-                    
-                    {sum_y_reg_1, sum_y_reg_2} <= $signed({sum_y_reg_1, sum_y_reg_2}) 
-                    + $signed({{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1, starting_y_reg_2[NARROW_WIDTH-2:0], {2*NARROW_WIDTH-1{1'b0}}});
+                    // Add the full per-pixel coordinate z[34:0] = {reg_1[16:0], reg_2[17:0]}
+                    // each iteration (Mandelbrot z<-z^2+c). Same reassembly fix as the
+                    // wide seed: drop reg_1's redundant sign bit, keep ALL of reg_2.
+                    {sum_x_reg_1, sum_x_reg_2} <= $signed({sum_x_reg_1, sum_x_reg_2})
+                    + $signed({{INTEGER_BITS{starting_x_reg_1[NARROW_WIDTH-1]}}, starting_x_reg_1[NARROW_WIDTH-2:0], starting_x_reg_2[NARROW_WIDTH-1:0], {2*NARROW_WIDTH-1{1'b0}}});
+
+                    {sum_y_reg_1, sum_y_reg_2} <= $signed({sum_y_reg_1, sum_y_reg_2})
+                    + $signed({{INTEGER_BITS{starting_y_reg_1[NARROW_WIDTH-1]}}, starting_y_reg_1[NARROW_WIDTH-2:0], starting_y_reg_2[NARROW_WIDTH-1:0], {2*NARROW_WIDTH-1{1'b0}}});
 
                     iteration_reg_1 <= iteration_reg_1 + 1;
 
