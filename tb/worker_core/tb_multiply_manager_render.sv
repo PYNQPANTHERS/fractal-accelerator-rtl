@@ -94,17 +94,19 @@ module tb_multiply_manager_render;
         @(negedge clk); start_left=1; @(negedge clk); start_left=0;
 
         cyc = 0;
-        forever begin
-            @(posedge clk);
-            cyc++;
-            if (done) begin
-                count = iteration_out;
-                break;
-            end
-            if (cyc > 1_000_000) begin
-                $display("TIMEOUT at pixel (%0d,%0d)", px, py);
-                count = 0;
-                break;
+        begin : wait_done
+            forever begin
+                @(posedge clk);
+                cyc++;
+                if (done) begin
+                    count = iteration_out;
+                    disable wait_done;
+                end
+                if (cyc > 1_000_000) begin
+                    $display("TIMEOUT at pixel (%0d,%0d)", px, py);
+                    count = 0;
+                    disable wait_done;
+                end
             end
         end
 

@@ -30,53 +30,76 @@ module tb_memory_integration;
     always #5 clk = ~clk;
     task automatic tick(input int n = 1); repeat(n) @(posedge clk); #1; endtask
 
-    // colour_bram
-    logic [8:0]  cb_rd_x, cb_rd_y;
+    // This integration TB exercises the 16x16-tile path (32 words/tile), so the
+    // AXI address expectations below (0x008, 0x0F8, tile-5 = 0x500, ...) assume it.
+    localparam int TILE_W    = 16;
+    localparam int TILE_BITS = $clog2(TILE_W);
+    localparam int BRAM_ADDR_W = $clog2(256*256/8);
+
+    // word-address + byte-offset for a pixel (mirrors colour_bram encoding)
+    function automatic logic [15:0] ta_of(input logic [7:0] x, y);
+        ta_of = {y[7:TILE_BITS], x[7:TILE_BITS], y[TILE_BITS-1:0], x[TILE_BITS-1:0]};
+    endfunction
+
+    // colour_bram (word-addressed write; per-pixel byte read)
+    logic [7:0]  cb_rd_x, cb_rd_y;
     logic        cb_rd_en;
     logic [7:0]  cb_rd_data;
-    logic [8:0]  cb_wr_x, cb_wr_y;
+    logic [BRAM_ADDR_W-1:0] cb_wr_waddr;
+    logic [63:0] cb_wr_word;
     logic        cb_wr_en;
-    logic [7:0]  cb_wr_data;
-    logic [12:0] b2d_word_addr;
+    logic [BRAM_ADDR_W-1:0] b2d_word_addr;
     logic        b2d_rd_en, b2d_rd_grant;
     logic [63:0] b2d_rd_data;
+    wire  [(256/TILE_W)*(256/TILE_W)-1:0] cb_tile_done;
 
-    colour_bram u_cbram (
-        .clk           (clk),
+    colour_bram #(.TILE_W(TILE_W)) u_cbram (
+        .clk           (clk),        .rst          (1'b0),
         .ctrl_rd_x     (cb_rd_x),    .ctrl_rd_y    (cb_rd_y),
         .ctrl_rd_en    (cb_rd_en),   .ctrl_rd_data (cb_rd_data),
-        .ctrl_wr_x     (cb_wr_x),    .ctrl_wr_y    (cb_wr_y),
-        .ctrl_wr_en    (cb_wr_en),   .ctrl_wr_data (cb_wr_data),
+        .ctrl_wr_waddr (cb_wr_waddr),.ctrl_wr_word (cb_wr_word),
+        .ctrl_wr_en    (cb_wr_en),
         .b2d_word_addr (b2d_word_addr),
         .b2d_rd_en     (b2d_rd_en),  .b2d_rd_grant (b2d_rd_grant),
-        .b2d_rd_data   (b2d_rd_data)
+        .b2d_rd_data   (b2d_rd_data),
+        .ctrl_rmw_rd_addr(cb_rmw_addr), .ctrl_rmw_rd_en(cb_rmw_en),
+        .ctrl_rmw_rd_data(cb_rmw_data),
+        .tile_done     (cb_tile_done)
     );
+    logic [BRAM_ADDR_W-1:0] cb_rmw_addr;
+    logic                   cb_rmw_en;
+    wire  [63:0]            cb_rmw_data;
 
-    // tile_table
+    // tile_table (quad-write interface only; a tile is "filled" by writing a quad
+    // covering it, "tiled" = simply left unfilled)
     logic       tt_rst;
-    logic       tt_single_en;
-    logic [7:0] tt_single_idx;
-    logic       tt_single_filled;
-    logic [5:0] tt_single_colour;
     logic       tt_quad_en;
-    logic [7:0] tt_quad_tlx, tt_quad_tly, tt_quad_size;
+    logic [7:0] tt_quad_tlx, tt_quad_tly;
+    logic [8:0] tt_quad_size;
     logic [5:0] tt_quad_colour;
     wire  [7:0] tt_rd_index;  // driven by bram_to_dram output, read by tile_table
-    logic       tt_is_filled;
-    logic [5:0] tt_fill_colour;
+    wire        tt_is_filled;
+    wire  [5:0] tt_fill_colour;
+    wire  [(256/TILE_W)*(256/TILE_W)-1:0] tt_filled_vec;
 
-    tile_table u_ttable (
+    tile_table #(.TILE_W(TILE_W)) u_ttable (
         .clk             (clk),       .rst             (tt_rst),
-        .wr_single_en    (tt_single_en),
-        .wr_single_index (tt_single_idx),
-        .wr_single_filled(tt_single_filled),
-        .wr_single_colour(tt_single_colour),
         .wr_quad_en      (tt_quad_en),
         .wr_quad_tlx     (tt_quad_tlx), .wr_quad_tly  (tt_quad_tly),
         .wr_quad_size    (tt_quad_size),.wr_quad_colour(tt_quad_colour),
         .rd_index        (tt_rd_index),
-        .rd_is_filled    (tt_is_filled),.rd_fill_colour(tt_fill_colour)
+        .rd_is_filled    (tt_is_filled),.rd_fill_colour(tt_fill_colour),
+        .rd_filled_vec   (tt_filled_vec)
     );
+
+    // map a tile index (row-major, TILES_P_AXIS per row) to its top-left pixel
+    localparam int TILES_P_AXIS = 256 / TILE_W;
+    function automatic logic [7:0] tile_tlx(input logic [7:0] idx);
+        tile_tlx = 8'((idx % TILES_P_AXIS) * TILE_W);
+    endfunction
+    function automatic logic [7:0] tile_tly(input logic [7:0] idx);
+        tile_tly = 8'((idx / TILES_P_AXIS) * TILE_W);
+    endfunction
 
     // bram_to_dram
     logic [255:0] tile_done;
@@ -91,7 +114,7 @@ module tb_memory_integration;
     logic         quarter_complete;
     logic         b2d_rst;
 
-    bram_to_dram u_b2d (
+    bram_to_dram #(.TILE_W(TILE_W)) u_b2d (
         .clk                (clk),        .rst             (b2d_rst),
         .tile_done          (tile_done),   .engine_done     (engine_done),
         .tt_rd_index        (tt_rd_index), .tt_is_filled    (tt_is_filled),
@@ -105,7 +128,7 @@ module tb_memory_integration;
         .cache_valid_index  (cache_valid_index),
         .cache_valid_value  (cache_valid_value),
         .sixteenth_base_addr(sixteenth_base_addr),
-        .quarter_complete   (quarter_complete)
+        .sixteenth_complete (quarter_complete)
     );
 
     // AXI capture
@@ -138,27 +161,37 @@ module tb_memory_integration;
         tt_rst = 1; b2d_rst = 1; tick(2);
         tt_rst = 0; b2d_rst = 0;
         cb_rd_en=0; cb_wr_en=0;
-        tt_single_en=0; tt_quad_en=0;
+        tt_quad_en=0;
         tile_done='0; engine_done=0;
         axi_wr_ready=1; sixteenth_base_addr=32'h0;
         tick(1);
     endtask
 
+    // Per-pixel write becomes a read-modify-write of the word holding that pixel:
+    // pre-read the 64-bit word, replace the byte at the pixel's offset, write back.
+    logic [15:0] cw_ta; logic [63:0] cw_word;
     task automatic ctrl_write(input logic [8:0] x, y, input logic [5:0] col);
-        cb_wr_x=x; cb_wr_y=y; cb_wr_data={2'b0,col};
-        cb_wr_en=1; tick(1); cb_wr_en=0;
+        cw_ta      = ta_of(x[7:0], y[7:0]);
+        cb_rmw_addr = cw_ta[15:3];
+        cb_rmw_en   = 1; tick(1); cb_rmw_en = 0;   // word now in cb_rmw_data next tick
+        #1;
+        cw_word               = cb_rmw_data;
+        cw_word[cw_ta[2:0]*8 +: 8] = {2'b0, col};
+        cb_wr_waddr = cw_ta[15:3]; cb_wr_word = cw_word;
+        cb_wr_en = 1; tick(1); cb_wr_en = 0;
     endtask
 
+    // "tiled" = not flood-filled (tile_table defaults unfilled, so this is a no-op
+    // beyond a tick for timing symmetry with the old single-write interface)
     task automatic mark_tiled(input logic [7:0] idx);
-        tt_single_idx=idx; tt_single_filled=0;
-        tt_single_colour=0; tt_single_en=1;
-        tick(1); tt_single_en=0;
+        tt_quad_en=0; tick(1);
     endtask
 
+    // "filled" = write a quad covering exactly this tile with the fill colour
     task automatic mark_filled(input logic [7:0] idx, input logic [5:0] col);
-        tt_single_idx=idx; tt_single_filled=1;
-        tt_single_colour=col; tt_single_en=1;
-        tick(1); tt_single_en=0;
+        tt_quad_tlx=tile_tlx(idx); tt_quad_tly=tile_tly(idx);
+        tt_quad_size=9'(TILE_W); tt_quad_colour=col; tt_quad_en=1;
+        tick(1); tt_quad_en=0;
     endtask
 
 
@@ -169,7 +202,7 @@ module tb_memory_integration;
         cb_rd_en=0; cb_wr_en=0; tt_rst=0; b2d_rst=1;
         tile_done='0; engine_done=0; axi_wr_ready=1;
         sixteenth_base_addr=0; axi_log_count=0;
-        tt_single_en=0; tt_quad_en=0;
+        tt_quad_en=0;
         tt_quad_tlx=0; tt_quad_tly=0; tt_quad_size=0; tt_quad_colour=0;
         // tt_rd_index driven by bram_to_dram - do not drive from testbench
         tick(3);
@@ -231,8 +264,10 @@ module tb_memory_integration;
             @(posedge clk); #1;
             rdy_timer++;
             if (n < 10 && rdy_timer % 4 == 0) begin
-                cb_wr_x=9'd100; cb_wr_y=9'd100;
-                cb_wr_data=8'hFF; cb_wr_en=1; n++;
+                // inject a full-word controller write to a DIFFERENT tile (100,100)
+                // while b2d streams tile 0 — must not disturb tile 0's data.
+                cb_wr_waddr = ta_of(8'd100, 8'd100) >> 3;
+                cb_wr_word  = 64'hFFFF_FFFF_FFFF_FFFF; cb_wr_en=1; n++;
             end else begin
                 cb_wr_en=0;
             end
