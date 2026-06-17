@@ -33,6 +33,9 @@ Both `top_level`s expose the same external ports (`cfg_*` config inputs, `hp_axi
 
 Each tree is fully self-contained, with its own copy of every submodule.
 
+Each variant can also be found in its individual branch: [`dual_core`](https://github.com/PYNQPANTHERS/fractal-accelerator-rtl/tree/dual_core) · [`dual_precision`](https://github.com/PYNQPANTHERS/fractal-accelerator-rtl/tree/dual_precision)
+
+
 ---
 
 ## Repository structure
