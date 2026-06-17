@@ -94,11 +94,6 @@ make test     TB=tb/scheduler/tb_scheduler.sv DESIGN=dual_precision
 make test-all DESIGN=dual_core                 # build+run every tb/**/tb_*.sv
 ```
 
-Each TB compiles against the whole selected tree (unused modules are dropped), so
-one TB serves both designs. See **[tb/TEST_COVERAGE.md](tb/TEST_COVERAGE.md)** for
-the current pass/fail status, what each functional test verifies, and the modules
-that still need dedicated unit tests.
-
 ## RTL does not contain
 
 - PS driver, server, or frontend code → see `fractal-accelerator-sw`
