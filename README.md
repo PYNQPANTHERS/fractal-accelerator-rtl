@@ -1,20 +1,15 @@
-# fractal-accelerator-rtl
+# PYNQZOOM - A fractal accelerator in hardware
 
-Verilog/SystemVerilog HDL and testbenches for the fractal accelerator PL fabric.
-Targets the Zynq-7020 on the PYNQ-Z1.
 
-## What this is
+## Overview
 
-A general-purpose escape-time fractal renderer implemented entirely in
-programmable logic. Supports fractals expressible as a complex polynomial
-iteration (Mandelbrot, Julia, …) configured by the PS at render start; once
-started, the PL runs to completion with no software involvement.
+A general-purpose escape-time fractal renderer implemented entirely in programmable logic. The PS configures a render over AXI-Lite and raises a start pulse; from that point the PL runs to completion with no software involvement, writing the finished frame to DDR over AXI-HP.
 
-The architecture centres on a pool of parallel iterator cores (organised into
-clusters) sharing a job queue, coordinated by a quad-tree scheduler implementing
-the Mariani–Silver algorithm. A 1024×1024 image is rendered as 16 sequential
-256×256 "sixteenths", each living in BRAM during computation and streamed to
-DRAM over an AXI-HP write port.
+The architecture centres on a pool of parallel iterator cores organised into clusters, coordinated by a hardware implementation of the Mariani-Silver quad-tree algorithm. Rather than dispatching every pixel unconditionally, the scheduler tests box borders and flood-fills uniform regions, only queuing individual pixels where the boundary is non-uniform. A 1024×1024 frame is rendered as 16 sequential 256×256 sixteenths, each held in on-chip BRAM during computation and streamed to DDR by a dedicated AXI-HP writeback unit once complete.
+
+Each core supports two runtime-selectable precision modes without additional hardware: a narrow mode that runs two independent pixel lanes in parallel using the native DSP multiply width, and a wide mode that groups the same DSP slices across multiple cycles via partial-product accumulation to achieve double the arithmetic precision for deep zooms. Fractal variant and Julia mode are controlled by a per-render opcode, enabling a large family of fractal forms to be rendered without RTL changes.
+
+---
 
 ## Two designs
 
@@ -22,29 +17,41 @@ The RTL is maintained as two parallel, self-contained trees under `hdl/`:
 
 | Tree | Engines | Precision | Top module |
 |------|---------|-----------|------------|
-| `hdl/dual_core/` | **2** (even/odd sixteenths in parallel, merged by an internal `axi_wr_arbiter`) | narrow | `top_level` |
-| `hdl/dual_precision/` | **1** | narrow **+ wide** (zoom-selected: `zoom_level > 165` → wide) | `top_level` |
+| `hdl/dual_core/` | **2** -- even/odd sixteenths in parallel, merged by an internal `axi_wr_arbiter` | Narrow | `top_level` |
+| `hdl/dual_precision/` | **1** | Narrow **+ wide** -- zoom-selected at runtime | `top_level` |
 
-Both `top_level`s expose the **same external ports** (`cfg_*` config inputs +
-`hp_axi_wr_*` write port + irqs), so a single Vivado block design
-(`axi_lite_slave` → `cfg_*`, `hp_axi_wr_*` → `axi_hp_master_wrap`) drives either.
-The wrappers themselves are instantiated in the block design, not in RTL.
+`dual_core` contains a pool of narrow-width cores optimised for minimal per-core resource usage, allowing the maximum number of cores to be placed on the fabric. `dual_precision` trades core count for wide-mode capability: each core carries the additional logic needed for partial-product accumulation, which increases per-core LUT usage and reduces the total number of cores that can be instantiated.
 
-Each tree contains its own copy of every submodule:
+Both `top_level`s expose the same external ports (`cfg_*` config inputs, `hp_axi_wr_*` write port, irqs), so a single Vivado block design drives either without modification. The AXI wrappers are instantiated in the block design, not in RTL.
+
+Each tree is fully self-contained, with its own copy of every submodule.
+
+---
+
+## Repository structure
 
 ```
 hdl/<design>/
-  top/            top_level, sixteenth_controller, per_sixteenth_engine
-  control_unit/   control_unit, dispatch, bram_read_write, translate, cluster/
-  scheduler/      quad-tree FSM, border_pixel_generator, scheduler_stack
-  comparator/     bounds check, differ/complete flags
-  worker_core/    iterator cores, multiply/multiply_manager (+ core_top, helpers)
-  memory/         colour_bram, state_bram, tile_table, bram_to_dram
-  queues/         job_queue(_handler), complete_queue(_handler), fifo, sync_fifo
-  axi/            axi_lite_slave, axi_hp_master_wrap
+  top/              Top-level control and frame sequencing
+                    (top_level, sixteenth_controller, per_sixteenth_engine)
+  control_unit/     Job dispatch, result collection, and cluster arbitration
+                    (control_unit, dispatch, bram_read_write, translate, cluster/)
+  scheduler/        Mariani-Silver quad-tree FSM and border pixel generation
+                    (scheduler, border_pixel_chooser, scheduler_stack)
+  comparator/       Border uniformity detection and stale-pixel filtering
+                    (comparator, bounds check, differ/complete flags)
+  worker_core/      Parallel iterator cores and fixed-point arithmetic pipeline
+                    (core_top, multiply_manager, multiply, helpers)
+  memory/           On-chip frame buffer, scheduler state, tile metadata, and AXI-HP writeback
+                    (colour_bram, state_bram, tile_table, bram_to_dram)
+  queues/           Decoupled producer/consumer FIFOs for job and completion paths
+                    (job_queue(_handler), complete_queue(_handler), fifo, sync_fifo)
+  axi/              PS-PL configuration and bulk tile writeback interfaces
+                    (axi_lite_slave, axi_hp_master_wrap)
 
-tb/               testbenches (shared across both trees)
-sim/              build/, waves/, render/ (CSV + visualise.py)
+tb/                 Unit and integration testbenches, shared across both design trees
+sim/                Simulation artefacts: compiled binaries, VCD waveforms,
+                    per-transaction CSVs and visualise.py PNG reconstruction
 ```
 
 ## Building & running
