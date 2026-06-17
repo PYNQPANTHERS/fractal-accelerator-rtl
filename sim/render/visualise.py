@@ -50,13 +50,20 @@ GREY    = (50, 50, 50)
 
 
 def _rgb(raw):
-    """Convert a raw colour value (int or string) to (R,G,B)."""
+    """Convert a raw colour value (int or string) to (R,G,B).
+
+      'X'/'x'/''  → magenta  (Verilog undefined — a real bug)
+      -1          → grey     (pixel never written — background)
+      0..63       → palette
+    """
     if isinstance(raw, str):
         raw = raw.strip()
         if raw in ('X', 'x', ''):
             return MAGENTA
         raw = int(raw)
-    return MAGENTA if raw < 0 else PALETTE[raw & 0x3F]
+    if raw < 0:
+        return GREY            # -1 sentinel = unwritten background
+    return PALETTE[raw & 0x3F]
 
 
 # ── Renderers ─────────────────────────────────────────────────────────────────
@@ -174,7 +181,12 @@ def render_dram_csv(path):
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 def _sniff_format(path):
-    """Return 'bram', 'dram', or 'image' by inspecting CSV headers."""
+    """Return 'bram', 'dram', 'image', or 'skip' by inspecting CSV headers.
+
+    Only files whose header matches a known renderable layout are rendered;
+    anything else (e.g. event logs 'cyc,kind,px,py,colour') is skipped instead
+    of being mis-rendered as an image (which used to KeyError on 'row').
+    """
     with open(path) as f:
         header = f.readline().strip().lower()
     fields = [h.strip() for h in header.split(',')]
@@ -182,7 +194,9 @@ def _sniff_format(path):
         return 'dram'
     if 'x' in fields and 'y' in fields:
         return 'bram'
-    return 'image'
+    if 'row' in fields and 'col' in fields:
+        return 'image'
+    return 'skip'
 
 
 def render_one(in_path, out_path=None):
@@ -190,6 +204,9 @@ def render_one(in_path, out_path=None):
     out_path = Path(out_path) if out_path else in_path.with_suffix('.png')
 
     fmt = _sniff_format(in_path)
+    if fmt == 'skip':
+        print(f"  [skip] {in_path.name}: not a renderable image/bram/dram CSV")
+        return
     if fmt == 'bram':
         img, undef = render_bram_csv(in_path)
         kind = 'bram-scatter'

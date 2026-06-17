@@ -484,8 +484,7 @@ always_comb begin : zoom_lut
     9'd454: scale_factor = DATA_WIDTH'(32'd3);
     9'd455: scale_factor = DATA_WIDTH'(32'd2);
     9'd456: scale_factor = DATA_WIDTH'(32'd1);
-    9'd457: scale_factor = DATA_WIDTH'(32'd0);
-    default: scale_factor = DATA_WIDTH'(32'd0);
+    default: scale_factor = DATA_WIDTH'(32'd1);
   endcase
 end
     // Tile select within a 4x4 grid, book-reading order.

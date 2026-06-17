@@ -351,8 +351,9 @@ module tb_comparator;
         feed(8'd7, 8'd3, 4'hB);
         tick(1);
         $display("    Quad 2 result: differ=%b complete=%b", differ, complete);
-        check(differ,   "quad 2: differ set");
-        check(complete, "quad 2: complete set");
+        check(differ,    "quad 2: differ set");
+        // mismatch in this quad sets differ, which suppresses complete (no flood-fill)
+        check(!complete, "quad 2: complete suppressed by differ");
 
         suite("MULTI-QUAD — stale entries from previous quad are discarded");
         hard_reset();

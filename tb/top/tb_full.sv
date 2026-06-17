@@ -165,9 +165,15 @@ module tb_full;
         end
         fd = $fopen(path, "w");
         $fwrite(fd, "row,col,colour\n");
+        // Unwritten pixels keep the 8'hFF init; emit them as -1 so the visualiser
+        // renders them as background (grey) instead of collapsing 0xFF & 0x3F = 63
+        // into the real red colour 63.
         for (int r = 0; r < 1024; r++)
             for (int c = 0; c < 1024; c++)
-                $fwrite(fd, "%0d,%0d,%0d\n", r, c, image[r][c] & 8'h3F);
+                if (image[r][c] === 8'hFF)
+                    $fwrite(fd, "%0d,%0d,-1\n", r, c);
+                else
+                    $fwrite(fd, "%0d,%0d,%0d\n", r, c, image[r][c] & 8'h3F);
         $fclose(fd);
         $display("  wrote %s  (1024x1024)", path);
     endtask

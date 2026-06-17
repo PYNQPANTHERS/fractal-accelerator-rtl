@@ -7,7 +7,7 @@
 
 module top_level #(
     parameter int TILE_W        = 16,
-    parameter int CLUSTER_COUNT = 4,   // iterator compute clusters per engine (power of 2)
+    parameter int CLUSTER_COUNT = 3,   // iterator compute clusters per engine (power of 2)
     parameter int CLUSTER_SIZE  = 8    // worker cores per cluster
 )(
     input  logic clk,

@@ -181,7 +181,6 @@ module per_sixteenth_engine #(
         .max_iter           (max_iter[4:0]),
         .sixteenth          (sixteenth_id),
         .start_flag         (start),
-        .width_flag         (1'b0),
         .c_x                (julia_real),
         .c_y                (julia_imag),
 

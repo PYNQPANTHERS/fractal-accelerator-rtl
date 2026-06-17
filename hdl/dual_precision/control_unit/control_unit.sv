@@ -20,7 +20,6 @@ module control_unit #(
     input  logic [34:0]   centre_y,
     input  logic [15:0]              zoom_level,
     input  logic [4:0]              max_iter,
-    input  logic                    width_flag,
     input  logic                    start_flag,
     input  logic [3:0]              sixteenth,
 

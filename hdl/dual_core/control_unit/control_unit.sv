@@ -21,7 +21,6 @@ module control_unit #(
     input  logic [15:0]              zoom_level,
     input  logic [4:0]              max_iter,
     input  logic                    start_flag,
-    input  logic                    width_flag,
     input  logic [3:0]              sixteenth,
 
     // julia c in full precision
@@ -79,7 +78,7 @@ module control_unit #(
 
     logic julia, wide;
     assign julia = fractal_type[4];
-    assign wide  = width_flag;
+    assign wide  = 1'b0;
 
     logic rst_i;
     assign rst_i = rst | opcode_reset;
