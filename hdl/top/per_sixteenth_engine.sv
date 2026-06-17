@@ -27,8 +27,7 @@ module per_sixteenth_engine #(
     output logic [31:0] axi_wr_addr,
     output logic [63:0] axi_wr_data,
     output logic        axi_wr_en,
-    input  logic        axi_wr_ready,
-
+    input  logic        axi_wr_ready
 );
 
     localparam int TILES_PER_AXIS = (1 << COORD_W) / TILE_W;

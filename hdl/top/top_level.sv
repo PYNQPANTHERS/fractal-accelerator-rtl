@@ -34,8 +34,7 @@ module top_level #(
     input  logic [34:0] cfg_centre_y,
     input  logic [15:0] cfg_zoom_level,
     input  logic [11:0] cfg_max_iter,
-    input  logic [31:0] cfg_image_base_addr,
-
+    input  logic [31:0] cfg_image_base_addr
 );
 
     // Controller <-> engine wires

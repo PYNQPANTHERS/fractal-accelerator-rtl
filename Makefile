@@ -16,16 +16,28 @@ SIM_DIR    := sim/waves
 BUILD_DIR  := sim/build
 RENDER_DIR := sim/render
 
+# Worker-core sources: use the WIDE multiply path (wide_multiply / wide_multiply_manage)
+# instead of the narrow multiply / multiply_manager. The wide files declare the same
+# module names (multiply, multiply_manager), so the narrow ones MUST be filtered out
+# to avoid duplicate definitions. mac.sv is only used by the narrow manager and is
+# left in the dir (unused, harmless). All other worker_core helpers (coord_flagger,
+# sum_alter, magnitude_comparison_unit, ...) are shared and stay.
+_WC_NARROW_SWAP := hdl/worker_core/multiply.sv hdl/worker_core/multiply_manager.sv
+_WC_WIDE_ADD    := hdl/wide_worker_core/wide_multiply.sv \
+                   hdl/wide_worker_core/wide_multiply_manage.sv
+
 # Sources for control_unit testbenches (isolated — CU has declaration quirks)
-_CU_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv), \
-                               $(wildcard hdl/worker_core/*.sv))
+_CU_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv) $(_WC_NARROW_SWAP), \
+                               $(wildcard hdl/worker_core/*.sv)) \
+                $(_WC_WIDE_ADD)
 CU_HDL_SRCS  := $(wildcard hdl/control_unit/*.sv) \
                 $(wildcard hdl/control_unit/cluster/*.sv) \
                 $(_CU_WC_SRCS)
 
 # Sources for engine/top testbenches (all subsystems except worker_core TB stubs)
-_ENGINE_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv), \
-                                  $(wildcard hdl/worker_core/*.sv))
+_ENGINE_WC_SRCS  := $(filter-out $(wildcard hdl/worker_core/tb_*.sv) $(_WC_NARROW_SWAP), \
+                                  $(wildcard hdl/worker_core/*.sv)) \
+                    $(_WC_WIDE_ADD)
 ENGINE_HDL_SRCS  := $(wildcard hdl/queues/*.sv) \
                     $(wildcard hdl/comparator/*.sv) \
                     $(wildcard hdl/scheduler/*.sv) \

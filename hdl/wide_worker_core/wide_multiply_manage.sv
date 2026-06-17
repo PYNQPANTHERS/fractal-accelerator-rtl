@@ -84,6 +84,8 @@ wire sum_y_reg_2_overflow_flag;
 
 logic is_wide;
 
+assign start_wide = 1'b1;   
+
 coord_flagger #(.NARROW_WIDTH(NARROW_WIDTH), .NARROW_FRACTIONAL_BITS(NARROW_FRACTIONAL_BITS), .INTEGER_BITS(INTEGER_BITS)) x_1 
 (
 .coordinate(sum_x_reg_1),
