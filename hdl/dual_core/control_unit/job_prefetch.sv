@@ -39,7 +39,11 @@ module job_prefetch #(
     input  logic                    res_fifo_full
 );
 
-    typedef enum logic [1:0] { IDLE, CHECKING, SKIP_PUSH } state_t;
+    // SKIP_WAIT inserts one cycle so the registered translate output (z_real/z_imag
+    // is now 1 cycle behind coord_a/coord_b) is valid before SKIP_PUSH writes it to
+    // the dispatch FIFO. The CHECKING path already has >=1 BRAM-read cycle of latency
+    // so it needs no extra wait.
+    typedef enum logic [2:0] { IDLE, CHECKING, SKIP_WAIT, SKIP_PUSH } state_t;
     state_t state;
 
     // Suppress during reset so the scheduler sees a clean 0→1 edge on deassert
@@ -63,13 +67,15 @@ module job_prefetch #(
                     if (wants_job && grant) begin
                         coord_a <= coord_out[PIXEL_W-1:0];
                         coord_b <= coord_out[PIXEL_ADDR_W-1:PIXEL_W];
-                        if (skip) state <= SKIP_PUSH;
+                        if (skip) state <= SKIP_WAIT;
                         else      state <= CHECKING;
                     end
                 end
 
                 // Skip path: pixel guaranteed fresh — push directly, no BRAM check.
                 // dispatch_full is 0 here (guaranteed by wants_job gate at IDLE accept).
+                // One wait cycle aligns the registered z_real/z_imag.
+                SKIP_WAIT: state <= SKIP_PUSH;
                 SKIP_PUSH: state <= IDLE;
 
                 CHECKING: begin

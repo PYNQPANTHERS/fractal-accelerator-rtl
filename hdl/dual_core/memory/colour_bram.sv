@@ -93,12 +93,32 @@ module colour_bram #(
             ctrl_rmw_rd_data <= mem[ctrl_rmw_rd_addr];
     end
 
-    // Per-tile write counter, ping-pong banks. rst rising edge flips active bank and
-    // starts a background TOTAL_TILES-cycle clear of the inactive bank. Saturates at bit[CNT_W-1].
-    logic [CNT_W-1:0] tile_wr_cnt_a [0:TOTAL_TILES-1];
-    logic [CNT_W-1:0] tile_wr_cnt_b [0:TOTAL_TILES-1];
+    // ── Per-tile pixel counter: count in BRAM, done-flag in fabric ────────────
+    // Previously this was 1024 (x2 ping-pong) saturating counters in LUT fabric,
+    // each with a CE gated by a 1024-way write-address decode. That decode + wide
+    // fanout dominated timing (354 failing paths). Here the COUNT lives in a small
+    // BRAM (touched one tile per cycle via RMW) and only the 1-bit-per-tile DONE
+    // flag stays in fabric, so bram_to_dram's lowest_set_tree still reads all 1024
+    // done bits in parallel — its interface (the tile_done bus) is unchanged.
+    //
+    // ctrl_wr_en (= bram_read_write WRITE state) fires at most once every 3 cycles
+    // (FSM: IDLE->PREREAD->WRITE->IDLE), so consecutive writes are never adjacent.
+    // The 2-stage RMW (read S0, write-back S1) always completes before the next
+    // write arrives — no same-tile hazard, no forwarding needed.
+    localparam logic [CNT_W-1:0] CNT_FULL = CNT_W'(PIX_PER_TILE);  // done at full count
+
     logic [TILE_IDX_W-1:0] tile_wr_idx;
     assign tile_wr_idx = ctrl_wr_waddr[BRAM_ADDR_W-1 : $clog2(WORDS_PER_TILE)];
+
+    // Count BRAM: 2 banks (ping-pong) x TOTAL_TILES x CNT_W. One write port each.
+    (* ram_style = "block" *)
+    logic [CNT_W-1:0] cnt_bram_a [0:TOTAL_TILES-1];
+    (* ram_style = "block" *)
+    logic [CNT_W-1:0] cnt_bram_b [0:TOTAL_TILES-1];
+
+    // Done flags: 1 bit per tile, in fabric — read in parallel by the priority tree.
+    logic [TOTAL_TILES-1:0] done_flag_a;
+    logic [TOTAL_TILES-1:0] done_flag_b;
 
     logic       active;
     logic       rst_d;
@@ -120,31 +140,62 @@ module colour_bram #(
         end
     end
 
+    // ── RMW stage 0: read the active bank's count for the tile being written ───
+    logic                  rmw_v_s1;       // a write is in flight (stage 1)
+    logic [TILE_IDX_W-1:0] rmw_idx_s1;
+    logic [CNT_W-1:0]      cnt_rd_s1;       // registered count read in S0
+
     always_ff @(posedge clk) begin
+        rmw_v_s1   <= ctrl_wr_en;
+        rmw_idx_s1 <= tile_wr_idx;
+        cnt_rd_s1  <= active ? cnt_bram_b[tile_wr_idx] : cnt_bram_a[tile_wr_idx];
+    end
+
+    // ── RMW stage 1: increment (saturating) + write back; set done flag at full ─
+    logic [CNT_W-1:0] cnt_next;
+    logic             cnt_hits_full;
+    always_comb begin
+        cnt_next      = (cnt_rd_s1 == CNT_FULL) ? cnt_rd_s1 : cnt_rd_s1 + 1'b1;
+        cnt_hits_full = (cnt_next == CNT_FULL);
+    end
+
+    always_ff @(posedge clk) begin
+        // Active bank: RMW write-back (stage 1). Inactive bank: background clear.
         if (!active) begin
-            if (clr_active)                                              tile_wr_cnt_b[clr_addr]   <= '0;
-            if (ctrl_wr_en && !tile_wr_cnt_a[tile_wr_idx][CNT_W-1])    tile_wr_cnt_a[tile_wr_idx] <= tile_wr_cnt_a[tile_wr_idx] + 1'b1;
+            if (rmw_v_s1)  cnt_bram_a[rmw_idx_s1] <= cnt_next;
+            if (clr_active) cnt_bram_b[clr_addr]   <= '0;
         end else begin
-            if (clr_active)                                              tile_wr_cnt_a[clr_addr]   <= '0;
-            if (ctrl_wr_en && !tile_wr_cnt_b[tile_wr_idx][CNT_W-1])    tile_wr_cnt_b[tile_wr_idx] <= tile_wr_cnt_b[tile_wr_idx] + 1'b1;
+            if (rmw_v_s1)  cnt_bram_b[rmw_idx_s1] <= cnt_next;
+            if (clr_active) cnt_bram_a[clr_addr]   <= '0;
         end
     end
 
-    genvar ti;
-    generate
-        for (ti = 0; ti < TOTAL_TILES; ti++) begin : tile_done_gen
-            assign tile_done[ti] = active ? tile_wr_cnt_b[ti][CNT_W-1] : tile_wr_cnt_a[ti][CNT_W-1];
+    // Done flags: set when the active bank's RMW reaches full; clear walks inactive.
+    always_ff @(posedge clk) begin
+        if (!active) begin
+            if (rmw_v_s1 && cnt_hits_full) done_flag_a[rmw_idx_s1] <= 1'b1;
+            if (clr_active)                done_flag_b[clr_addr]   <= 1'b0;
+        end else begin
+            if (rmw_v_s1 && cnt_hits_full) done_flag_b[rmw_idx_s1] <= 1'b1;
+            if (clr_active)                done_flag_a[clr_addr]   <= 1'b0;
         end
-    endgenerate
+    end
+
+    assign tile_done = active ? done_flag_b : done_flag_a;
 
     initial begin
-        active     = 1'b0;
-        rst_d      = 1'b0;
-        clr_active = 1'b0;
-        clr_addr   = '0;
+        active      = 1'b0;
+        rst_d       = 1'b0;
+        clr_active  = 1'b0;
+        clr_addr    = '0;
+        rmw_v_s1    = 1'b0;
+        rmw_idx_s1  = '0;
+        cnt_rd_s1   = '0;
+        done_flag_a = '0;
+        done_flag_b = '0;
         for (int ti = 0; ti < TOTAL_TILES; ti++) begin
-            tile_wr_cnt_a[ti] = '0;
-            tile_wr_cnt_b[ti] = '0;
+            cnt_bram_a[ti] = '0;
+            cnt_bram_b[ti] = '0;
         end
     end
 

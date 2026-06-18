@@ -122,19 +122,96 @@ end
     assign tile_col = sixteenth[1:0];   // X column
     assign tile_row = sixteenth[3:2];   // Y row = floor(sixteenth/4)
 
-    localparam int unsigned HALF_SPAN = 512; 
+    localparam int unsigned HALF_SPAN = 512;
 
-    logic signed [DATA_WIDTH-1:0]   px, py;
-    logic signed [2*DATA_WIDTH-1:0] x_prod, y_prod;
+    // ── Per-sixteenth precompute (Fix 3) ──────────────────────────────────────
+    // The original critical cone was, per pixel:
+    //     px     = (tile<<8 + a) - 512                 (35-bit add/sub)
+    //     x_prod = px * scale                          (35x18 DSP multiply)
+    //     z_real = centre_x + trunc35(x_prod)          (35-bit fabric add, stacked)
+    // i.e. add → multiply → add, all combinational in one cycle (CARRY4=6, DSP=2).
+    //
+    // Distribute px = base + a, where base = (tile<<8) - 512 depends ONLY on the
+    // sixteenth, and a is the per-pixel coord. Then
+    //     x_prod = base*scale + a*scale
+    //     z_real = centre_x + trunc35(base*scale + a*scale)
+    //            = trunc35( [centre_x_sext + base*scale]  +  a*scale )
+    // The bracketed origin term is constant for the whole sixteenth, so register it
+    // once. Per pixel only a*scale (an 8-bit multiply) and one add remain. Because
+    // origin is carried at full product width, the final trunc35 is bit-identical to
+    // the original 35-bit "centre + trunc35(prod)" (both equal (centre+prod) mod 2^35).
+    //
+    // base is one of {-512,-256,0,+256} for tile_col/tile_row in 0..3.
+    //
+    // ── Width note (narrow-only area trim) ────────────────────────────────────
+    // dual_core is narrow-mode only (control_unit hardwires wide=0) and z_real is
+    // consumed as z_real[34:17] downstream — so only the low DATA_WIDTH (=35) bits
+    // of every product/accumulator ever matter. The old datapath carried the FULL
+    // 2*DATA_WIDTH (=70) product through base*scale, origin, and the per-pixel MAC,
+    // then threw the top 35 bits away at the final trunc35. Since the result is
+    // (centre + base*scale + a*scale) mod 2^35, and add/sub/low-multiply all commute
+    // with "mod 2^35", carrying every stage at 35 bits is bit-identical to the 70-bit
+    // version (verified: 200k random cases, 0 mismatch). This halves every accumulator
+    // and turns the 35x35->70 multiplies into 35x35->35 low-product multiplies,
+    // recovering the LUT/DSP area the precompute fix had cost.
+    localparam int PROD_W = DATA_WIDTH;
 
-    always_comb begin : coordinate_map
-        px = $signed({1'b0, (DATA_WIDTH-1)'((tile_col << RESOLUTION) + a)}) - HALF_SPAN; 
-        py = $signed({1'b0, (DATA_WIDTH-1)'((tile_row << RESOLUTION) + b)}) - HALF_SPAN;
+    // base = (tile<<8) - 512, one of {-512,-256,0,+256}. Depends only on sixteenth.
+    logic signed [DATA_WIDTH-1:0]   base_x, base_y;
+    assign base_x = $signed((DATA_WIDTH)'(tile_col << RESOLUTION)) - HALF_SPAN;
+    assign base_y = $signed((DATA_WIDTH)'(tile_row << RESOLUTION)) - HALF_SPAN;
 
-        x_prod = px * $signed(scale_factor_q);     
-        y_prod = py * $signed(scale_factor_q);
-
-        z_real = $signed(centre_x) + $signed(DATA_WIDTH'(x_prod));
-        z_imag = $signed(centre_y) - $signed(DATA_WIDTH'(y_prod));
+    // origin_x = centre_x + base_x*scale ; origin_y = centre_y - base_y*scale
+    // (note z_imag subtracts the y product, so the per-sixteenth origin subtracts
+    //  base_y*scale and the per-pixel term also subtracts a*scale — see below)
+    //
+    // This precompute updates only once per sixteenth, so it is pipelined across
+    // 3 stages for free (origin is valid long before the first pixel dispatches —
+    // the engine reset/load/render sequencing gives many idle cycles):
+    //   stage 0: register base (cuts the combinational sixteenth_id -> subtract ->
+    //            DSP chain that crossed dual_controller->engine and added CARRY4s
+    //            ahead of the multiply; now BOTH multiply operands are registered so
+    //            they land in the DSP AREG/BREG),
+    //   stage 1: base*scale (DSP MREG),
+    //   stage 2: + centre with the mac.sv pattern — (* use_dsp *) on the multiply-add
+    //            result + full-width add, no mid-truncation — so the centre add packs
+    //            into the DSP post-adder (C port) not a fabric CARRY4 chain.
+    logic signed [DATA_WIDTH-1:0]   base_x_q, base_y_q;       // stage 0: registered base
+    always_ff @(posedge clk) begin
+        base_x_q <= base_x;
+        base_y_q <= base_y;
     end
+
+    logic signed [PROD_W-1:0] base_x_prod_q, base_y_prod_q;   // stage 1: base*scale
+    always_ff @(posedge clk) begin
+        base_x_prod_q <= base_x_q * $signed(scale_factor_q);
+        base_y_prod_q <= base_y_q * $signed(scale_factor_q);
+    end
+
+    (* use_dsp = "yes" *) logic signed [PROD_W-1:0] origin_x; // stage 2: + centre (in-DSP)
+    (* use_dsp = "yes" *) logic signed [PROD_W-1:0] origin_y;
+    always_ff @(posedge clk) begin
+        origin_x <= $signed(centre_x) + base_x_prod_q;
+        origin_y <= $signed(centre_y) - base_y_prod_q;
+    end
+
+    // ── Per-pixel path (Fix B: a*scale + origin fuses into the DSP post-adder) ─
+    // a/b are unsigned pixel offsets (0..255); zero-extend so they stay positive.
+    // (* use_dsp *) + full-width multiply-add (no mid-truncation) packs this into a
+    // single DSP A*B+C like mac.sv. Truncation to 35 bits happens once at the end,
+    // which is bit-identical to the original centre + trunc35(prod) (mod 2^35).
+    // The DSP multiply-add output is REGISTERED (lands in the DSP PREG, mac.sv
+    // pattern) so the timing path ends at the DSP slice instead of running combin-
+    // ationally through the 70->35 truncation and a long route to the dispatch FIFO
+    // (the post-precompute critical path: route 4.0ns, fanout 14). This adds 1 cycle
+    // of latency on z_real/z_imag; job_prefetch hides it (see SKIP_WAIT there).
+    (* use_dsp = "yes" *) logic signed [PROD_W-1:0] zx_full;
+    (* use_dsp = "yes" *) logic signed [PROD_W-1:0] zy_full;
+    always_ff @(posedge clk) begin
+        zx_full <= origin_x + ($signed({1'b0, a}) * $signed(scale_factor_q));
+        zy_full <= origin_y - ($signed({1'b0, b}) * $signed(scale_factor_q));
+    end
+
+    assign z_real = DATA_WIDTH'(zx_full);
+    assign z_imag = DATA_WIDTH'(zy_full);
 endmodule

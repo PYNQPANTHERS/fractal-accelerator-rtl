@@ -33,16 +33,24 @@ module axi_wr_arbiter (
     // grant: 0 = engine A holds the bus, 1 = engine B
     logic grant;
 
+    // Grant switches on the *_complete LEVEL signals, NOT on the peer's per-word
+    // wr_en pulse. The old condition (a_complete && b_wr_en) deadlocked at end of
+    // frame: when the holder (A) finished its LAST sixteenth (a_complete held high)
+    // while the peer (B) still had its final sixteenth to drain, the switch needed
+    // a_complete and b_wr_en to coincide — but b_wr_en is a gapped per-word pulse
+    // and A's complete could clear (engine reset) before they lined up, stranding
+    // B's whole sixteenth (the 7680 = 15x512 hang: the 16th sixteenth issues ZERO
+    // bursts). Releasing the bus the moment the holder is complete fixes it: a
+    // holder only reaches *_complete after draining all its tiles, so no data is
+    // lost. The !peer_complete guard prevents the grant oscillating between two
+    // idle engines once BOTH have finished at end of frame.
     always_ff @(posedge clk) begin
         if (rst) begin
             grant <= 1'b0;
         end else begin
             case (grant)
-                // A holds grant: switch to B only after A's sixteenth is complete
-                // and B is actually requesting (avoid pointless switch to idle B)
-                1'b0: if (a_complete && b_wr_en) grant <= 1'b1;
-                // B holds grant: switch back to A after B's sixteenth is complete
-                1'b1: if (b_complete && a_wr_en) grant <= 1'b0;
+                1'b0: if (a_complete && !b_complete) grant <= 1'b1;  // A done, hand bus to B
+                1'b1: if (b_complete && !a_complete) grant <= 1'b0;  // B done, hand bus to A
             endcase
         end
     end

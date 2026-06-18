@@ -62,11 +62,20 @@ module sixteenth_controller #(
     logic [4:0] sxt_for_a, sxt_for_b;
     logic       a_gets_job, b_gets_job;
 
+    // sixteenth_complete is a multi-cycle LEVEL signal that stays asserted until
+    // the engine is reset in ENG_LOAD. Edge-detect it so a render claim fires for
+    // exactly one cycle — otherwise the stale level re-triggers a second spurious
+    // claim when state_a/b briefly re-enters ENG_RENDER (LOAD->RENDER) before the
+    // engine reset has cleared engine_done.
+    logic       sxt_complete_a_d, sxt_complete_b_d;
+    wire        sxt_complete_a_rise = sixteenth_complete_a && !sxt_complete_a_d;
+    wire        sxt_complete_b_rise = sixteenth_complete_b && !sxt_complete_b_d;
+
     assign a_claiming = ((state_a == ENG_IDLE)   && ps_start) ||
-                        ((state_a == ENG_RENDER)  && sixteenth_complete_a);
+                        ((state_a == ENG_RENDER)  && sxt_complete_a_rise);
 
     assign b_claiming = ((state_b == ENG_IDLE)   && ps_start) ||
-                        ((state_b == ENG_RENDER)  && sixteenth_complete_b);
+                        ((state_b == ENG_RENDER)  && sxt_complete_b_rise);
 
     assign sxt_for_a  = next_sxt;
     assign sxt_for_b  = a_claiming ? (next_sxt + 5'd1) : next_sxt;
@@ -99,10 +108,16 @@ module sixteenth_controller #(
             sixteenth_id_b        <= '0;
             sixteenth_base_addr_a <= '0;
             sixteenth_base_addr_b <= '0;
+            sxt_complete_a_d      <= 1'b0;
+            sxt_complete_b_d      <= 1'b0;
         end else begin
             start_a  <= 1'b0;
             start_b  <= 1'b0;
             all_done <= 1'b0;
+
+            // Edge-detect registers for sixteenth_complete level signals
+            sxt_complete_a_d <= sixteenth_complete_a;
+            sxt_complete_b_d <= sixteenth_complete_b;
 
             // ── Advance shared counter whenever jobs are claimed ───────────────
             if (a_gets_job && b_gets_job)
