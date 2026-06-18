@@ -117,6 +117,13 @@ make test-all DESIGN=dual_core                 # build+run every tb/**/tb_*.sv
 
 ---
 
+## Specific directories
+
+```bash
+git switch dual_precision  # wide and narrow mode switching
+git switch dual_core       # 2 sided core, faster clock speed, only narrow mode
+```
+
 ## RTL does not contain
 
 - PS driver, server, or frontend code → see `fractal-accelerator-sw`
