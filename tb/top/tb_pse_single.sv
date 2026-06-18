@@ -310,12 +310,21 @@ module tb_pse_single;
         tile_done_prev <= dut.tile_done;
         tile_done_rose <= dut.tile_done & ~tile_done_prev;
     end
+    // Per-tile pixel-count probe. The two designs name this counter differently:
+    //   dual_core (rearchitected): cnt_bram_a/_b   (count-in-BRAM)
+    //   dual_precision (original):  tile_wr_cnt_a/_b
+    // The Makefile passes -D DUAL only for dual_core, so select the live name here
+    // (otherwise iverilog fails to bind the missing name for the other design).
     always @(posedge clk) begin
         for (int _i = 0; _i < TOTAL_TILES; _i++) begin
             if (tile_done_rose[_i])
                 $display("  [tile_done] cyc=%0d  tile=%0d  pixel_cnt=%0d  tt_filled=%0b  bram_writes_so_far=%0d",
                          cyc, _i,
+`ifdef DUAL
+                         dut.u_colour_bram.active ? dut.u_colour_bram.cnt_bram_b[_i] : dut.u_colour_bram.cnt_bram_a[_i],
+`else
                          dut.u_colour_bram.active ? dut.u_colour_bram.tile_wr_cnt_b[_i] : dut.u_colour_bram.tile_wr_cnt_a[_i],
+`endif
                          dut.u_tile_table.tile_table[_i][6],
                          bram_cnt);
         end
