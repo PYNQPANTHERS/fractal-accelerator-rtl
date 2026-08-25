@@ -1,6 +1,6 @@
 // Consumes entries from the complete_queue_handler, performs bounds checking,
 // colour comparison, and raises differ/complete flags to the scheduler
-
+`timescale 1ns/1ps
 module comparator #(
     parameter int COORD_W = 8   // coordinate bit width; must match scheduler
 ) (

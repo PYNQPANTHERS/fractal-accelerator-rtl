@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1787671215" />
+    <testcase name="test_comparator" classname="coco_comparator" file="/home/lucca/fractal-accelerator-rtl/tb/comparator/coco_comparator.py" lineno="89" time="0.023263216018676758" sim_time_ns="1706.0" ratio_time="73334.65839935228" />
+  </testsuite>
+</testsuites>
